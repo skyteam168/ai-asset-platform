@@ -235,6 +235,7 @@ POLICY = obj(
         "facts": obj(
             {
                 "app_grant": {"type": "boolean"},
+                "release_in_scope": {"type": "boolean"},
                 "user_grant_required": {"type": "boolean"},
                 "user_grant": {"type": ["boolean", "null"]},
                 "within_ceiling": {"type": "boolean"},
@@ -243,7 +244,7 @@ POLICY = obj(
                     "additionalProperties": obj({"org_id": NULLSTR, "in_scope": {"type": "boolean"}}, ["in_scope"]),
                 },
             },
-            ["app_grant", "within_ceiling", "scope_check"],
+            ["release_in_scope", "app_grant", "within_ceiling", "scope_check"],
         ),
         "resource": obj(
             {
@@ -255,6 +256,7 @@ POLICY = obj(
                 "confirm_policy": CONFIRM,
                 "app_identity_allowed": {"type": "boolean"},
                 "transport_exception": {"type": "boolean"},
+                "exposure": {"type": "array", "items": {"enum": ["rest", "mcp", "a2a"]}},
                 "required_scopes": {"type": "array", "items": {"type": "string"}},
             },
             ["capability_id", "version", "classification", "risk", "release_status", "confirm_policy"],

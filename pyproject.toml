@@ -32,6 +32,7 @@ dev = [
     "pyyaml>=6.0",
     "types-pyyaml>=6.0",
     "trustme>=1.2",
+    "types-jsonschema>=4.23",
 ]
 
 [build-system]
@@ -70,7 +71,7 @@ ignore = ["RUF001", "RUF002", "RUF003", "S101"]
 [tool.ruff.lint.per-file-ignores]
 "src/aip/libs/httpclient/**" = ["TID251"]
 "src/aip/libs/common/errors.py" = ["S105"]  # 错误码名称不是口令
-"tests/**" = ["S", "TID251"]
+"tests/**" = ["S", "TID251", "ASYNC221", "ASYNC240"]
 "tools/**" = ["S", "T201"]
 "migrations/**" = ["E501"]  # SQL DDL
 "docs/architecture/reference/**" = ["ALL"]

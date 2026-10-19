@@ -1,24 +1,22 @@
 """IAM 快照（architecture.md 4.4、5.1）：控制面打包身份与授权事实，签名后由数据面拉取。
 
-M1 只做全量快照；增量快照与 LISTEN/NOTIFY 推送在 M2 补齐（ADR-0019）。
+全量快照；授权事实（grants）由 grant 模块经 snapshot_part() 提供，iam 不读其表。
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import uuid
 from collections import defaultdict
 from typing import Any
 
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import ec
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from aip.control_plane.grant import service as grant_service
 from aip.control_plane.iam import tables as t
 from aip.libs.common.ids import utcnow
-from aip.libs.tokens.keys import SigningKey, canonical_json
+from aip.libs.tokens.keys import SigningKey
+from aip.libs.tokens.signed import sign_payload
 
 FORMAT = 1
 
@@ -139,6 +137,11 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
     for p in (await conn.execute(select(t.agent_profile))).mappings():
         consumers[str(p["consumer_id"])]["agent_profiles"][p["name"]] = str(p["id"])
 
+    external_codes: dict[str, dict[str, str]] = defaultdict(dict)
+    for ec in (await conn.execute(select(t.org_external_code))).mappings():
+        if ec["org_id"] in active:
+            external_codes[ec["system_key"]][ec["external_code"]] = str(ec["org_id"])
+
     return {
         "format": FORMAT,
         "generated_at": now.isoformat(),
@@ -151,14 +154,14 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
         "users": users,
         "employee_index": employee_index,
         "consumers": consumers,
+        # scope_binding by_code：旧系统编码 → 平台节点（architecture.md 2.3）
+        "external_codes": external_codes,
+        **await grant_service.snapshot_part(conn),
     }
 
 
 def sign(payload: dict[str, Any], key: SigningKey) -> tuple[str, str]:
-    body = canonical_json(payload)
-    digest = hashlib.sha256(body).hexdigest()
-    sig = key.private.sign(body, ec.ECDSA(hashes.SHA256()))
-    return digest, base64.b64encode(sig).decode()
+    return sign_payload(payload, key)
 
 
 async def publish(conn: AsyncConnection, key: SigningKey) -> dict[str, Any] | None:

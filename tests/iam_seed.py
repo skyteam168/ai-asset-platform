@@ -55,8 +55,20 @@ async def create_test_database() -> None:
 async def truncate() -> None:
     conn = await asyncpg.connect(owner_dsn())
     try:
-        names = ", ".join(f"iam.{tb.name}" for tb in t.md.sorted_tables)
-        await conn.execute(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
+        iam_tables = [f"iam.{tb.name}" for tb in t.md.sorted_tables]
+        others = [
+            "registry.release_snapshot",
+            "registry.domain_event",
+            "registry.state_transition",
+            'registry."release"',
+            "registry.asset_version",
+            "registry.asset",
+            'grants."grant"',
+            "grants.grant_ceiling",
+            "audit.audit_anchor",
+            "audit.audit_log",
+        ]
+        await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:
         await conn.close()
 

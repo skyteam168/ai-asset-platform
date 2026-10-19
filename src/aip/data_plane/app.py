@@ -5,16 +5,25 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import pathlib
+import time
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 import httpx
 from fastapi import FastAPI, Header, Response
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import create_async_engine
 
-from aip.data_plane.iam_cache import IamCache, SnapshotRejected
+from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.oauth import AuthContext
 from aip.data_plane.oauth import router as oauth_router
+from aip.data_plane.pdp import OpaClient, PolicyService
 from aip.data_plane.principal import PrincipalResolver
+from aip.data_plane.release_cache import ReleaseCache
+from aip.data_plane.snapshots import SnapshotCache, SnapshotRejected
+from aip.libs.audit.spool import AuditSpool
+from aip.libs.audit.store import anchor, ship
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
 from aip.libs.tokens.keys import SigningKey, platform_key
@@ -26,16 +35,19 @@ log = logging.getLogger("aip.data_plane")
 class Readiness:
     """就绪条件：IAM 快照、发布快照与策略 bundle 均已加载（architecture.md 4.4，缺失即拒绝服务）。"""
 
-    def __init__(self, iam: IamCache) -> None:
-        self.iam = iam
-        self.release_snapshot_seq: int | None = None
-        self.policy_bundle: str | None = None
+    def __init__(self, iam: IamCache, releases: ReleaseCache, opa: OpaClient) -> None:
+        self.iam, self.releases, self.opa = iam, releases, opa
 
     def checks(self) -> dict[str, str]:
+        policy_ok = (
+            self.opa.revision is not None
+            and self.releases.seq is not None
+            and self.opa.revision == self.releases.policy["revision"]
+        )
         return {
             "iam_snapshot": "loaded" if self.iam.seq is not None else "missing",
-            "release_snapshot": "loaded" if self.release_snapshot_seq is not None else "missing",
-            "policy_bundle": "loaded" if self.policy_bundle is not None else "missing",
+            "release_snapshot": "loaded" if self.releases.seq is not None else "missing",
+            "policy_bundle": "loaded" if policy_ok else "missing",
         }
 
     @property
@@ -43,30 +55,68 @@ class Readiness:
         return all(v == "loaded" for v in self.checks().values())
 
 
+async def pull_once(client: httpx.AsyncClient, cache: SnapshotCache, token: str) -> bool:
+    r = await client.get(
+        f"/api/v1/snapshots/{cache.kind}",
+        params={"after_seq": cache.seq or 0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    if r.status_code == 200:
+        return cache.load(r.json())
+    return False
+
+
 async def pull_snapshots(app: FastAPI, control_plane_url: str, interval_s: float = 2.0) -> None:
-    """从控制面拉取 IAM 快照；控制面不可用时保持现有快照继续服务。"""
-    cache: IamCache = app.state.iam
+    """从控制面拉取快照；控制面不可用时继续使用已加载（或从磁盘恢复）的快照。"""
+    token = get_settings().internal_service_token
     async with httpx.AsyncClient(base_url=control_plane_url, timeout=5) as client:
         while True:
-            try:
-                r = await client.get(
-                    "/api/v1/snapshots/iam",
-                    params={"after_seq": cache.seq or 0},
-                    headers={"Authorization": f"Bearer {get_settings().internal_service_token}"},
-                )
-                if r.status_code == 200:
-                    cache.load(r.json())
-            except (httpx.HTTPError, SnapshotRejected, KeyError) as e:
-                log.warning("iam snapshot pull failed: %s", e)
+            for cache in (app.state.iam, app.state.releases):
+                try:
+                    if await pull_once(client, cache, token) and cache is app.state.releases:
+                        await app.state.policy.sync_policy()
+                except (httpx.HTTPError, SnapshotRejected, KeyError) as e:
+                    log.warning("%s snapshot pull failed: %s", cache.kind, e)
             await asyncio.sleep(interval_s)
 
 
+async def ship_audit(app: FastAPI, database_url: str) -> None:
+    """后台把 spool 写入审计库，并按小时锚定链头（architecture.md 12.4）；审计库不可用时只告警、spool 继续累积。"""
+    settings = get_settings()
+    engine = create_async_engine(database_url, pool_pre_ping=True)
+    last_anchor = 0.0
+    try:
+        while True:
+            try:
+                await ship(app.state.audit, engine)
+                now = time.monotonic()
+                if now - last_anchor >= settings.audit_anchor_interval_s:
+                    async with engine.begin() as conn:
+                        await anchor(conn, app.state.auth.key)
+                    last_anchor = now
+            except (OSError, SQLAlchemyError) as e:
+                log.warning("audit ship failed, spool keeps buffering: %s", type(e).__name__)
+            await asyncio.sleep(settings.audit_ship_interval_s)
+    finally:
+        await engine.dispose()
+
+
 def create_app(
-    *, key: SigningKey | None = None, replay: ReplayStore | None = None, control_plane_url: str | None = None
+    *,
+    key: SigningKey | None = None,
+    replay: ReplayStore | None = None,
+    control_plane_url: str | None = None,
+    data_dir: pathlib.Path | None = None,
+    opa_url: str | None = None,
 ) -> FastAPI:
     settings = get_settings()
     key = key or platform_key()
-    iam = IamCache([key])
+    data_dir = data_dir or pathlib.Path(settings.data_dir)
+    iam = IamCache([key], data_dir / "snapshots")
+    releases = ReleaseCache([key], data_dir / "snapshots")
+    opa = OpaClient(opa_url or settings.opa_url)
+    audit = AuditSpool(data_dir / "audit-spool", settings.instance_id, settings.audit_spool_max_bytes)
+    policy = PolicyService(iam, releases, opa, audit, env=settings.env if settings.env != "dev" else "test")
     ctx = AuthContext(
         settings=settings,
         resolver=PrincipalResolver(iam),
@@ -76,16 +126,29 @@ def create_app(
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(pull_snapshots(app, control_plane_url)) if control_plane_url else None
+        # 先从磁盘恢复最近一次已验签的快照，控制面宕机时也能启动服务
+        iam.restore_from_disk()
+        if releases.restore_from_disk():
+            with contextlib.suppress(httpx.HTTPError):
+                await policy.sync_policy()
+        tasks = []
+        if control_plane_url:
+            tasks.append(asyncio.create_task(pull_snapshots(app, control_plane_url)))
+        if settings.audit_database_url:
+            tasks.append(asyncio.create_task(ship_audit(app, settings.audit_database_url)))
         yield
-        if task:
+        for task in tasks:
             task.cancel()
+        await opa.aclose()
 
     app = FastAPI(title="AIP Data Plane API", version=settings.version, lifespan=lifespan)
     web.install(app)
-    readiness = Readiness(iam)
+    readiness = Readiness(iam, releases, opa)
     app.state.readiness = readiness
     app.state.iam = iam
+    app.state.releases = releases
+    app.state.policy = policy
+    app.state.audit = audit
     app.state.auth = ctx
     app.include_router(oauth_router(ctx))
 

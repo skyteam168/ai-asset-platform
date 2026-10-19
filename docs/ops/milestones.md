@@ -58,3 +58,28 @@
 | 控制面响应体 | 字段与 OpenAPI 一致，尚未用 Pydantic 响应模型强校验 | M4 补响应模型与契约测试 |
 | break-glass 告警 | 写 critical 日志与领域事件 | M2 接入审计与告警通道 |
 | 服务间认证 | dev 共享服务令牌 | M7（P12）mTLS + 短期服务令牌 |
+
+## M2 Registry、PDP、审计（P2、P4）— 2026-10-19 通过（含已记录的延后项）
+
+| 第 14 章 M2 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 已发布版本改动被触发器拒绝 | 通过 | `test_published_version_is_immutable_at_db_level`：用 owner 账号直连数据库，离开 draft 后改 spec、content_hash、semver 与 DELETE 均被触发器拒绝；应用层同样拒绝（`..._at_app_level`），同版本号不可覆盖 |
+| 停掉 control_plane 数据面仍能按快照解析 Tool | 通过 | `test_data_plane_resolves_tools_after_control_plane_goes_down`：数据面经 HTTP 拉取快照并落盘；新进程指向不存在的控制面地址，从本地磁盘恢复已验签快照，解析 Tool 成功且 /readyz 为 200；被篡改的本地快照拒绝恢复（`test_tampered_local_snapshot_is_not_restored`） |
+| PDP 表驱动用例 ≥ 40 个且默认拒绝 | 通过 | `test_policy_table` 44 个用例在真实 OPA sidecar 上运行（字段缺失、类型错误、未知状态、空输入全部拒绝）；`opa test` Rego 单元测试通过；多个拒绝原因同时返回 |
+| IAM 快照缺失时全部拒绝 | 通过 | `test_fail_closed_without_iam_snapshot` 返回 POLICY_UNAVAILABLE 并写审计；OPA 不可达同样拒绝（`test_fail_closed_when_opa_unreachable`） |
+| 篡改一行审计后校验脚本报错并定位到 shard 与 seq | 通过 | `test_tampering_one_row_is_detected_with_shard_and_seq`：超级用户跳过触发器改写一行后，`tools/audit_verify.py` 退出码 1 并输出 `shard=dp-b-20261019 seq=3`；删除锚定记录、删除中间记录、伪造锚点签名均被发现 |
+| 状态机与发布 | 通过 | 合法与非法迁移、Suspended 只能回到原状态、迁移日志；发布替代、一键回滚、回滚后快照只含旧版本；danger 不能开放 MCP |
+| 授权事实 | 通过 | 本厂参数放行、他厂参数与缺失参数拒绝（by_code 映射）；无授权、上限撤销后授权失效、用户层收窄（只授予品质部）、密级审批前后对比、Suspended 拒绝 |
+| 审计可靠性 | 通过 | 应用角色不能 UPDATE / DELETE / TRUNCATE；owner 也被追加保护触发器拒绝；审计库不可用时继续写 spool、恢复后补投；offset 丢失重复投递被主键去重；spool 80% 背压与满载拒绝；进程重启链不断；按月分区按需创建；数据面后台任务自动入库并锚定；审计只存参数摘要不存原值 |
+| lint | 通过 | ruff、mypy --strict（50 个文件）、TLS 约束检查 |
+| 测试总数 | 176 通过，0 失败，0 跳过（M0 34 + M1 63 + M2 79） | `python -m pytest -q`，约 2 分钟 |
+
+延后项：
+
+| 项 | 现状 | 计划 |
+| --- | --- | --- |
+| 平台签名密钥、TOTP 种子加密、审计锚点签名改用 OpenBao Transit | 本地密钥（prod 强制显式配置） | M4 上线前 |
+| 增量快照与 LISTEN/NOTIFY 推送、30 秒传播压测 | 全量快照 + 2 秒拉取 | M4 压测时一并完成 |
+| by_employee_no 首次匹配回写绑定 | 未回写 | M4 |
+| 发布与授权的审批流（目前平台管理员直接操作） | 服务与接口已就绪 | M4（P7） |
+| docs/specs 与 policies 打包进镜像 | 运行时从仓库路径读取 | M4（P12 部署） |

@@ -99,6 +99,8 @@ scope\_binding 的入参值必须能映射到 org\_unit：Tool Spec 中声明映
 
 默认值：终端用户默认范围为其主归属部门子树；公司管理员可扩大到本公司；跨公司范围只有总部可授予。
 
+判定规则（M2 实现）：dimension=org 时，入参映射到的节点必须在用户数据范围内；dimension=company 时，入参必须映射到公司节点，且用户数据范围内至少有一个节点属于该公司（例如车间员工可以查询本厂工单，但不能查询他厂）。绑定了组织维度的入参缺失或无法映射，一律视为越界。
+
 ### 2.4 密级 clearance
 
 四级：L1 公开、L2 内部、L3 敏感、L4 机密，资产 data\_classification 使用同一刻度。
@@ -252,7 +254,7 @@ grant 用 `grantee_type`（consumer / agent\_profile / org\_unit / user）与 `g
 
 - PDP 用 OPA，sidecar 部署在数据面；rego 与表驱动测试同仓库，CI 跑 `opa test` 与覆盖率。
 - **事实预计算**：PrincipalResolver（Python）根据 IAM 快照算好 Principal、命中的 Grant 列表、上限校验结果、scope\_binding 映射后的 org id，放入 PDP input；OPA 只持有策略与少量静态数据（风险策略表、密级刻度）。这样 OPA 内存与快照大小无关，策略也更容易测试。
-- 策略以 OPA bundle 分发（带版本号与签名），数据面启动时没有有效 bundle 则拒绝服务。
+- 策略随发布快照一起分发（`payload.policy` = 模块源码 + revision 摘要，与快照同一签名），数据面验签后推送到 OPA sidecar；数据面启动时没有有效策略则不就绪、调用全部拒绝。PDP 的放行只在全部检查“正向成立”时发生，字段缺失或类型错误一律拒绝。
 - 身份与授权数据由控制面打成带 seq 的 IAM 快照（全量 + 增量），经 outbox 事件推送数据面；数据面写入本地只读缓存（进程内 + 本地文件），发现 seq 缺口主动拉取。控制面宕机时按已有快照服务；快照缺失或校验失败时 fail closed。
 - 紧急变更（用户停用、授权撤销、上限收缩、公钥吊销）走高优先级通道，目标 30 秒内生效（M4 压测校准）。
 - OPA decision log 关闭远程上报，由数据面把决策结果与原因写入审计。

@@ -8,3 +8,4 @@ __pycache__/
 .env
 /out/
 node_modules/
+.aip-data/

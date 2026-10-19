@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     # 服务间认证（生产为 mTLS + 短期服务令牌，architecture.md 3.3）；dev 用共享令牌
     internal_service_token: str = "aip-dev-internal-service-token"  # noqa: S105 - dev 默认值
     control_plane_url: str = ""
+    # 数据面本地状态：快照落盘目录与审计 spool（architecture.md 4.4、12.4）
+    data_dir: str = ".aip-data"
+    instance_id: str = "dp-local"
+    audit_spool_max_bytes: int = 512 * 1024 * 1024
+    # 审计库（应用角色只有 INSERT / SELECT）；为空则只写本地 spool、不入库
+    audit_database_url: str = ""
+    audit_ship_interval_s: float = 1.0
+    audit_anchor_interval_s: float = 3600.0
     access_token_ttl_s: int = Field(default=600, ge=300, le=900)
     assertion_max_ttl_s: int = 300
     session_idle_s: int = 1800

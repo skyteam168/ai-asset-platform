@@ -17,6 +17,8 @@ URGENT = frozenset(
         "binding.deleted",
         "org.disabled",
         "consumer.disabled",
+        "grant.revoked",
+        "ceiling.revoked",
     }
 )
 

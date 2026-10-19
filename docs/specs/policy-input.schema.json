@@ -59,6 +59,9 @@
         "app_grant": {
           "type": "boolean"
         },
+        "release_in_scope": {
+          "type": "boolean"
+        },
         "user_grant_required": {
           "type": "boolean"
         },
@@ -93,6 +96,7 @@
         }
       },
       "required": [
+        "release_in_scope",
         "app_grant",
         "within_ceiling",
         "scope_check"
@@ -142,6 +146,16 @@
         },
         "transport_exception": {
           "type": "boolean"
+        },
+        "exposure": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "rest",
+              "mcp",
+              "a2a"
+            ]
+          }
         },
         "required_scopes": {
           "type": "array",
