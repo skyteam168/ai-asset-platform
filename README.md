@@ -10,7 +10,9 @@
 uv sync                          # 安装依赖到 .venv
 python tools/dev.py up           # 启动 PostgreSQL / Valkey / OpenBao / OPA / SeaweedFS 并迁移
 python tools/dev.py ci           # 文档契约 + lint + 全部测试
+python tools/dev.py bootstrap    # 首次运行：建集团、总部与管理员，凭据写入 .aip-data/dev-admin.txt
 python tools/dev.py serve        # 控制面 :18081，数据面 :18082
+python tools/smoke.py            # 另开终端：对运行中的系统做端到端冒烟
 ```
 
 Linux / macOS 可用 `make up`、`make ci` 等同名任务。Windows 下用 `.venv\Scripts\python tools\dev.py <task>`。
