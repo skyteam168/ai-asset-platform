@@ -1,0 +1,32 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with: {python-version: "3.12"}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+      - run: uv sync --frozen
+      - name: docs (ADR / JSON Schema / OpenAPI 生成一致性、spectral、链接)
+        run: uv run python tools/dev.py docs
+      - name: openapi-diff（与主分支比较，禁止破坏性变更）
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          for f in control-plane data-plane; do
+            git show origin/${{ github.base_ref }}:docs/api/$f.openapi.yaml > /tmp/base-$f.yaml || continue
+            docker run --rm -v /tmp:/base -v $PWD:/head openapitools/openapi-diff:2.1.0 /base/base-$f.yaml /head/docs/api/$f.openapi.yaml --fail-on-incompatible
+          done
+      - name: client 生成（Python、TypeScript）
+        run: |
+          for f in control-plane data-plane; do for g in python typescript-fetch; do
+            docker run --rm -v $PWD:/local openapitools/openapi-generator-cli:v7.10.0 generate -i /local/docs/api/$f.openapi.yaml -g $g -o /tmp/gen-$f-$g
+          done; done
+      - run: uv run python tools/dev.py lint
+      - name: infra + test
+        run: |
+          uv run python tools/dev.py up
+          uv run python tools/dev.py test

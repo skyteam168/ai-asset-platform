@@ -1,0 +1,1830 @@
+openapi: 3.1.0
+info:
+  title: AIP Control Plane API
+  version: 0.1.0
+  description: 控制面：IAM、资产、发布、授权、连接、审批、审计。约定见 conventions.md，错误码见 error-codes.md。
+servers:
+- url: https://api.example-group.internal
+security:
+- bearer: []
+tags:
+- name: approval
+- name: audit
+- name: auth
+- name: connection
+- name: grant
+- name: iam
+- name: ops
+- name: registry
+- name: release
+- name: snapshot
+paths:
+  /healthz:
+    get:
+      operationId: cpHealth
+      tags:
+      - ops
+      summary: 存活检查
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /api/v1/auth/login:
+    post:
+      operationId: login
+      tags:
+      - auth
+      summary: 本地登录（密码 + TOTP）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      security: []
+  /api/v1/auth/logout:
+    post:
+      operationId: logout
+      tags:
+      - auth
+      summary: 注销会话
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/me:
+    get:
+      operationId: me
+      tags:
+      - auth
+      summary: 当前用户
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/orgs:
+    get:
+      operationId: listOrgs
+      tags:
+      - iam
+      summary: 组织列表（按生效节点范围）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/OrgUnit'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createOrg
+      tags:
+      - iam
+      summary: 新建组织节点
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUnit'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgUnitCreate'
+  /api/v1/orgs/{id}:
+    get:
+      operationId: getOrg
+      tags:
+      - iam
+      summary: 组织详情
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUnit'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      operationId: updateOrg
+      tags:
+      - iam
+      summary: 修改组织
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUnit'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgUnitCreate'
+  /api/v1/orgs/{id}/move:
+    post:
+      operationId: moveOrg
+      tags:
+      - iam
+      summary: 迁移组织节点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUnit'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrgUnitMove'
+  /api/v1/orgs/{id}/disable:
+    post:
+      operationId: disableOrg
+      tags:
+      - iam
+      summary: 停用组织节点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUnit'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/users:
+    get:
+      operationId: listUsers
+      tags:
+      - iam
+      summary: 用户列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createUser
+      tags:
+      - iam
+      summary: 新建用户
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+  /api/v1/users/import:
+    post:
+      operationId: importUsers
+      tags:
+      - iam
+      summary: 批量导入用户（支持 dry_run）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRequest'
+  /api/v1/users/{id}:
+    get:
+      operationId: getUser
+      tags:
+      - iam
+      summary: 用户详情
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    patch:
+      operationId: updateUser
+      tags:
+      - iam
+      summary: 修改用户
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+  /api/v1/users/{id}/roles:
+    post:
+      operationId: assignRole
+      tags:
+      - iam
+      summary: 分配角色
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+  /api/v1/clearance-requests:
+    post:
+      operationId: requestClearance
+      tags:
+      - iam
+      summary: 申请提升密级
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearanceRequest'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClearanceRequest'
+  /api/v1/clearance-requests/{id}/decide:
+    post:
+      operationId: decideClearance
+      tags:
+      - iam
+      summary: 审批密级申请
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClearanceRequest'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+  /api/v1/consumers:
+    get:
+      operationId: listConsumers
+      tags:
+      - iam
+      summary: 消费方列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Consumer'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createConsumer
+      tags:
+      - iam
+      summary: 注册消费方
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Consumer'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Consumer'
+  /api/v1/consumers/{id}/credentials:
+    post:
+      operationId: issueCredential
+      tags:
+      - iam
+      summary: 签发消费方凭据
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialIssued'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialCreate'
+  /api/v1/credentials/{id}/revoke:
+    post:
+      operationId: revokeCredential
+      tags:
+      - iam
+      summary: 吊销凭据
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/consumers/{id}/jwks:
+    post:
+      operationId: addConsumerJwk
+      tags:
+      - iam
+      summary: 登记用户断言验签公钥
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Jwk'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Jwk'
+  /api/v1/consumers/{id}/bindings:
+    get:
+      operationId: listBindings
+      tags:
+      - iam
+      summary: 用户绑定列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UserBinding'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createBinding
+      tags:
+      - iam
+      summary: 新建用户绑定
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBinding'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserBinding'
+  /api/v1/assertion-debug:
+    post:
+      operationId: debugAssertion
+      tags:
+      - iam
+      summary: 断言调试器（不落日志）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssertionDebugResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssertionDebugRequest'
+  /api/v1/assets:
+    get:
+      operationId: listAssets
+      tags:
+      - registry
+      summary: 资产列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Asset'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createAsset
+      tags:
+      - registry
+      summary: 新建资产
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Asset'
+  /api/v1/assets/{id}/versions:
+    post:
+      operationId: createVersion
+      tags:
+      - registry
+      summary: 新建资产版本
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetVersion'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetVersion'
+  /api/v1/versions/{id}/submit:
+    post:
+      operationId: submitVersion
+      tags:
+      - release
+      summary: 提交门禁
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetVersion'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/releases:
+    post:
+      operationId: createRelease
+      tags:
+      - release
+      summary: 发布
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Release'
+  /api/v1/releases/{id}/rollback:
+    post:
+      operationId: rollbackRelease
+      tags:
+      - release
+      summary: 一键回滚
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Release'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/grant-ceilings:
+    post:
+      operationId: createCeiling
+      tags:
+      - grant
+      summary: 设置授权上限
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantCeiling'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantCeiling'
+  /api/v1/grants:
+    get:
+      operationId: listGrants
+      tags:
+      - grant
+      summary: 授权列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Grant'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createGrant
+      tags:
+      - grant
+      summary: 下放授权
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Grant'
+  /api/v1/connections:
+    get:
+      operationId: listConnections
+      tags:
+      - connection
+      summary: 连接列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SystemConnection'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createConnection
+      tags:
+      - connection
+      summary: 新建系统连接
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemConnection'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SystemConnection'
+  /api/v1/connections/{id}/test:
+    post:
+      operationId: testConnection
+      tags:
+      - connection
+      summary: 连接测试（真实握手）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionTestResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/connections/{id}/trust-draft:
+    post:
+      operationId: draftTrust
+      tags:
+      - connection
+      summary: 从连接测试生成 pinned / custom_ca 草稿
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigDraft'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfigDraft'
+  /api/v1/approvals:
+    get:
+      operationId: listApprovals
+      tags:
+      - approval
+      summary: 我的审批待办
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Approval'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/approvals/{id}/decide:
+    post:
+      operationId: decideApproval
+      tags:
+      - approval
+      summary: 审批
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Approval'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+  /api/v1/audit-logs:
+    get:
+      operationId: searchAudit
+      tags:
+      - audit
+      summary: 审计检索
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditRecord'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/snapshots/iam:
+    get:
+      operationId: pullIamSnapshot
+      tags:
+      - snapshot
+      summary: 数据面拉取 IAM 快照
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/AfterSeq'
+  /api/v1/snapshots/release:
+    get:
+      operationId: pullReleaseSnapshot
+      tags:
+      - snapshot
+      summary: 数据面拉取发布快照
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Snapshot'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/AfterSeq'
+components:
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    AfterSeq:
+      name: after_seq
+      in: query
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              code:
+                type: string
+              message:
+                type: string
+      required:
+      - type
+      - title
+      - status
+      - code
+    Health:
+      type: object
+      properties:
+        status:
+          enum:
+          - ok
+          - degraded
+        service:
+          type: string
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - status
+      - service
+    LoginRequest:
+      type: object
+      properties:
+        login_name:
+          type: string
+        password:
+          type: string
+          format: password
+        totp:
+          type:
+          - string
+          - 'null'
+      required:
+      - login_name
+      - password
+    Session:
+      type: object
+      properties:
+        session_token:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+      required:
+      - session_token
+      - expires_at
+      - user
+    OrgUnit:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        type:
+          enum:
+          - group
+          - company
+          - department
+          - team
+        code:
+          type: string
+        name:
+          type: string
+        parent_id:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type: string
+        default_clearance:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 4
+        timezone:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+        status:
+          enum:
+          - active
+          - disabled
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - type
+      - code
+      - name
+      - company_id
+      - status
+    OrgUnitCreate:
+      type: object
+      properties:
+        type:
+          enum:
+          - company
+          - department
+          - team
+        code:
+          type: string
+        name:
+          type: string
+        parent_id:
+          type: string
+        default_clearance:
+          type:
+          - integer
+          - 'null'
+          minimum: 1
+          maximum: 4
+        timezone:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+      required:
+      - type
+      - code
+      - name
+      - parent_id
+    OrgUnitMove:
+      type: object
+      properties:
+        new_parent_id:
+          type: string
+      required:
+      - new_parent_id
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        login_name:
+          type:
+          - string
+          - 'null'
+        display_name:
+          type: string
+        employee_no:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+        home_org_id:
+          type: string
+        login_enabled:
+          type: boolean
+        status:
+          enum:
+          - active
+          - disabled
+          - left
+        effective_clearance:
+          type: integer
+          minimum: 1
+          maximum: 4
+        totp_provisioning_uri:
+          type:
+          - string
+          - 'null'
+          description: 仅创建可登录用户时返回一次
+        timezone:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - display_name
+      - home_org_id
+      - login_enabled
+      - status
+    UserCreate:
+      type: object
+      properties:
+        login_name:
+          type:
+          - string
+          - 'null'
+        display_name:
+          type: string
+        employee_no:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+        home_org_id:
+          type: string
+        login_enabled:
+          type: boolean
+        password:
+          type:
+          - string
+          - 'null'
+      required:
+      - display_name
+      - home_org_id
+    ImportRequest:
+      type: object
+      properties:
+        format:
+          enum:
+          - csv
+        content:
+          type: string
+        dry_run:
+          type: boolean
+      required:
+      - format
+      - content
+    ImportResult:
+      type: object
+      properties:
+        batch_id:
+          type: string
+        dry_run:
+          type: boolean
+        created:
+          type: integer
+        updated:
+          type: integer
+        unchanged:
+          type: integer
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              message:
+                type: string
+    RoleAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        user_id:
+          type: string
+        role:
+          enum:
+          - platform_admin
+          - asset_developer
+          - data_owner
+          - business_owner
+          - company_admin
+          - auditor
+        scope_org_id:
+          type: string
+        expires_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - user_id
+      - role
+      - scope_org_id
+    ClearanceRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        user_id:
+          type: string
+        requested_level:
+          type: integer
+          minimum: 1
+          maximum: 4
+        reason:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        status:
+          enum:
+          - pending
+          - approved
+          - rejected
+      required:
+      - user_id
+      - requested_level
+      - reason
+      - expires_at
+    Decision:
+      type: object
+      properties:
+        decision:
+          enum:
+          - approve
+          - reject
+        comment:
+          type: string
+      required:
+      - decision
+    Consumer:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        client_id:
+          type: string
+        company_id:
+          type: string
+        clearance_cap:
+          type: integer
+          minimum: 1
+          maximum: 4
+        bind_policy:
+          enum:
+          - strict
+          - by_employee_no
+          - app_only
+        status:
+          type: string
+        contact:
+          type: string
+      required:
+      - client_id
+      - company_id
+      - clearance_cap
+      - bind_policy
+    CredentialCreate:
+      type: object
+      properties:
+        kind:
+          enum:
+          - static_token
+          - private_key_jwt
+        expires_at:
+          type: string
+          format: date-time
+        ip_binding:
+          type: array
+          items:
+            type: string
+      required:
+      - kind
+    CredentialIssued:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        kind:
+          type: string
+        token:
+          type:
+          - string
+          - 'null'
+          description: 仅创建时返回一次
+        expires_at:
+          type: string
+          format: date-time
+    Jwk:
+      type: object
+      properties:
+        kid:
+          type: string
+        kty:
+          type: string
+        crv:
+          type: string
+        x:
+          type: string
+        y:
+          type: string
+        n:
+          type: string
+        e:
+          type: string
+        alg:
+          type: string
+      required:
+      - kid
+      - kty
+    UserBinding:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        consumer_id:
+          type: string
+        external_subject:
+          type: string
+        user_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+      required:
+      - consumer_id
+      - external_subject
+      - user_id
+    AssertionDebugRequest:
+      type: object
+      properties:
+        consumer_id:
+          type: string
+        assertion:
+          type: string
+      required:
+      - consumer_id
+      - assertion
+    AssertionDebugResult:
+      type: object
+      properties:
+        signature_valid:
+          type: boolean
+        claims_valid:
+          type: boolean
+        binding:
+          type:
+          - string
+          - 'null'
+        errors:
+          type: array
+          items:
+            type: string
+        principal:
+          type:
+          - object
+          - 'null'
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        type:
+          enum:
+          - tool
+          - skill
+          - workflow
+          - bundle
+          - prompt
+          - model_profile
+          - connector_package
+        name:
+          type: string
+        owner_org_id:
+          type: string
+        owner_user_id:
+          type: string
+        classification:
+          type: integer
+          minimum: 1
+          maximum: 4
+      required:
+      - type
+      - name
+      - owner_org_id
+      - classification
+    AssetVersion:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        asset_id:
+          type: string
+        semver:
+          type: string
+        content_hash:
+          type: string
+        spec:
+          type: object
+        state:
+          enum:
+          - draft
+          - testing
+          - in_review
+          - approved
+          - canary
+          - active
+          - deprecated
+          - retired
+          - suspended
+      required:
+      - semver
+      - spec
+    Release:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        version_id:
+          type: string
+        env:
+          enum:
+          - test
+          - staging
+          - prod
+        scope:
+          type: object
+        channel:
+          enum:
+          - beta
+          - stable
+        exposure:
+          type: array
+          items:
+            enum:
+            - rest
+            - mcp
+            - a2a
+        status:
+          type: string
+      required:
+      - version_id
+      - env
+      - scope
+      - channel
+    GrantCeiling:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        company_id:
+          type: string
+        asset_set:
+          type: object
+        max_classification:
+          type: integer
+          minimum: 1
+          maximum: 4
+        quota:
+          type: object
+      required:
+      - company_id
+      - asset_set
+      - max_classification
+    Grant:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        asset_id:
+          type: string
+        grantee_type:
+          enum:
+          - consumer
+          - agent_profile
+          - org_unit
+          - user
+        grantee_id:
+          type: string
+        env:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        ceiling_id:
+          type: string
+      required:
+      - asset_id
+      - grantee_type
+      - grantee_id
+      - env
+      - expires_at
+    SystemConnection:
+      $ref: ../specs/system-connection.schema.json
+    ConnectionTestResult:
+      type: object
+      properties:
+        connection_id:
+          type: string
+        resolved_ip:
+          type:
+          - string
+          - 'null'
+        allowlisted:
+          type: boolean
+        tls_version:
+          type:
+          - string
+          - 'null'
+        chain:
+          type: array
+          items:
+            type: object
+            properties:
+              subject:
+                type: string
+              issuer:
+                type: string
+              not_before:
+                type: string
+                format: date-time
+              not_after:
+                type: string
+                format: date-time
+        fingerprint_cert_sha256:
+          type:
+          - string
+          - 'null'
+        fingerprint_spki_sha256:
+          type:
+          - string
+          - 'null'
+        hostname_match:
+          type:
+          - boolean
+          - 'null'
+        verdict:
+          enum:
+          - pass
+          - fail
+        error_code:
+          type:
+          - string
+          - 'null'
+        detail:
+          type:
+          - string
+          - 'null'
+      required:
+      - connection_id
+      - verdict
+    ConfigDraft:
+      type: object
+      properties:
+        tls_mode:
+          enum:
+          - custom_ca
+          - pinned
+        pins:
+          type: array
+          items:
+            type: object
+        ca_pem:
+          type:
+          - string
+          - 'null'
+        approval_id:
+          type: string
+    Approval:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        kind:
+          type: string
+        subject_ref:
+          type: string
+        status:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+    AuditRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        occurred_at:
+          type: string
+          format: date-time
+        actor:
+          type: object
+        action:
+          type: string
+        target:
+          type: string
+        decision:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+        trace_id:
+          type:
+          - string
+          - 'null'
+        shard_id:
+          type: string
+        seq:
+          type: integer
+        hash:
+          type: string
+    Snapshot:
+      type: object
+      properties:
+        kind:
+          enum:
+          - iam
+          - release
+        seq:
+          type: integer
+        full:
+          type: boolean
+        sha256:
+          type: string
+        signature:
+          type: string
+        payload_url:
+          type: string
+      required:
+      - kind
+      - seq
+      - full
+      - sha256
+      - signature

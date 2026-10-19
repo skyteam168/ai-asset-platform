@@ -1,0 +1,23 @@
+"""控制面应用：IAM、Registry、Release、Grant 等模块的路由在各自里程碑挂载。"""
+
+from __future__ import annotations
+
+from fastapi import FastAPI
+
+from aip.libs.common import web
+from aip.libs.common.config import get_settings
+
+
+def create_app() -> FastAPI:
+    settings = get_settings()
+    app = FastAPI(title="AIP Control Plane API", version=settings.version)
+    web.install(app)
+
+    @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="cpHealth")
+    async def healthz() -> web.Health:
+        return web.Health(status="ok", service="control-plane", version=settings.version)
+
+    return app
+
+
+app = create_app()

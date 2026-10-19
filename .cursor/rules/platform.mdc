@@ -1,0 +1,18 @@
+---
+description: 企业 AI 资产管理中台项目规则（来源 docs/architecture.md 15.2）
+alwaysApply: true
+---
+- 以 docs/architecture.md 为唯一设计依据；设计冲突先提问，不自行改设计。
+- Python 3.12, FastAPI, SQLAlchemy 2.0 async + asyncpg, Alembic, Pydantic v2, pytest, ruff, mypy --strict。
+- 模块化单体：模块间仅经 service 接口与领域事件，禁止跨模块直接读写他人表。
+- 身份、组织、密级、授权数据只由 iam 模块写入；不读取、不同步、不信任任何外部系统的部门、角色、权限或 token 中的组织声明。
+- 用户表名为 iam_user，不得使用 user。
+- asset_version 一旦发布不可变：数据库触发器 + 应用层双重保护。
+- 所有业务表含 company_id、created_at(UTC)，启用 RLS；每个事务 SET LOCAL app.company_ids。
+- 所有调用必须经 PolicyService.decide()，默认拒绝，决策原因写入审计。
+- 所有出站 HTTP 必须经 libs/httpclient 的 build_client(connection)；禁止在其他位置出现 verify=False、CERT_NONE、_create_unverified_context。
+- pinned / insecure 的指纹与主机名检查必须在 TLS 握手后、发送任何 HTTP 字节前完成。
+- 日志与审计禁止出现明文凭据、用户断言、访问令牌与未脱敏业务数据。
+- 沙箱模式下 Connector 必须硬拒绝 live 写操作。
+- 错误码只能使用 docs/api/error-codes.md 中登记的值，新增先登记。
+- 每次变更：先输出计划 → 迁移脚本 → 代码 → 单测/集成测试 → OpenAPI 与文档更新。

@@ -1,0 +1,418 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/tool-spec.schema.json",
+  "title": "Tool Spec（architecture.md 6.1）",
+  "type": "object",
+  "properties": {
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "domain": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "title": {
+      "type": "string"
+    },
+    "title_i18n": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string",
+      "minLength": 20,
+      "maxLength": 2000
+    },
+    "description_lang": {
+      "enum": [
+        "zh",
+        "en",
+        "vi"
+      ],
+      "default": "zh"
+    },
+    "usage_notes": {
+      "type": "string"
+    },
+    "not_for": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "examples": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "question": {
+            "type": "string"
+          },
+          "args": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "question",
+          "args"
+        ]
+      }
+    },
+    "input_schema": {
+      "type": "object"
+    },
+    "output_schema": {
+      "type": "object"
+    },
+    "connector_ref": {
+      "type": "object",
+      "properties": {
+        "connector": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "package_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
+        }
+      },
+      "required": [
+        "connector",
+        "operation"
+      ],
+      "additionalProperties": false
+    },
+    "output_limits": {
+      "type": "object",
+      "properties": {
+        "max_items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "default": 200
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "default": 65536
+        },
+        "pagination": {
+          "enum": [
+            "none",
+            "cursor"
+          ],
+          "default": "none"
+        }
+      }
+    },
+    "risk_level": {
+      "enum": [
+        "read",
+        "write",
+        "danger"
+      ]
+    },
+    "idempotency": {
+      "type": "object",
+      "properties": {
+        "idempotent": {
+          "type": "boolean"
+        },
+        "key_rule": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "idempotent"
+      ]
+    },
+    "timeout": {
+      "type": "object",
+      "properties": {
+        "connect_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "read_ms": {
+          "type": "integer",
+          "minimum": 100
+        },
+        "deadline_ms": {
+          "type": "integer",
+          "minimum": 100
+        }
+      },
+      "required": [
+        "connect_ms",
+        "read_ms",
+        "deadline_ms"
+      ]
+    },
+    "retry_class": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "max_attempts": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 5
+          },
+          "backoff_ms": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      }
+    },
+    "rate_limit": {
+      "type": "object",
+      "properties": {
+        "per_second": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "burst": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "breaker": {
+      "type": "object",
+      "properties": {
+        "failure_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "min_calls": {
+          "type": "integer"
+        },
+        "open_seconds": {
+          "type": "integer"
+        }
+      }
+    },
+    "reconcile": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "by": {
+          "enum": [
+            "idempotency_key",
+            "business_no"
+          ]
+        }
+      },
+      "required": [
+        "operation",
+        "by"
+      ]
+    },
+    "verify": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string"
+        },
+        "assert": {
+          "type": "string"
+        }
+      }
+    },
+    "recovery": {
+      "enum": [
+        "none",
+        "retry",
+        "compensate",
+        "manual"
+      ],
+      "default": "none"
+    },
+    "compensation_ref": {
+      "type": "string",
+      "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"
+    },
+    "irreversible": {
+      "type": "boolean",
+      "default": false
+    },
+    "identity_mode": {
+      "enum": [
+        "service_account",
+        "user_delegated",
+        "hybrid"
+      ]
+    },
+    "scope_binding": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "dimension": {
+            "enum": [
+              "company",
+              "org"
+            ]
+          },
+          "map": {
+            "enum": [
+              "by_id",
+              "by_code"
+            ]
+          },
+          "system_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dimension",
+          "map"
+        ]
+      }
+    },
+    "data_classification": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
+    "required_scopes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "pii_fields": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "confirm_policy": {
+      "enum": [
+        "auto",
+        "user_confirm",
+        "approval"
+      ]
+    },
+    "confirm_template": {
+      "type": "string"
+    },
+    "app_identity_allowed": {
+      "type": "boolean"
+    },
+    "probe": {
+      "type": "object",
+      "properties": {
+        "args": {
+          "type": "object"
+        },
+        "interval_s": {
+          "type": "integer",
+          "minimum": 300,
+          "default": 3600
+        },
+        "assert": {
+          "type": "string"
+        }
+      }
+    },
+    "egress_class": {
+      "enum": [
+        "none",
+        "internal",
+        "external"
+      ],
+      "default": "none"
+    }
+  },
+  "required": [
+    "capability_id",
+    "domain",
+    "name",
+    "description",
+    "input_schema",
+    "output_schema",
+    "connector_ref",
+    "risk_level",
+    "timeout",
+    "data_classification",
+    "identity_mode",
+    "confirm_policy"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "risk_level": {
+            "enum": [
+              "write",
+              "danger"
+            ]
+          }
+        },
+        "required": [
+          "risk_level"
+        ]
+      },
+      "then": {
+        "required": [
+          "idempotency",
+          "recovery",
+          "reconcile"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recovery": {
+            "const": "compensate"
+          }
+        },
+        "required": [
+          "recovery"
+        ]
+      },
+      "then": {
+        "required": [
+          "compensation_ref"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "risk_level": {
+            "const": "danger"
+          }
+        },
+        "required": [
+          "risk_level"
+        ]
+      },
+      "then": {
+        "properties": {
+          "confirm_policy": {
+            "enum": [
+              "user_confirm",
+              "approval"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

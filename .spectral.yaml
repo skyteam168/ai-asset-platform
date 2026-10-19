@@ -1,0 +1,8 @@
+extends: ["spectral:oas"]
+rules:
+  # 服务器地址是占位符；契约测试在本地运行
+  oas3-api-servers: off
+  info-contact: off
+  operation-operationId: error
+  operation-tags: error
+  operation-description: off

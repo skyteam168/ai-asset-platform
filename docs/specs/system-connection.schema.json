@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/system-connection.schema.json",
+  "title": "system_connection（architecture.md 9.6、11.3）",
+  "type": "object",
+  "properties": {
+    "system_key": {
+      "type": "string"
+    },
+    "env": {
+      "enum": [
+        "sandbox",
+        "test",
+        "staging",
+        "prod"
+      ]
+    },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "scheme": {
+      "enum": [
+        "https",
+        "http"
+      ]
+    },
+    "tls_mode": {
+      "enum": [
+        "system_ca",
+        "custom_ca",
+        "pinned",
+        "insecure",
+        null
+      ]
+    },
+    "tls_profile_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tls_check_hostname": {
+      "type": "boolean",
+      "default": true
+    },
+    "pins": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "cert",
+              "spki"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "kind",
+          "sha256"
+        ]
+      }
+    },
+    "pin_enforce_expiry": {
+      "type": "boolean",
+      "default": false
+    },
+    "block_on_fingerprint_change": {
+      "type": "boolean",
+      "default": false
+    },
+    "client_cert_ref": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "transport_exception_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "transport_exception_expires_at": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    },
+    "transport_approved_by": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "system_key",
+    "env",
+    "base_url",
+    "scheme"
+  ],
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "scheme": {
+            "const": "http"
+          }
+        },
+        "required": [
+          "scheme"
+        ]
+      },
+      "then": {
+        "required": [
+          "transport_exception_reason",
+          "transport_exception_expires_at"
+        ],
+        "properties": {
+          "tls_mode": {
+            "const": null
+          },
+          "base_url": {
+            "pattern": "^http://"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scheme": {
+            "const": "https"
+          }
+        },
+        "required": [
+          "scheme"
+        ]
+      },
+      "then": {
+        "required": [
+          "tls_mode"
+        ],
+        "properties": {
+          "tls_mode": {
+            "enum": [
+              "system_ca",
+              "custom_ca",
+              "pinned",
+              "insecure"
+            ]
+          },
+          "base_url": {
+            "pattern": "^https://"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tls_mode": {
+            "const": "pinned"
+          }
+        },
+        "required": [
+          "tls_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "pins"
+        ],
+        "properties": {
+          "pins": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tls_mode": {
+            "const": "custom_ca"
+          }
+        },
+        "required": [
+          "tls_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "tls_profile_id"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "tls_mode": {
+            "const": "insecure"
+          }
+        },
+        "required": [
+          "tls_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "transport_exception_reason",
+          "transport_exception_expires_at"
+        ]
+      }
+    }
+  ]
+}

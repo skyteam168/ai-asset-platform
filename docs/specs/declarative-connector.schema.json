@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/declarative-connector.schema.json",
+  "title": "声明式 REST Connector 映射（architecture.md 9.1）",
+  "type": "object",
+  "properties": {
+    "connector": {
+      "type": "string"
+    },
+    "operation": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "mode": {
+      "enum": [
+        "read",
+        "write"
+      ],
+      "default": "read"
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "method": {
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "query": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "body": {}
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "response": {
+      "type": "object",
+      "properties": {
+        "success_when": {
+          "type": "string"
+        },
+        "data": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "next_cursor": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "when": {
+            "type": "string"
+          },
+          "map": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z_]+$"
+          }
+        },
+        "required": [
+          "when",
+          "map"
+        ]
+      }
+    }
+  },
+  "required": [
+    "connector",
+    "operation",
+    "request",
+    "response"
+  ],
+  "additionalProperties": false
+}

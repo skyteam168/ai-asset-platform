@@ -1,0 +1,602 @@
+openapi: 3.1.0
+info:
+  title: AIP Data Plane API
+  version: 0.1.0
+  description: 数据面：OAuth 令牌、目录、统一调用、确认、MCP。约定见 conventions.md，错误码见 error-codes.md。
+servers:
+- url: https://api.example-group.internal
+security:
+- bearer: []
+tags:
+- name: catalog
+- name: confirmation
+- name: invoke
+- name: mcp
+- name: oauth
+- name: ops
+paths:
+  /healthz:
+    get:
+      operationId: dpHealth
+      tags:
+      - ops
+      summary: 存活检查
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /readyz:
+    get:
+      operationId: dpReady
+      tags:
+      - ops
+      summary: 就绪检查（快照与策略已加载）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /.well-known/oauth-protected-resource:
+    get:
+      operationId: protectedResourceMetadata
+      tags:
+      - oauth
+      summary: RFC 9728
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProtectedResourceMetadata'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /.well-known/oauth-authorization-server:
+    get:
+      operationId: authorizationServerMetadata
+      tags:
+      - oauth
+      summary: RFC 8414
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizationServerMetadata'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /.well-known/jwks.json:
+    get:
+      operationId: jwks
+      tags:
+      - oauth
+      summary: 平台令牌验签公钥
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Jwks'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /oauth/token:
+    post:
+      operationId: token
+      tags:
+      - oauth
+      summary: client_credentials 与 RFC 7523 jwt-bearer 令牌交换
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+  /api/v1/catalog:
+    get:
+      operationId: catalog
+      tags:
+      - catalog
+      summary: 按 Principal 过滤的能力目录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CatalogEntry'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+  /api/v1/invoke/{capability_id}:
+    post:
+      operationId: invoke
+      tags:
+      - invoke
+      summary: 调用 Tool（统一执行链）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: capability_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - name: X-User-Assertion
+        in: header
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvokeRequest'
+  /api/v1/executions/{id}:
+    get:
+      operationId: getExecution
+      tags:
+      - invoke
+      summary: 查询执行结果
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/runs/{id}:
+    get:
+      operationId: getRun
+      tags:
+      - invoke
+      summary: 查询 Workflow Run
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/confirmations/{id}/confirm:
+    post:
+      operationId: confirm
+      tags:
+      - confirmation
+      summary: 确认（需同一用户的新断言）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRequest'
+  /api/v1/confirmations/{id}/reject:
+    post:
+      operationId: rejectConfirmation
+      tags:
+      - confirmation
+      summary: 拒绝确认
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmRequest'
+  /mcp:
+    post:
+      operationId: mcp
+      tags:
+      - mcp
+      summary: MCP Streamable HTTP（JSON-RPC，协议 2025-11-25 与 2026-07-28）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                description: JSON-RPC 响应
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /mcp/bundles/{name}:
+    post:
+      operationId: mcpBundle
+      tags:
+      - mcp
+      summary: 按套件暴露的 MCP 端点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+components:
+  responses:
+    Problem:
+      description: RFC 9457 Problem Details
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+              code:
+                type: string
+              message:
+                type: string
+      required:
+      - type
+      - title
+      - status
+      - code
+    Health:
+      type: object
+      properties:
+        status:
+          enum:
+          - ok
+          - degraded
+        service:
+          type: string
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+      - status
+      - service
+    TokenRequest:
+      type: object
+      required:
+      - grant_type
+      properties:
+        grant_type:
+          enum:
+          - client_credentials
+          - urn:ietf:params:oauth:grant-type:jwt-bearer
+        assertion:
+          type: string
+        client_id:
+          type: string
+        client_assertion_type:
+          type: string
+        client_assertion:
+          type: string
+        resource:
+          type: string
+        scope:
+          type: string
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          const: Bearer
+        expires_in:
+          type: integer
+        scope:
+          type: string
+      required:
+      - access_token
+      - token_type
+      - expires_in
+    ProtectedResourceMetadata:
+      type: object
+      properties:
+        resource:
+          type: string
+        authorization_servers:
+          type: array
+          items:
+            type: string
+        bearer_methods_supported:
+          type: array
+          items:
+            type: string
+      required:
+      - resource
+      - authorization_servers
+    AuthorizationServerMetadata:
+      type: object
+      properties:
+        issuer:
+          type: string
+        token_endpoint:
+          type: string
+        jwks_uri:
+          type: string
+        grant_types_supported:
+          type: array
+          items:
+            type: string
+      required:
+      - issuer
+      - token_endpoint
+    Jwks:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            type: object
+      required:
+      - keys
+    CatalogEntry:
+      type: object
+      properties:
+        capability_id:
+          type: string
+        version:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        risk_level:
+          type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+      required:
+      - capability_id
+      - version
+    InvokeRequest:
+      type: object
+      properties:
+        args:
+          type: object
+        version:
+          type:
+          - string
+          - 'null'
+        channel:
+          enum:
+          - beta
+          - stable
+      required:
+      - args
+    ExecutionResult:
+      type: object
+      properties:
+        execution_id:
+          type: string
+        status:
+          enum:
+          - succeeded
+          - failed
+          - unknown
+          - pending_confirm
+          - running
+          - cancelled
+          - compensated
+        data: {}
+        page:
+          type: object
+          properties:
+            next_cursor:
+              type:
+              - string
+              - 'null'
+            truncated:
+              type: boolean
+        error:
+          type:
+          - object
+          - 'null'
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            retryable:
+              type: boolean
+        next_action:
+          type:
+          - object
+          - 'null'
+          properties:
+            type:
+              enum:
+              - refresh_auth
+              - fix_args
+              - request_permission
+              - confirm
+              - wait
+              - reconcile
+              - ask_human
+            message:
+              type: string
+            confirmation_id:
+              type:
+              - string
+              - 'null'
+            retry_after_s:
+              type:
+              - integer
+              - 'null'
+        trace_id:
+          type: string
+      required:
+      - execution_id
+      - status
+      - trace_id
+    Run:
+      type: object
+      properties:
+        run_id:
+          type: string
+        status:
+          type: string
+        result: {}
+        pending_tasks:
+          type: array
+          items:
+            type: object
+      required:
+      - run_id
+      - status
+    ConfirmRequest:
+      type: object
+      properties:
+        assertion:
+          type: string
+        comment:
+          type: string
