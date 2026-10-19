@@ -1,0 +1,404 @@
+"""控制面 IAM 接口（docs/api/control-plane.openapi.yaml）。每个操作在操作者可见公司范围内的事务中执行。"""
+
+from __future__ import annotations
+
+import datetime as dt
+import secrets
+import uuid
+from typing import Annotated, Any, Literal
+
+from fastapi import APIRouter, Depends, Header, Request, Response
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+
+from aip.control_plane.db import Database, DbScope
+from aip.control_plane.iam import auth, consumers, orgs, snapshot, users
+from aip.control_plane.iam import tables as t
+from aip.control_plane.iam.authz import Actor
+from aip.libs.common.config import get_settings
+from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.tokens.assertion import verify_assertion
+from aip.libs.tokens.keys import platform_key
+from aip.libs.tokens.replay import MemoryReplayStore
+
+V = "/api/v1"
+
+
+def _db(request: Request) -> Database:
+    db: Database = request.app.state.db
+    return db
+
+
+def _bearer(authorization: str | None) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise PlatformError(ErrorCode.UNAUTHENTICATED, "缺少会话令牌")
+    return authorization[7:].strip()
+
+
+async def current_actor(request: Request, authorization: Annotated[str | None, Header()] = None) -> Actor:
+    db = _db(request)
+    token = _bearer(authorization)
+    async with db.tx(DbScope.system()) as conn:
+        user_id = await auth.resolve_session(conn, token)
+        return await users.load_actor(conn, user_id)
+
+
+ActorDep = Annotated[Actor, Depends(current_actor)]
+DbDep = Annotated[Database, Depends(_db)]
+
+
+class LoginIn(BaseModel):
+    login_name: str
+    password: str
+    totp: str | None = None
+
+
+class OrgIn(BaseModel):
+    type: Literal["company", "department", "team"]
+    code: str = Field(min_length=1, max_length=64)
+    name: str
+    parent_id: uuid.UUID
+    default_clearance: int | None = Field(default=None, ge=1, le=4)
+    timezone: str | None = None
+    locale: str | None = None
+
+
+class MoveIn(BaseModel):
+    new_parent_id: uuid.UUID
+
+
+class UserIn(BaseModel):
+    display_name: str
+    home_org_id: uuid.UUID
+    login_name: str | None = None
+    password: str | None = None
+    employee_no: str | None = None
+    email: str | None = None
+    login_enabled: bool = False
+
+
+class ImportIn(BaseModel):
+    format: Literal["csv"] = "csv"
+    content: str
+    dry_run: bool = True
+
+
+class RoleIn(BaseModel):
+    role: str
+    scope_org_id: uuid.UUID
+    expires_at: dt.datetime | None = None
+
+
+class ClearanceIn(BaseModel):
+    user_id: uuid.UUID
+    requested_level: int = Field(ge=1, le=4)
+    reason: str = Field(min_length=4)
+    expires_at: dt.datetime
+
+
+class DecisionIn(BaseModel):
+    decision: Literal["approve", "reject"]
+    comment: str = ""
+
+
+class ConsumerIn(BaseModel):
+    client_id: str = Field(pattern=r"^[a-z0-9][a-z0-9-]{2,63}$")
+    company_id: uuid.UUID
+    clearance_cap: int = Field(ge=1, le=4)
+    bind_policy: Literal["strict", "by_employee_no", "app_only"] = "strict"
+    contact: str | None = None
+
+
+class CredentialIn(BaseModel):
+    kind: Literal["static_token"] = "static_token"
+    days: int = Field(default=90, ge=1, le=365)
+    ip_binding: list[str] | None = None
+
+
+class BindingIn(BaseModel):
+    external_subject: str = Field(min_length=1, max_length=256)
+    user_id: uuid.UUID
+
+
+class DebugIn(BaseModel):
+    consumer_id: uuid.UUID
+    assertion: str
+
+
+def _user_out(row: dict[str, Any], clearance: int) -> dict[str, Any]:
+    keys = (
+        "id",
+        "login_name",
+        "display_name",
+        "employee_no",
+        "email",
+        "home_org_id",
+        "login_enabled",
+        "status",
+        "timezone",
+        "locale",
+    )
+    out = {k: (str(row[k]) if isinstance(row[k], uuid.UUID) else row[k]) for k in keys}
+    out["effective_clearance"] = clearance
+    return out
+
+
+def router() -> APIRouter:
+    r = APIRouter()
+
+    @r.post(f"{V}/auth/login", tags=["auth"], operation_id="login")
+    async def login(body: LoginIn, db: DbDep) -> dict[str, Any]:
+        async with db.tx(DbScope.system()) as conn:
+            try:
+                token, expires, user_id = await auth.login(conn, body.login_name, body.password, body.totp)
+            except PlatformError:
+                # 失败计数与锁定需要落库，因此先提交再抛错
+                await conn.commit()
+                raise
+            u = await users.user_row(conn, user_id)
+            clearance = await users.effective_clearance(conn, user_id)
+        return {"session_token": token, "expires_at": expires.isoformat(), "user": _user_out(u, clearance)}
+
+    @r.post(f"{V}/auth/logout", tags=["auth"], operation_id="logout", status_code=204)
+    async def logout(db: DbDep, authorization: Annotated[str | None, Header()] = None) -> Response:
+        async with db.tx(DbScope.system()) as conn:
+            await auth.logout(conn, _bearer(authorization))
+        return Response(status_code=204)
+
+    @r.get(f"{V}/me", tags=["auth"], operation_id="me")
+    async def me(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        assert actor.user_id is not None
+        async with db.tx(actor.db_scope()) as conn:
+            u = await users.user_row(conn, actor.user_id)
+            out = _user_out(u, await users.effective_clearance(conn, actor.user_id))
+        out["roles"] = [{"role": g.role, "scope_org_id": str(g.scope_org_id)} for g in actor.roles]
+        return out
+
+    @r.get(f"{V}/orgs", tags=["iam"], operation_id="listOrgs")
+    async def list_orgs(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            items = [o.as_dict() for o in await orgs.list_orgs(conn)]
+        return {"items": items, "next_cursor": None, "has_more": False}
+
+    @r.post(f"{V}/orgs", tags=["iam"], operation_id="createOrg", status_code=201)
+    async def create_org(body: OrgIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            o = await orgs.create_org(
+                conn,
+                actor,
+                type_=body.type,
+                code=body.code,
+                name=body.name,
+                parent_id=body.parent_id,
+                default_clearance=body.default_clearance,
+                timezone=body.timezone,
+                locale=body.locale,
+            )
+        return o.as_dict()
+
+    @r.get(f"{V}/orgs/{{id}}", tags=["iam"], operation_id="getOrg")
+    async def get_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return (await orgs.get_org(conn, id)).as_dict()
+
+    @r.post(f"{V}/orgs/{{id}}/move", tags=["iam"], operation_id="moveOrg")
+    async def move_org(id: uuid.UUID, body: MoveIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return (await orgs.move_org(conn, actor, id, body.new_parent_id)).as_dict()
+
+    @r.post(f"{V}/orgs/{{id}}/disable", tags=["iam"], operation_id="disableOrg")
+    async def disable_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return (await orgs.disable_org(conn, actor, id)).as_dict()
+
+    @r.get(f"{V}/users", tags=["iam"], operation_id="listUsers")
+    async def list_users(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            rows = (await conn.execute(select(t.iam_user).order_by(t.iam_user.c.id).limit(200))).mappings().all()
+            items = [_user_out(dict(u), await users.effective_clearance(conn, u["id"])) for u in rows]
+        return {"items": items, "next_cursor": None, "has_more": False}
+
+    @r.post(f"{V}/users", tags=["iam"], operation_id="createUser", status_code=201)
+    async def create_user(body: UserIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            created = await users.create_user(
+                conn,
+                actor,
+                display_name=body.display_name,
+                home_org_id=body.home_org_id,
+                login_name=body.login_name,
+                password=body.password,
+                employee_no=body.employee_no,
+                email=body.email,
+                login_enabled=body.login_enabled,
+            )
+            out = _user_out(await users.user_row(conn, created.id), await users.effective_clearance(conn, created.id))
+        out["totp_provisioning_uri"] = created.totp_provisioning_uri
+        return out
+
+    @r.post(f"{V}/users/import", tags=["iam"], operation_id="importUsers")
+    async def import_users(body: ImportIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            res = await users.import_users_csv(conn, actor, body.content, body.dry_run)
+        return {
+            "batch_id": str(res.batch_id),
+            "dry_run": res.dry_run,
+            "created": res.created,
+            "updated": 0,
+            "unchanged": res.unchanged,
+            "errors": res.errors,
+        }
+
+    @r.get(f"{V}/users/{{id}}", tags=["iam"], operation_id="getUser")
+    async def get_user(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return _user_out(await users.user_row(conn, id), await users.effective_clearance(conn, id))
+
+    @r.post(f"{V}/users/{{id}}/roles", tags=["iam"], operation_id="assignRole", status_code=201)
+    async def assign_role(id: uuid.UUID, body: RoleIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            rid = await users.assign_role(conn, actor, id, body.role, body.scope_org_id, body.expires_at)
+        return {"id": str(rid), "user_id": str(id), "role": body.role, "scope_org_id": str(body.scope_org_id)}
+
+    @r.post(f"{V}/clearance-requests", tags=["iam"], operation_id="requestClearance", status_code=201)
+    async def request_clearance(body: ClearanceIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            rid = await users.request_clearance(
+                conn, actor, body.user_id, body.requested_level, body.reason, body.expires_at
+            )
+        return {"id": str(rid), "status": "pending", **body.model_dump(mode="json")}
+
+    @r.post(f"{V}/clearance-requests/{{id}}/decide", tags=["iam"], operation_id="decideClearance")
+    async def decide_clearance(id: uuid.UUID, body: DecisionIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            status = await users.decide_clearance(conn, actor, id, body.decision == "approve", body.comment)
+        return {"id": str(id), "status": status}
+
+    @r.get(f"{V}/consumers", tags=["iam"], operation_id="listConsumers")
+    async def list_consumers(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            rows = (await conn.execute(select(t.consumer).order_by(t.consumer.c.client_id))).mappings().all()
+        items = [{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()} for row in rows]
+        return {"items": items, "next_cursor": None, "has_more": False}
+
+    @r.post(f"{V}/consumers", tags=["iam"], operation_id="createConsumer", status_code=201)
+    async def create_consumer(body: ConsumerIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            cid = await consumers.create_consumer(
+                conn,
+                actor,
+                client_id=body.client_id,
+                company_id=body.company_id,
+                clearance_cap=body.clearance_cap,
+                bind_policy=body.bind_policy,
+                contact=body.contact,
+            )
+        return {"id": str(cid), **body.model_dump(mode="json"), "status": "active"}
+
+    @r.post(f"{V}/consumers/{{id}}/credentials", tags=["iam"], operation_id="issueCredential", status_code=201)
+    async def issue_credential(id: uuid.UUID, body: CredentialIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            cred_id, token, expires = await consumers.issue_static_token(conn, actor, id, body.days, body.ip_binding)
+        return {"id": str(cred_id), "kind": body.kind, "token": token, "expires_at": expires.isoformat()}
+
+    @r.post(f"{V}/credentials/{{id}}/revoke", tags=["iam"], operation_id="revokeCredential", status_code=204)
+    async def revoke_credential(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await consumers.revoke_credential(conn, actor, id)
+        return Response(status_code=204)
+
+    @r.post(f"{V}/consumers/{{id}}/jwks", tags=["iam"], operation_id="addConsumerJwk", status_code=201)
+    async def add_jwk(id: uuid.UUID, jwk: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            await consumers.add_jwk(conn, actor, id, jwk)
+        return jwk
+
+    @r.get(f"{V}/consumers/{{id}}/bindings", tags=["iam"], operation_id="listBindings")
+    async def list_bindings(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            rows = (
+                (await conn.execute(select(t.user_binding).where(t.user_binding.c.consumer_id == id).limit(200)))
+                .mappings()
+                .all()
+            )
+        items = [{k: (str(v) if isinstance(v, uuid.UUID | dt.datetime) else v) for k, v in row.items()} for row in rows]
+        return {"items": items, "next_cursor": None, "has_more": False}
+
+    @r.post(f"{V}/consumers/{{id}}/bindings", tags=["iam"], operation_id="createBinding", status_code=201)
+    async def create_binding(id: uuid.UUID, body: BindingIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            bid = await consumers.create_binding(conn, actor, id, body.external_subject, body.user_id)
+        return {"id": str(bid), "consumer_id": str(id), **body.model_dump(mode="json")}
+
+    @r.post(f"{V}/assertion-debug", tags=["iam"], operation_id="debugAssertion")
+    async def debug_assertion(body: DebugIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """断言调试器：验签、校验声明、查绑定；不消耗 jti、不记录断言内容（architecture.md 3.1）。"""
+        s = get_settings()
+        async with db.tx(actor.db_scope()) as conn:
+            c = await consumers.consumer_row(conn, body.consumer_id)
+            actor.require(actor.manages_org(c["company_id"]))
+            keys = {
+                k["kid"]: k["jwk"]
+                for k in (
+                    await conn.execute(
+                        select(t.consumer_jwk).where(
+                            (t.consumer_jwk.c.consumer_id == body.consumer_id) & (t.consumer_jwk.c.status == "active")
+                        )
+                    )
+                ).mappings()
+            }
+            result: dict[str, Any] = {
+                "signature_valid": False,
+                "claims_valid": False,
+                "binding": None,
+                "errors": [],
+                "principal": None,
+            }
+            try:
+                v = await verify_assertion(
+                    body.assertion,
+                    client_id=c["client_id"],
+                    jwks=keys,
+                    audiences=[s.token_endpoint_aud, s.mcp_resource, s.issuer],
+                    replay=MemoryReplayStore(),
+                    max_ttl_s=s.assertion_max_ttl_s,
+                )
+            except PlatformError as e:
+                result["errors"].append(f"{e.code}: {e.detail}")
+                return result
+            result.update(signature_valid=True, claims_valid=True)
+            row = (
+                await conn.execute(
+                    select(t.user_binding.c.user_id).where(
+                        (t.user_binding.c.consumer_id == body.consumer_id)
+                        & (t.user_binding.c.external_subject == v.subject)
+                    )
+                )
+            ).first()
+            if row is None:
+                result["errors"].append(f"USER_NOT_BOUND（bind_policy={c['bind_policy']}）")
+                return result
+            result["binding"] = str(row[0])
+            u = await users.user_row(conn, row[0])
+            result["principal"] = {
+                "identity_kind": "user",
+                "user_id": str(row[0]),
+                "company_id": str(u["company_id"]),
+                "clearance": min(await users.effective_clearance(conn, row[0]), int(c["clearance_cap"])),
+                "client_id": c["client_id"],
+                "status": u["status"],
+            }
+        return result
+
+    @r.get(f"{V}/snapshots/iam", tags=["snapshot"], operation_id="pullIamSnapshot", response_model=None)
+    async def pull_iam(
+        db: DbDep, after_seq: int = 0, authorization: Annotated[str | None, Header()] = None
+    ) -> Response | dict[str, Any]:
+        if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
+            raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
+        async with db.tx(DbScope.system()) as conn:
+            await snapshot.publish(conn, platform_key())
+            snap = await snapshot.latest(conn, after_seq)
+        return snap if snap is not None else Response(status_code=204)
+
+    return r

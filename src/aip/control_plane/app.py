@@ -2,16 +2,29 @@
 
 from __future__ import annotations
 
+import contextlib
+from collections.abc import AsyncIterator
+
 from fastapi import FastAPI
 
+from aip.control_plane.db import Database
+from aip.control_plane.iam.api import router as iam_router
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
 
 
-def create_app() -> FastAPI:
+def create_app(db: Database | None = None) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="AIP Control Plane API", version=settings.version)
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        yield
+        await app.state.db.dispose()
+
+    app = FastAPI(title="AIP Control Plane API", version=settings.version, lifespan=lifespan)
+    app.state.db = db or Database()
     web.install(app)
+    app.include_router(iam_router())
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="cpHealth")
     async def healthz() -> web.Health:
