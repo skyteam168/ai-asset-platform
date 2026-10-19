@@ -7,6 +7,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
 
+from aip.control_plane.conn.api import router as conn_router
 from aip.control_plane.db import Database
 from aip.control_plane.iam.api import router as iam_router
 from aip.control_plane.registry.api import router as registry_router
@@ -27,6 +28,7 @@ def create_app(db: Database | None = None) -> FastAPI:
     web.install(app)
     app.include_router(iam_router())
     app.include_router(registry_router())
+    app.include_router(conn_router())
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="cpHealth")
     async def healthz() -> web.Health:

@@ -19,6 +19,8 @@ dependencies = [
     "redis>=5.2",
     "uuid-utils>=0.9",
     "python-multipart>=0.0.20",
+    "jinja2>=3.1.4",
+    "jsonpath-ng>=1.7",
 ]
 
 [dependency-groups]
@@ -69,7 +71,7 @@ ignore = ["RUF001", "RUF002", "RUF003", "S101"]
 "urllib3".msg = "出站 HTTP 必须经 aip.libs.httpclient"
 
 [tool.ruff.lint.per-file-ignores]
-"src/aip/libs/httpclient/**" = ["TID251"]
+"src/aip/libs/httpclient/**" = ["TID251", "ASYNC109"]  # 实现 httpcore 网络后端接口，签名含 timeout
 "src/aip/libs/common/errors.py" = ["S105"]  # 错误码名称不是口令
 "tests/**" = ["S", "TID251", "ASYNC221", "ASYNC240"]
 "tools/**" = ["S", "T201"]

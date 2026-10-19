@@ -596,6 +596,25 @@ def control_plane() -> dict[str, Any]:
                 code="201",
             ),
         },
+        f"{A}/connections/{{id}}/approve-exception": {
+            "post": op(
+                "approveTransportException",
+                "connection",
+                "审批传输例外（生产需两名数据 Owner）",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/connector-instances": {
+            "post": op(
+                "createConnectorInstance",
+                "connection",
+                "登记 Connector 实例",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+            )
+        },
         f"{A}/connections/{{id}}/test": {
             "post": op(
                 "testConnection", "connection", "连接测试（真实握手）", res=ref("ConnectionTestResult"), params=["Id"]

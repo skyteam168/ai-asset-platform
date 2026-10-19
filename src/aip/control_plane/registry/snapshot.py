@@ -77,7 +77,15 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
             }
         )
     releases.sort(key=lambda x: (x["capability_id"], x["env"], x["channel"]))
-    return {"format": 1, "generated_at": utcnow().isoformat(), "releases": releases, "policy": policy_bundle()}
+    from aip.control_plane.conn.service import snapshot_part as connections
+
+    return {
+        "format": 1,
+        "generated_at": utcnow().isoformat(),
+        "releases": releases,
+        "policy": policy_bundle(),
+        **await connections(conn),
+    }
 
 
 async def publish(conn: AsyncConnection, key: SigningKey) -> dict[str, Any] | None:

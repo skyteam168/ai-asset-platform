@@ -11,25 +11,42 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 import httpx
-from fastapi import FastAPI, Header, Response
+from fastapi import FastAPI, Header, Request, Response
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
 from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.oauth import AuthContext
 from aip.data_plane.oauth import router as oauth_router
 from aip.data_plane.pdp import OpaClient, PolicyService
 from aip.data_plane.principal import PrincipalResolver
 from aip.data_plane.release_cache import ReleaseCache
+from aip.data_plane.runtime import (
+    ConnectorRegistry,
+    ExecutionStore,
+    MemoryExecutionStore,
+    PgExecutionStore,
+    ToolRuntime,
+)
 from aip.data_plane.snapshots import SnapshotCache, SnapshotRejected
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.audit.store import anchor, ship
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
+from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.httpclient.config import Resolver
 from aip.libs.tokens.keys import SigningKey, platform_key
 from aip.libs.tokens.replay import ReplayStore, ValkeyReplayStore
 
 log = logging.getLogger("aip.data_plane")
+
+
+class InvokeIn(BaseModel):
+    args: dict[str, Any] = Field(default_factory=dict)
+    version: str | None = None
+    channel: str = "stable"
 
 
 class Readiness:
@@ -108,13 +125,16 @@ def create_app(
     control_plane_url: str | None = None,
     data_dir: pathlib.Path | None = None,
     opa_url: str | None = None,
+    secrets: SecretStore | None = None,
+    exec_store: ExecutionStore | None = None,
+    resolver: Resolver | None = None,
 ) -> FastAPI:
     settings = get_settings()
     key = key or platform_key()
     data_dir = data_dir or pathlib.Path(settings.data_dir)
     iam = IamCache([key], data_dir / "snapshots")
     releases = ReleaseCache([key], data_dir / "snapshots")
-    opa = OpaClient(opa_url or settings.opa_url)
+    opa = OpaClient(opa_url or settings.opa_url, settings.opa_timeout_s)
     audit = AuditSpool(data_dir / "audit-spool", settings.instance_id, settings.audit_spool_max_bytes)
     policy = PolicyService(iam, releases, opa, audit, env=settings.env if settings.env != "dev" else "test")
     ctx = AuthContext(
@@ -122,6 +142,24 @@ def create_app(
         resolver=PrincipalResolver(iam),
         key=key,
         replay=replay or ValkeyReplayStore(settings.valkey_url),
+    )
+    if exec_store is None:
+        exec_store = (
+            PgExecutionStore(create_async_engine(settings.runtime_database_url))
+            if settings.runtime_database_url
+            else MemoryExecutionStore()
+        )
+    registry = ConnectorRegistry(
+        releases, secrets or OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token), resolver
+    )
+    runtime = ToolRuntime(
+        iam=iam,
+        releases=releases,
+        policy=policy,
+        registry=registry,
+        store=exec_store,
+        audit=audit,
+        mode=settings.runtime_mode,
     )
 
     @contextlib.asynccontextmanager
@@ -150,6 +188,8 @@ def create_app(
     app.state.policy = policy
     app.state.audit = audit
     app.state.auth = ctx
+    app.state.runtime = runtime
+    store = exec_store
     app.include_router(oauth_router(ctx))
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="dpHealth")
@@ -175,6 +215,46 @@ def create_app(
         """M1：只做认证与 Principal 解析；目录内容在 M4 按发布快照与 PDP 过滤。"""
         await ctx.principal_from_request(authorization, x_user_assertion)
         return {"items": [], "next_cursor": None, "has_more": False}
+
+    @app.post("/api/v1/invoke/{capability_id}", tags=["invoke"], operation_id="invoke")
+    async def invoke(
+        capability_id: str,
+        body: InvokeIn,
+        request: Request,
+        authorization: Annotated[str | None, Header()] = None,
+        x_user_assertion: Annotated[str | None, Header()] = None,
+        idempotency_key: Annotated[str | None, Header()] = None,
+    ) -> dict[str, Any]:
+        """统一执行链的 REST 出口；业务失败也返回 200 + status=failed（docs/api/conventions.md）。"""
+        principal = await ctx.principal_from_request(authorization, x_user_assertion)
+        return await runtime.invoke(
+            principal,
+            capability_id,
+            body.args,
+            idempotency_key=idempotency_key,
+            exposure="rest",
+            channel=body.channel,
+            version=body.version,
+            trace_id=request.state.trace_id,
+        )
+
+    @app.get("/api/v1/executions/{id}", tags=["invoke"], operation_id="getExecution")
+    async def get_execution(
+        id: str,
+        authorization: Annotated[str | None, Header()] = None,
+        x_user_assertion: Annotated[str | None, Header()] = None,
+    ) -> dict[str, Any]:
+        principal = await ctx.principal_from_request(authorization, x_user_assertion)
+        rec = await store.get(id)
+        if rec is None or str(rec["consumer_id"]) != principal.consumer_id:
+            raise PlatformError(ErrorCode.NOT_FOUND, "执行记录不存在")
+        return {
+            "execution_id": rec["id"],
+            "status": rec["status"],
+            "data": rec.get("result"),
+            "error": {"code": rec["error_code"]} if rec.get("error_code") else None,
+            "trace_id": rec["trace_id"],
+        }
 
     return app
 

@@ -847,6 +847,44 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SystemConnection'
+  /api/v1/connections/{id}/approve-exception:
+    post:
+      operationId: approveTransportException
+      tags:
+      - connection
+      summary: 审批传输例外（生产需两名数据 Owner）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/connector-instances:
+    post:
+      operationId: createConnectorInstance
+      tags:
+      - connection
+      summary: 登记 Connector 实例
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
   /api/v1/connections/{id}/test:
     post:
       operationId: testConnection

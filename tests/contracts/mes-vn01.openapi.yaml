@@ -1,0 +1,43 @@
+openapi: 3.0.3
+info:
+  title: VN01 MES（接入台账中的旧系统接口，节选）
+  version: "2.3"
+paths:
+  /api/v2/workorders:
+    get:
+      operationId: listWorkOrders
+      parameters:
+        - {name: plant, in: query, required: true, schema: {type: string, pattern: "^F[0-9]{3}$"}}
+        - {name: status, in: query, required: false, schema: {type: string, enum: [open, closed, hold]}}
+        - {name: pageSize, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200}}
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, data]
+                properties:
+                  code: {type: integer, example: 0}
+                  data:
+                    type: object
+                    required: [items]
+                    properties:
+                      nextPage: {type: string, nullable: true, example: null}
+                      items:
+                        type: array
+                        items:
+                          type: object
+                          required: [woNo, planQty, status]
+                          properties:
+                            woNo: {type: string, example: WO-20261019-001}
+                            planQty: {type: integer, example: 1200}
+                            status: {type: string, example: open}
+              example:
+                code: 0
+                data:
+                  nextPage: null
+                  items:
+                    - {woNo: WO-20261019-001, planQty: 1200, status: open}
+                    - {woNo: WO-20261019-002, planQty: 800, status: open}

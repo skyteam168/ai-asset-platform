@@ -67,6 +67,10 @@ async def truncate() -> None:
             "grants.grant_ceiling",
             "audit.audit_anchor",
             "audit.audit_log",
+            "conn.connector_instance",
+            "conn.connection_test_run",
+            "conn.system_connection",
+            "exec.tool_execution",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:

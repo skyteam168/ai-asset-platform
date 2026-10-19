@@ -83,3 +83,28 @@
 | by_employee_no 首次匹配回写绑定 | 未回写 | M4 |
 | 发布与授权的审批流（目前平台管理员直接操作） | 服务与接口已就绪 | M4（P7） |
 | docs/specs 与 policies 打包进镜像 | 运行时从仓库路径读取 | M4（P12 部署） |
+
+## M3 Connector 与 Runtime（P3）— 2026-10-19 通过
+
+| 第 14 章 M3 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| **HTTP、自签 HTTPS 的 pinned 与 insecure 三种连接测试通过** | 通过 | `test_m3_tls_matrix.py`：T-HTTP-01、T-PIN-01、T-INS-01，均同时通过 `probe()` 连接测试判定 |
+| 附录 B TLS 测试矩阵全部通过 | 通过（26 / 26） | 正向：SPKI 指纹、双指纹轮换、同密钥续签、过期证书仅告警、insecure 按 IP 校验主机名、自签证书作为 custom_ca、下游 mTLS；反向：指纹错误 / 证书过期强制 / 主机名不符 / 指纹变化阻断时**服务端请求数为 0**，system_ca 拒绝自签证书、custom_ca 主机名不符、协议不一致、HTTPS→HTTP 重定向不跟随、访问登记主机以外的地址被拒、公网地址被拒、DNS 重绑定被拒、传输例外过期禁用并发事件、出站日志字段完整且不含凭据、错误码精确映射 |
+| 集成测试覆盖超时、熔断、幂等重放、沙箱拒写、unknown 对账、并发刷新只登录一次 | 通过 | `test_m3_runtime.py`：超时、读操作重试、连续 5 次失败后熔断且不再打下游、限流、同键重放不再调用下游 / 同键不同参数冲突 / 写操作缺幂等键拒绝、沙箱禁止写生产连接（服务端请求数 0）、写超时进入 unknown 且不重放 → 对账成功或确认未执行、10 个并发调用只登录 1 次且 401 后刷新一次重试成功 |
+| CI 的 verify=False 检查生效 | 通过 | M0 `test_m0_tls_lint.py` 持续运行；httpclient 包是唯一豁免目录 |
+| 一个声明式 Connector 从 Mock 跑通 G1 契约测试 | 通过 | `test_G1_declarative_connector_against_prism_mock`：按旧系统 OpenAPI（`tests/contracts/mes-vn01.openapi.yaml`）启动 Prism，请求经 Prism 校验、返回值符合 Tool output_schema；分页上限被映射截到 200 |
+| 其他 | 通过 | 传输例外生产环境需两名不同数据 Owner 审批、创建者不能审批、到期日不超过 90 天、到期自动禁用；T-GEN-N6（例外连接上的 user_delegated Tool 发布被拒）；连接测试接口 + “固定此证书”草稿且不发 HTTP 请求；发布快照携带 Connector 实例与连接（只含凭据引用）；Postgres 唯一约束保证并发同键只执行一次；kb Connector；业务码失败不泄露下游信息；Result Guard 按 output_schema 裁剪、按密级脱敏 PII、按上限截断；PDP 拒绝与确认贯通；REST `/invoke` 与 `/executions` |
+| lint | 通过 | ruff、mypy --strict（63 个文件）、TLS 约束检查 |
+| 测试总数 | 227 通过，0 失败，0 跳过（M0 34 + M1 63 + M2 79 + M3 51） | `python -m pytest -q`，约 3.5 分钟 |
+
+实现中修复的缺陷：事件回调为空列表时被当作“未提供”而丢事件（改为 `is not None`）；模板 `default` 过滤器遇到未传参数时报错（StrictUndefined 下需显式判断 Undefined）。
+
+延后项：
+
+| 项 | 现状 | 计划 |
+| --- | --- | --- |
+| 连接测试展示完整证书链 | Python 3.12 只能取叶子证书 | 升级到 Python 3.13（`get_unverified_chain`） |
+| insecure 指纹记录回写控制面 | 数据面进程内记录并发事件 | M4 事件回传通道 |
+| 写操作确认对象（confirmation）与确认通道 | Runtime 返回 pending_confirm，不执行 | M5（P8） |
+| 对账自动调度 | 提供 `reconcile()`，由调用方触发 | M5 reconcile worker |
+| Result Guard 的“不可信内容”标注 | 未加 | M4 MCP 出口一并实现 |

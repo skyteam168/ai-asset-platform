@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     openbao_addr: str = "http://127.0.0.1:58200"
     openbao_token: str = "aip-dev-root-token"  # noqa: S105 - 仅 dev 容器使用的根令牌
     opa_url: str = "http://127.0.0.1:58181"
+    opa_timeout_s: float = 2.0
     s3_endpoint: str = "http://127.0.0.1:58333"
 
     # 身份（architecture.md 3）
@@ -39,6 +40,10 @@ class Settings(BaseSettings):
     audit_spool_max_bytes: int = 512 * 1024 * 1024
     # 审计库（应用角色只有 INSERT / SELECT）；为空则只写本地 spool、不入库
     audit_database_url: str = ""
+    # 数据面运行表（exec.tool_execution）；为空时用进程内存储（仅限开发）
+    runtime_database_url: str = ""
+    # sandbox：写操作只允许到 sandbox / test 连接；live：生产（architecture.md 7.2）
+    runtime_mode: str = Field(default="sandbox", pattern="^(sandbox|live_read|live)$")
     audit_ship_interval_s: float = 1.0
     audit_anchor_interval_s: float = 3600.0
     access_token_ttl_s: int = Field(default=600, ge=300, le=900)

@@ -132,6 +132,7 @@ def dev_env() -> dict[str, str]:
         "AIP_SIGNING_KEY_PEM": key_file.read_text(encoding="utf-8"),
         "AIP_CONTROL_PLANE_URL": "http://127.0.0.1:18081",
         "AIP_AUDIT_DATABASE_URL": "postgresql+asyncpg://aip_app:aip-app-dev-only@127.0.0.1:55432/aip",
+        "AIP_RUNTIME_DATABASE_URL": "postgresql+asyncpg://aip_app:aip-app-dev-only@127.0.0.1:55432/aip",
     }
 
 

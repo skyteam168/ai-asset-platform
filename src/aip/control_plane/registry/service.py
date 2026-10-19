@@ -83,6 +83,18 @@ async def _emit(
     )
 
 
+async def notify_change(
+    conn: AsyncConnection,
+    kind: str,
+    company_id: uuid.UUID,
+    subject_id: uuid.UUID | None,
+    actor: Actor,
+    payload: dict[str, Any] | None = None,
+) -> None:
+    """其他模块（连接、Connector 实例）的变更也要触发新的发布快照。"""
+    await _emit(conn, kind, company_id, subject_id, actor, payload)
+
+
 async def asset_row(conn: AsyncConnection, asset_id: uuid.UUID) -> dict[str, Any]:
     row = (await conn.execute(select(t.asset).where(t.asset.c.id == asset_id))).mappings().first()
     if row is None:
@@ -247,6 +259,10 @@ async def create_release(
     risk = v["spec"].get("risk_level")
     if risk == "danger" and exposure != ["rest"]:
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "danger 级别默认不对外暴露（architecture.md 10.2）")
+    if v["spec"].get("connector_ref"):
+        from aip.control_plane.conn.service import check_release_connection
+
+        await check_release_connection(conn, v["spec"], env)
     norm = _check_scope(scope)
     prev = (
         await conn.execute(

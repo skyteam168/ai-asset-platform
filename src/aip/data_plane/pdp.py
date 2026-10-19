@@ -33,8 +33,11 @@ class Decision:
 
 
 class OpaClient:
-    def __init__(self, base_url: str, timeout_s: float = 0.5) -> None:
-        self._http = httpx.AsyncClient(base_url=base_url, timeout=timeout_s)
+    def __init__(self, base_url: str, timeout_s: float = 2.0) -> None:
+        # sidecar 在本机：保持长连接，避免每次决策都建连
+        self._http = httpx.AsyncClient(
+            base_url=base_url, timeout=timeout_s, limits=httpx.Limits(max_keepalive_connections=32, max_connections=64)
+        )
         self.revision: str | None = None
 
     async def load_bundle(self, bundle: dict[str, Any]) -> None:
