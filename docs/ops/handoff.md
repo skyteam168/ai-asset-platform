@@ -17,7 +17,7 @@
 | 控制台品牌、中英越三语、明暗主题、界面改版 | 完成 | 58c17e7、8c4b8ad |
 | **M6a** 风险规则、自动熔断与复核恢复、配额与计量 | 完成 | f96ddb1 |
 | **M6b** 套件、目录与 webhook | 完成 | 0208d45 |
-| **M6c** Skill Registry 与 corp-skill | 完成 | （本切片提交） |
+| **M6c** Skill Registry 与 corp-skill | 完成 | 04063f7 |
 | **M6d–M6e、M7** | **待做**（见第 6、7 节） | — |
 
 测试现状：后端含 M6b/M6c 用例（`test_m6_catalog` / `test_m6_webhook` / `test_m6_skill`）；控制台组件测试与端到端在提交前再跑全量。
