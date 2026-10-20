@@ -19,9 +19,10 @@
 | **M6b** 套件、目录与 webhook | 完成 | 0208d45 |
 | **M6c** Skill Registry 与 corp-skill | 完成 | 04063f7 |
 | **M6d** 合成探针与契约漂移 | 完成 | 412ef8b |
-| **M6e、M7** | **待做**（见第 6、7 节） | — |
+| **M6e** M5 延后项与控制台 | 完成 | （本提交） |
+| **M7** | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M6d 用例（catalog / webhook / skill / probe）；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M6e 用例；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -61,7 +62,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b）、`skill/`（M6c 包与目录）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`oauth.py`、`pdp.py` / `facts.py` |
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
-| `migrations/versions/` | Alembic，当前到 0012（probe_result / contract_drift；此前 0011 skill、0010 notify） |
+| `migrations/versions/` | Alembic，当前到 0013（parent_run_id / exec_sandbox / channel_outbox；此前 0012 probe） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
@@ -112,15 +113,9 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 
 write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不自动 Suspended。
 
-### M6e M5 延后项与控制台——**当前下一步**
+### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-- Workflow 引擎补 `loop`（必须有上限）、`parallel`、`sub_workflow` 节点（`src/aip/data_plane/workflow/engine.py`；`libs/workflow/dsl.py` 里去掉对应的“暂不支持”）。
-- Workflow 在 Test Lab 沙箱整体回放：需要与生产隔离的运行表（如 `exec_sandbox` schema）与独立 Worker，避免被生产 Worker 认领。
-- 通知插件（Notifier：邮件 + 一个 IM），用于待办、风险告警、确认到期。
-- 人工任务超时升级与代理人（审批引擎已有代理人表，人工任务尚未接入）。
-- 控制台：资产目录页、Run 详情页（目前只在审批待办里能展开 Run 抽屉）、套件 / Skill / webhook 管理页。
-
-## 7. 之后：M7 与横向事项
+## 7. 之后：M7 与横向事项（**当前下一步**）
 
 - **M7（P11、P13、P12 演练部分）**：MCP tasks 扩展、MRTR / elicitation 确认通道、`get_run_status` 工具、工具注解自动生成；发现模式（三个元工具，中文与越南语全文检索，danger 不进入）；上游 MCP 连接器；Python / TypeScript SDK（含 LangGraph / LangChain 适配器）；A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）。
 - **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。

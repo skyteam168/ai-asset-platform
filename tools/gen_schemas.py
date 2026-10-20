@@ -197,8 +197,12 @@ NODE = obj(
             "type",
             "loop",
             {
-                "required": ["max_iterations", "body"],
-                "properties": {"max_iterations": {"type": "integer", "minimum": 1, "maximum": 100}},
+                "required": ["max_iterations", "body", "next"],
+                "properties": {
+                    "max_iterations": {"type": "integer", "minimum": 1, "maximum": 100},
+                    "body": {"type": "string", "description": "循环体入口节点；体结束时 next 指回本 loop 节点"},
+                    "while": {"type": "string", "description": "可选 CEL；缺省则执行至 max_iterations"},
+                },
             },
         ),
         when(
@@ -218,12 +222,39 @@ NODE = obj(
                     "timeout_s": {"type": "integer", "minimum": 1},
                     "on_timeout": {"type": "string"},
                     "on_reject": {"type": "string"},
+                    "escalate_to": {
+                        "type": "string",
+                        "description": "超时后升级到的处理人（与 assignee 同写法）；优先于 on_timeout",
+                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@("
+                        r"[A-Za-z0-9_.-]+|\$input\.[A-Za-z0-9_.]+|org_of\(input\.[A-Za-z0-9_.]+\)))$",
+                    },
                     "input_schema": {"type": "object"},
                 },
             },
         ),
-        when("type", "sub_workflow", {"required": ["ref"], "properties": {"ref": REF_AT}}),
-        when("type", "parallel", {"required": ["branches"]}),
+        when(
+            "type",
+            "sub_workflow",
+            {
+                "required": ["ref", "next"],
+                "properties": {"ref": REF_AT, "args": {"type": "object"}},
+            },
+        ),
+        when(
+            "type",
+            "parallel",
+            {
+                "required": ["branches", "next"],
+                "properties": {
+                    "branches": {
+                        "type": "array",
+                        "minItems": 1,
+                        "items": {"type": "string"},
+                        "description": "各分支入口；分支结束时 next 指回本 parallel 节点汇合",
+                    },
+                },
+            },
+        ),
         when("type", "wait", {"required": ["seconds"], "properties": {"seconds": {"type": "number", "minimum": 0}}}),
         when("type", "end", {"properties": {"output": {"type": "object"}}}),
     ],

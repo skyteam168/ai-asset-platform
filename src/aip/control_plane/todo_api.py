@@ -15,7 +15,10 @@ from typing import Any, Literal
 import httpx
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncConnection
 
+from aip.control_plane.approval import service as approval
+from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam.api import ActorDep
 from aip.control_plane.iam.authz import Actor
 from aip.libs.common.config import get_settings
@@ -80,6 +83,20 @@ def can_handle_task(actor: Actor, t: dict[str, Any]) -> bool:
     return qualifies(actor, t.get("assignee_role"), t.get("assignee_org_id"))
 
 
+async def can_handle_task_with_delegate(conn: AsyncConnection, actor: Actor, t: dict[str, Any]) -> bool:
+    """指定处理人时，有效代理人也可处理（与审批代理人同一张表）。"""
+    if can_handle_task(actor, t):
+        return True
+    if not t.get("assignee_user_id") or actor.user_id is None:
+        return False
+    try:
+        assignee = uuid.UUID(str(t["assignee_user_id"]))
+    except ValueError:
+        return False
+    principals = await approval._active_principals(conn, actor)
+    return assignee in principals
+
+
 def router() -> APIRouter:
     r = APIRouter()
 
@@ -89,6 +106,10 @@ def router() -> APIRouter:
             s = get_settings()
             client = request.app.state.data_plane = DataPlane(s.data_plane_url, s.internal_service_token)
         return client
+
+    def db(request: Request) -> Database:
+        database: Database = request.app.state.db
+        return database
 
     @r.get(f"{V}/todo", tags=["approval"], operation_id="listTodo")
     async def todo(request: Request, actor: ActorDep) -> dict[str, Any]:
@@ -100,7 +121,9 @@ def router() -> APIRouter:
         if companies is not None and actor.company_id and str(actor.company_id) not in companies:
             mine = await dp(request).call("POST", "/todo", {"company_ids": [str(actor.company_id)]})
             confirmations += [c for c in mine["confirmations"] if can_confirm(actor, c)]
-        return {"confirmations": confirmations, "tasks": [t for t in data["tasks"] if can_handle_task(actor, t)]}
+        async with db(request).tx(DbScope.system()) as conn:
+            tasks = [t for t in data["tasks"] if await can_handle_task_with_delegate(conn, actor, t)]
+        return {"confirmations": confirmations, "tasks": tasks}
 
     @r.post(f"{V}/todo/confirmations/{{id}}/decide", tags=["approval"], operation_id="decideConfirmation")
     async def decide_confirmation(id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep) -> Any:
@@ -115,11 +138,26 @@ def router() -> APIRouter:
     @r.post(f"{V}/todo/tasks/{{id}}/decide", tags=["approval"], operation_id="decideTask")
     async def decide_task(id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep) -> Any:
         t = await dp(request).call("GET", f"/tasks/{id}")
-        actor.require(can_handle_task(actor, t), "无权处理该任务")
+        async with db(request).tx(DbScope.system()) as conn:
+            ok = await can_handle_task_with_delegate(conn, actor, t)
+        actor.require(ok, "无权处理该任务")
+        on_behalf = None
+        if (
+            t.get("assignee_user_id")
+            and actor.user_id is not None
+            and str(actor.user_id) != str(t["assignee_user_id"])
+        ):
+            on_behalf = str(t["assignee_user_id"])
         return await dp(request).call(
             "POST",
             f"/tasks/{id}/decide",
-            {"decision": body.decision, "user_id": str(actor.user_id), "comment": body.comment, "data": body.data},
+            {
+                "decision": body.decision,
+                "user_id": str(actor.user_id),
+                "comment": body.comment,
+                "data": body.data,
+                "on_behalf_of": on_behalf,
+            },
         )
 
     @r.get(f"{V}/runs/{{id}}", tags=["approval"], operation_id="getRunConsole")
@@ -127,7 +165,12 @@ def router() -> APIRouter:
         view = await dp(request).call("GET", f"/runs/{id}")
         if not actor.is_global:
             companies = {str(g.scope_company_id) for g in actor.roles}
-            task_ok = any(can_handle_task(actor, t) for t in view.get("pending_tasks", []))
+            async with db(request).tx(DbScope.system()) as conn:
+                task_ok = False
+                for t in view.get("pending_tasks", []):
+                    if await can_handle_task_with_delegate(conn, actor, t):
+                        task_ok = True
+                        break
             actor.require(task_ok or view["company_id"] in companies, "无权查看该 Run")
         return view
 

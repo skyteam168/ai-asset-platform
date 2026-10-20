@@ -349,7 +349,28 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 3 通过 | `test_m6_probe.py` |
 
-仍未完成（M6 后续切片）：M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
+### M6e M5 延后项与控制台 — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| loop 有上限并按迭代 journal | 通过 | `test_m6_workflow_nodes.py::test_loop_runs_max_iterations` |
+| parallel 分支汇合 | 通过 | `test_parallel_joins_branches` |
+| sub_workflow 等待子 Run | 通过 | `test_sub_workflow_waits_for_child` |
+| 沙箱 schema 不被生产 Worker 认领 | 通过 | `test_sandbox_schema_isolated` |
+| Notifier outbox 邮件通道 | 通过 | `test_m6_notify.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| DSL / 引擎 | `loop`（max_iterations + 可选 while）、`parallel`（顺序执行各分支后汇合）、`sub_workflow`（父子 Run + parent_run_id 唤醒） |
+| 迁移 0013 | `exec.wf_run.parent_run_id`；`exec_sandbox` 隔离运行表；`notify.channel_outbox` |
+| 人工任务 | 超时 `escalate_to` 升级；控制面待办接入审批代理人表 |
+| 控制台 | `/distribution`（Skill / webhook / 套件入口）、`/runs/:id` 详情；待办 Run 链到详情页 |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 6 通过 | `test_m6_workflow_nodes.py`（5）+ `test_m6_notify.py`（1） |
+
+仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、MCP tasks / elicitation。
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 

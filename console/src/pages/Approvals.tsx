@@ -1,5 +1,6 @@
 import { Alert, Badge, Button, Descriptions, Drawer, Form, Input, Modal, Radio, Space, Table, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { get, post, type Page } from "../api";
 import { JsonInput, jsonRule, JsonView, PageCard, PAGINATION, parseJson, StateTag } from "../components";
 import { useAction, useLoad } from "../hooks";
@@ -142,10 +143,11 @@ function TodoDecide(p: {
 function RunLink({ id }: { id: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <>
-      <Button size="small" type="link" onClick={() => setOpen(true)}>{id.slice(0, 8)}</Button>
+    <Space size={4}>
+      <Link to={`/runs/${id}`}>{id.slice(0, 8)}</Link>
+      <Button size="small" type="link" onClick={() => setOpen(true)}>{t("抽屉")}</Button>
       {open && <RunDrawer id={id} onClose={() => setOpen(false)} />}
-    </>
+    </Space>
   );
 }
 

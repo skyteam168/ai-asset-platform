@@ -33,6 +33,7 @@ class DecideIn(BaseModel):
     user_id: str
     comment: str | None = None
     data: dict[str, Any] | None = None
+    on_behalf_of: str | None = None
 
 
 class TodoQuery(BaseModel):
@@ -138,7 +139,12 @@ def router(ctx: AuthContext, runtime: ToolRuntime, workflows: Any = None) -> API
     ) -> dict[str, Any]:
         require_service(authorization, service_token)
         result: dict[str, Any] = await need_engine().decide_task(
-            id, decision=body.decision, user_id=body.user_id, data=body.data, comment=body.comment
+            id,
+            decision=body.decision,
+            user_id=body.user_id,
+            data=body.data,
+            comment=body.comment,
+            on_behalf_of=body.on_behalf_of,
         )
         return result
 

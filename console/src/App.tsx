@@ -7,6 +7,7 @@ import {
   BgColorsOutlined,
   BookOutlined,
   CheckSquareOutlined,
+  CloudUploadOutlined,
   ClusterOutlined,
   CloseOutlined,
   DownOutlined,
@@ -52,6 +53,8 @@ const ConsumersPage = page(() => import("./pages/Consumers"), "ConsumersPage");
 const GrantsPage = page(() => import("./pages/Grants"), "GrantsPage");
 const OrgsPage = page(() => import("./pages/Orgs"), "OrgsPage");
 const RiskPage = page(() => import("./pages/Risk"), "RiskPage");
+const RunsPage = page(() => import("./pages/Runs"), "RunsPage");
+const DistributionPage = page(() => import("./pages/Distribution"), "DistributionPage");
 
 type Group = "access" | "governance" | "system";
 
@@ -78,6 +81,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
   { path: "/catalog", label: t("资产目录"), icon: <BookOutlined />, element: <CatalogPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
+  { path: "/distribution", label: t("分发与 Skill"), icon: <CloudUploadOutlined />, element: <DistributionPage />,
+    roles: ["platform_admin", "asset_developer", "company_admin"] },
   { path: "/grants", label: t("授权"), icon: <SafetyCertificateOutlined />, element: <GrantsPage />,
     roles: ["platform_admin", "company_admin"] },
   { path: "/consumers", label: t("消费方与绑定"), icon: <KeyOutlined />, element: <ConsumersPage />,
@@ -233,6 +238,7 @@ export function AppShell() {
                 {visible.map((s) => (
                   <Route key={s.path} path={`${s.path}/*`} element={<div key={tabs.reloadKey(s.path)}>{s.element}</div>} />
                 ))}
+                <Route path="/runs/:id" element={<RunsPage />} />
                 <Route path="*" element={visible.length ? <Navigate to={visible[0].path} replace /> : <NoAccess />} />
               </Routes>
             </Suspense>

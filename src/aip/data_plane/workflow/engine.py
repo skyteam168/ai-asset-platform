@@ -97,6 +97,7 @@ WHERE id = (
   ORDER BY updated_at FOR UPDATE SKIP LOCKED LIMIT 1
 ) RETURNING *
 """
+SCHEMAS = frozenset({"exec", "exec_sandbox"})
 
 
 class WorkflowEngine:
@@ -112,12 +113,20 @@ class WorkflowEngine:
         poll_s: float = 0.5,
         stale_s: float = 30.0,
         reconcile_base_s: float = 2.0,
+        schema: str = "exec",
     ) -> None:
+        if schema not in SCHEMAS:
+            raise ValueError(f"unsupported workflow schema: {schema}")
         self.db, self.runtime, self.audit = engine, runtime, audit
         self.me, self.llm = instance_id, llm or UnconfiguredLlm()
         self.lease_s, self.poll_s, self.stale_s, self.reconcile_base_s = lease_s, poll_s, stale_s, reconcile_base_s
+        self.schema = schema
         self._kick = asyncio.Event()
         runtime.on_confirmation_done = self.wake
+
+    def _q(self, sql: str) -> Any:
+        """生产用 exec，Test Lab 沙箱用 exec_sandbox，避免被生产 Worker 认领。"""
+        return text(sql.replace("exec.", f"{self.schema}."))
 
     @contextlib.asynccontextmanager
     async def _tx(self) -> AsyncIterator[AsyncConnection]:
@@ -135,6 +144,20 @@ class WorkflowEngine:
             return None
         return rel["spec"] if rel.get("asset_type", "tool") == "tool" else None
 
+    def _workflow_spec(self, cap: str, version: str) -> dict[str, Any] | None:
+        try:
+            rel = self.runtime.releases.resolve(cap, self.runtime.policy.env, version=version)
+        except PlatformError:
+            return None
+        return rel if rel.get("asset_type") == "workflow" else None
+
+    def _persist_id(self, nid: str, ctx: dict[str, Any]) -> str:
+        """循环体内节点按迭代区分 journal / 幂等键，避免 (run_id, node_id) 冲突。"""
+        loop = ctx.get("_loop")
+        if not loop or nid == loop["id"]:
+            return nid
+        return f"{nid}#i{loop['i']}"
+
     async def start(
         self,
         principal: Principal,
@@ -143,9 +166,11 @@ class WorkflowEngine:
         *,
         trace_id: str,
         idempotency_key: str | None = None,
+        parent_run_id: str | None = None,
+        deadline: dt.datetime | None = None,
     ) -> dict[str, Any]:
         dsl = release["spec"]
-        problems = validate(dsl, self._tool_spec)
+        problems = validate(dsl, self._tool_spec, workflow_lookup=self._workflow_spec)
         if problems:
             raise PlatformError(ErrorCode.PRECONDITION_FAILED, "Workflow 定义无效：" + "；".join(problems[:3]))
         errors = list(jsonschema.Draft202012Validator(dsl.get("input_schema") or {}).iter_errors(input_))
@@ -157,16 +182,16 @@ class WorkflowEngine:
             if idempotency_key
             else str(uuid.uuid4())
         )
-        deadline = _now() + dt.timedelta(seconds=int(dsl["budget"]["timeout_s"]))
+        dl = deadline or (_now() + dt.timedelta(seconds=int(dsl["budget"]["timeout_s"])))
         async with self._tx() as conn:
             created = (
                 await conn.execute(
-                    text(
+                    self._q(
                         """INSERT INTO exec.wf_run (id, company_id, consumer_id, end_user_id, capability_id, version,
-                             release_id, dsl, principal, input, ctx, current, status, deadline, trace_id)
+                             release_id, dsl, principal, input, ctx, current, status, deadline, trace_id, parent_run_id)
                            VALUES (:id, :company, :consumer, :user, :cap, :ver, :rel, CAST(:dsl AS jsonb),
                              CAST(:principal AS jsonb), CAST(:input AS jsonb), CAST(:ctx AS jsonb), :current,
-                             'running', :deadline, :trace)
+                             'running', :deadline, :trace, :parent)
                            ON CONFLICT (id) DO NOTHING RETURNING id"""
                     ),
                     {
@@ -182,8 +207,9 @@ class WorkflowEngine:
                         "input": _j(input_),
                         "ctx": _j({"input": input_}),
                         "current": dsl["nodes"][0]["id"],
-                        "deadline": deadline,
+                        "deadline": dl,
                         "trace": trace_id,
+                        "parent": parent_run_id,
                     },
                 )
             ).first()
@@ -198,6 +224,7 @@ class WorkflowEngine:
                     "consumer_id": principal.consumer_id,
                     "end_user_id": principal.user_id,
                     "trace_id": trace_id,
+                    "parent_run_id": parent_run_id,
                 },
             )
             self._kick.set()
@@ -206,7 +233,7 @@ class WorkflowEngine:
     async def view(self, run_id: str, consumer_id: str | None = None) -> dict[str, Any]:
         async with self._tx() as conn:
             run = (
-                (await conn.execute(text("SELECT * FROM exec.wf_run WHERE id = :id"), {"id": run_id}))
+                (await conn.execute(self._q("SELECT * FROM exec.wf_run WHERE id = :id"), {"id": run_id}))
                 .mappings()
                 .first()
             )
@@ -215,7 +242,7 @@ class WorkflowEngine:
             steps = (
                 (
                     await conn.execute(
-                        text(
+                        self._q(
                             "SELECT node_id, kind, status, attempts, executor FROM exec.wf_step "
                             "WHERE run_id = :id ORDER BY seq"
                         ),
@@ -268,18 +295,28 @@ class WorkflowEngine:
     async def wake(self, run_id: str) -> None:
         async with self._tx() as conn:
             await conn.execute(
-                text("UPDATE exec.wf_run SET wake_at = now() WHERE id = :id AND status = 'waiting'"), {"id": run_id}
+                self._q("UPDATE exec.wf_run SET wake_at = now() WHERE id = :id AND status = 'waiting'"), {"id": run_id}
             )
         self._kick.set()
 
     async def task(self, task_id: str) -> dict[str, Any] | None:
         async with self._tx() as conn:
             m = (
-                (await conn.execute(text("SELECT * FROM exec.human_task WHERE id = :id"), {"id": task_id}))
+                (await conn.execute(self._q("SELECT * FROM exec.human_task WHERE id = :id"), {"id": task_id}))
                 .mappings()
                 .first()
             )
         return _str(m) if m else None
+
+    async def _task_id_for_node(self, run_id: str, node_id: str) -> str | None:
+        async with self._tx() as conn:
+            tid = (
+                await conn.execute(
+                    self._q("SELECT id FROM exec.human_task WHERE run_id = :run AND node_id = :n"),
+                    {"run": run_id, "n": node_id},
+                )
+            ).scalar_one_or_none()
+        return str(tid) if tid else None
 
     async def pending_tasks(self, company_ids: list[str] | None) -> list[dict[str, Any]]:
         sql = "SELECT * FROM exec.human_task WHERE status = 'pending' AND deadline > now()"
@@ -288,7 +325,7 @@ class WorkflowEngine:
             sql += " AND company_id = ANY(CAST(:c AS uuid[]))"
             params["c"] = company_ids
         async with self._tx() as conn:
-            rows = (await conn.execute(text(sql + " ORDER BY created_at LIMIT 500"), params)).mappings().all()
+            rows = (await conn.execute(self._q(sql + " ORDER BY created_at LIMIT 500"), params)).mappings().all()
         return [_str(r) for r in rows]
 
     async def decide_task(
@@ -299,13 +336,15 @@ class WorkflowEngine:
         user_id: str,
         data: dict[str, Any] | None = None,
         comment: str | None = None,
+        on_behalf_of: str | None = None,
     ) -> dict[str, Any]:
-        """授权（谁能处理这个任务）由调用方完成；这里只保证：任务仍待处理、未过期、指定了人时必须是那个人、
-        补录数据符合 input_schema。"""
+        """授权（谁能处理这个任务）由调用方完成；这里只保证：任务仍待处理、未过期、指定了人时必须是那个人
+        （或经控制面校验的代理人 on_behalf_of）、补录数据符合 input_schema。"""
         t = await self.task(task_id)
         if t is None:
             raise PlatformError(ErrorCode.NOT_FOUND, "任务不存在")
-        if t["assignee_user_id"] and t["assignee_user_id"] != user_id:
+        effective = on_behalf_of or user_id
+        if t["assignee_user_id"] and t["assignee_user_id"] != effective:
             raise PlatformError(ErrorCode.PERMISSION_DENIED, "该任务指定了处理人")
         status = {"approve": "completed" if t["kind"] == "input" else "approved", "reject": "rejected"}[decision]
         if t["kind"] == "input" and decision == "approve":
@@ -313,10 +352,11 @@ class WorkflowEngine:
             errs = list(jsonschema.Draft202012Validator(schema).iter_errors(data or {}))
             if errs:
                 raise PlatformError(ErrorCode.INVALID_ARGUMENT, errs[0].message)
+        by = f"user:{user_id}" + (f" for:{on_behalf_of}" if on_behalf_of and on_behalf_of != user_id else "")
         async with self._tx() as conn:
             ok = (
                 await conn.execute(
-                    text(
+                    self._q(
                         "UPDATE exec.human_task SET status = :s, decided_by = :by, decided_at = now(), "
                         "data = COALESCE(data, '{}'::jsonb) || CAST(:data AS jsonb) "
                         "WHERE id = :id AND status = 'pending' AND deadline > now() RETURNING run_id"
@@ -324,7 +364,7 @@ class WorkflowEngine:
                     {
                         "id": task_id,
                         "s": status,
-                        "by": f"user:{user_id}",
+                        "by": by,
                         "data": _j({"submitted": data or {}, "comment": comment}),
                     },
                 )
@@ -332,7 +372,7 @@ class WorkflowEngine:
             if ok is None:
                 raise PlatformError(ErrorCode.PRECONDITION_FAILED, "任务已处理或已过期")
             await conn.execute(
-                text("UPDATE exec.wf_run SET wake_at = now() WHERE id = :id AND status = 'waiting'"), {"id": ok[0]}
+                self._q("UPDATE exec.wf_run SET wake_at = now() WHERE id = :id AND status = 'waiting'"), {"id": ok[0]}
             )
         await self.audit.append_async(
             "workflow.task.decided",
@@ -365,7 +405,7 @@ class WorkflowEngine:
 
     async def tick(self) -> bool:
         async with self._tx() as conn:
-            row = (await conn.execute(text(CLAIM), {"me": self.me, "lease": self.lease_s})).mappings().first()
+            row = (await conn.execute(self._q(CLAIM), {"me": self.me, "lease": self.lease_s})).mappings().first()
         if row is None:
             return False
         await self.drive(dict(row))
@@ -412,11 +452,11 @@ class WorkflowEngine:
         kind = n["type"]
         if kind == "condition":
             target = n["then"] if expr.check(n["expr"], ctx) else n["else"]
-            await self._journal(run, n, {"result": target == n["then"]})
+            await self._journal(run, n, {"result": target == n["then"]}, ctx)
             return Next(target)
         if kind == "wait":
             out = await self._journal(
-                run, n, {"until": (_now() + dt.timedelta(seconds=float(n["seconds"]))).isoformat()}
+                run, n, {"until": (_now() + dt.timedelta(seconds=float(n["seconds"]))).isoformat()}, ctx
             )
             until = dt.datetime.fromisoformat(out["until"])
             return Park(until) if _now() < until else Next(n["next"])
@@ -424,6 +464,12 @@ class WorkflowEngine:
             return await self._human(run, n, ctx)
         if kind == "llm":
             return await self._llm(run, n, ctx)
+        if kind == "loop":
+            return await self._loop(run, n, ctx)
+        if kind == "parallel":
+            return await self._parallel(run, n, ctx)
+        if kind == "sub_workflow":
+            return await self._sub_workflow(run, principal, n, ctx)
         return await self._tool(run, principal, n, ctx)
 
     # ------------------------------------------------------------------ 节点
@@ -432,7 +478,8 @@ class WorkflowEngine:
         self, run: dict[str, Any], principal: Principal, n: dict[str, Any], ctx: dict[str, Any]
     ) -> Next | Park | Stop:
         run_id, nid = str(run["id"]), n["id"]
-        step = await self._get_step(run_id, nid)
+        pid = self._persist_id(nid, ctx)
+        step = await self._get_step(run_id, pid)
         if step and step["status"] == "done":
             return Next(n["next"], step["output"])
         cap, version = split_ref(n["ref"])
@@ -445,28 +492,35 @@ class WorkflowEngine:
             if not isinstance(gate, Next):
                 return gate
         if step and step["status"] == "waiting" and "reconcile" in (step["output"] or {}):
-            return await self._reconcile(run, n, step)
-        await self._mark_started(run, n)
+            return await self._reconcile(run, n, step, ctx)
+        await self._mark_started(run, n, ctx)
         # 写操作与需要确认的调用带固定幂等键（重做时由 Runtime 返回第一次的结果）；只读调用崩溃后直接重做
         keyed = spec.get("risk_level") in WRITE_RISKS or spec.get("confirm_policy", "auto") != "auto"
         res = await self.runtime.invoke(
             principal,
             cap,
             resolve_args(n.get("args") or {}, ctx),
-            idempotency_key=f"wf:{run_id}:{nid}" if keyed else None,
+            idempotency_key=f"wf:{run_id}:{pid}" if keyed else None,
             exposure="internal",
             version=version,
             trace_id=run["trace_id"] or "",
             run_id=run_id,
         )
-        return await self._tool_result(run, n, spec, res)
+        return await self._tool_result(run, n, spec, res, ctx)
 
     async def _tool_result(
-        self, run: dict[str, Any], n: dict[str, Any], spec: dict[str, Any], res: dict[str, Any]
+        self,
+        run: dict[str, Any],
+        n: dict[str, Any],
+        spec: dict[str, Any],
+        res: dict[str, Any],
+        ctx: dict[str, Any] | None = None,
     ) -> Next | Park | Stop:
+        ctx = ctx or {}
         nid, status = n["id"], res["status"]
+        pid = self._persist_id(nid, ctx)
         if status == "succeeded":
-            await self._done(run, n, res["data"], res["execution_id"])
+            await self._done(run, n, res["data"], res["execution_id"], ctx)
             if spec.get("untrusted_output") and not run["tainted"]:
                 await self._taint(run, f"{nid}:{n['ref']}")
             return Next(n["next"], res["data"])
@@ -477,26 +531,30 @@ class WorkflowEngine:
                 return Stop("failed", "CONFIRMATION_REQUIRED", "确认对象缺失", nid)
             if conf["status"] == "expired" or conf["expires_at"] <= _now():
                 return Stop("failed", "CONFIRMATION_EXPIRED", "确认已过期", nid)
-            await self._set_step(run, nid, "waiting", {"confirmation_id": cid}, res["execution_id"])
+            await self._set_step(run, pid, "waiting", {"confirmation_id": cid}, res["execution_id"])
             return Park(conf["expires_at"])
         if status == "cancelled":
             return Stop("rejected", "CONFIRMATION_REJECTED", "调用确认被拒绝", nid)
         if status == "unknown":
-            await self._set_step(run, nid, "waiting", {"reconcile": 0}, res["execution_id"])
+            await self._set_step(run, pid, "waiting", {"reconcile": 0}, res["execution_id"])
             return Park(_now() + dt.timedelta(seconds=self.reconcile_base_s))
         if status == "running":
             # 上次执行中途进程崩溃：记录卡在 running。超过陈旧阈值后按结果未知对账
             settled = await self.runtime.settle_stale(res["execution_id"], self.stale_s)
             if settled == "unknown":
-                await self._set_step(run, nid, "waiting", {"reconcile": 0}, res["execution_id"])
+                await self._set_step(run, pid, "waiting", {"reconcile": 0}, res["execution_id"])
                 return Park(_now())
             return Park(_now() + dt.timedelta(seconds=1))
         err = res.get("error") or {}
-        await self._set_step(run, nid, "failed", {"error": err}, res["execution_id"])
+        await self._set_step(run, pid, "failed", {"error": err}, res["execution_id"])
         return Stop("failed", err.get("code", "STEP_FAILED"), err.get("message", ""), nid)
 
-    async def _reconcile(self, run: dict[str, Any], n: dict[str, Any], step: dict[str, Any]) -> Next | Park | Stop:
+    async def _reconcile(
+        self, run: dict[str, Any], n: dict[str, Any], step: dict[str, Any], ctx: dict[str, Any] | None = None
+    ) -> Next | Park | Stop:
+        ctx = ctx or {}
         nid, attempts = n["id"], int(step["output"]["reconcile"])
+        pid = self._persist_id(nid, ctx)
         manual = (step["output"] or {}).get("manual_task")
         if manual:
             t = await self.task(manual)
@@ -504,7 +562,7 @@ class WorkflowEngine:
                 return Park(dt.datetime.fromisoformat(t["deadline"]))
             submitted = ((t or {}).get("data") or {}).get("submitted") or {}
             if t and t["status"] == "completed" and submitted.get("outcome") == "succeeded":
-                await self._done(run, n, submitted.get("result"), step["execution_id"])
+                await self._done(run, n, submitted.get("result"), step["execution_id"], ctx)
                 return Next(n["next"], submitted.get("result"))
             return Stop("failed", "OUTCOME_UNKNOWN", "人工核实为未成功或未处理", nid)
         res = await self.runtime.reconcile(str(step["execution_id"]))
@@ -514,14 +572,14 @@ class WorkflowEngine:
             rec = await self.runtime.store.get(str(step["execution_id"]))
             if rec and rec.get("reconcile_status") == "not_executed":
                 # 确认未执行：清掉等待标记，下次推进时用同一幂等键重试
-                await self._set_step(run, nid, "started", None, step["execution_id"])
+                await self._set_step(run, pid, "started", None, step["execution_id"])
                 return Park(_now())
         if res["status"] in ("succeeded", "failed"):
-            return await self._tool_result(run, n, spec, res)
+            return await self._tool_result(run, n, spec, res, ctx)
         if attempts + 1 >= RECONCILE_MAX:
             task_id = await self._create_task(
                 run,
-                f"{nid}#reconcile",
+                f"{pid}#reconcile",
                 "input",
                 f"role:platform_admin@{run['company_id']}",
                 f"{n['ref']} 执行结果未知，已对账 {RECONCILE_MAX} 次仍不确定，请到下游系统核实后填写结果",
@@ -535,21 +593,22 @@ class WorkflowEngine:
                 },
             )
             await self._set_step(
-                run, nid, "waiting", {"reconcile": attempts + 1, "manual_task": task_id}, step["execution_id"]
+                run, pid, "waiting", {"reconcile": attempts + 1, "manual_task": task_id}, step["execution_id"]
             )
             return Park(_now() + dt.timedelta(seconds=DEFAULT_TASK_TIMEOUT_S))
-        await self._set_step(run, nid, "waiting", {"reconcile": attempts + 1}, step["execution_id"])
+        await self._set_step(run, pid, "waiting", {"reconcile": attempts + 1}, step["execution_id"])
         return Park(_now() + dt.timedelta(seconds=self.reconcile_base_s * 2**attempts))
 
     async def _llm(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
         nid, budget = n["id"], run["dsl"]["budget"]
-        step = await self._get_step(str(run["id"]), nid)
+        pid = self._persist_id(nid, ctx)
+        step = await self._get_step(str(run["id"]), pid)
         if step and step["status"] == "done":
             return Next(n["next"], step["output"])
         if run["llm_calls"] + 1 > int(budget["max_llm_calls"]):
             return Stop("failed", "BUDGET_EXCEEDED", "超过 LLM 调用次数上限", nid)
         schema = run["dsl"]["schemas"][n["output_schema"]]
-        await self._mark_started(run, n)
+        await self._mark_started(run, n, ctx)
         res = await self.llm.complete(
             model_profile=n["model_profile"],
             prompt=n["prompt"],
@@ -567,13 +626,117 @@ class WorkflowEngine:
             data = {k: v for k, v in data.items() if k in schema["properties"]}
         errs = list(jsonschema.Draft202012Validator(schema).iter_errors(data))
         if errs:
-            await self._set_step(run, nid, "failed", {"error": errs[0].message})
+            await self._set_step(run, pid, "failed", {"error": errs[0].message})
             return Stop("failed", "LLM_OUTPUT_INVALID", errs[0].message, nid)
-        await self._done(run, n, data)
+        await self._done(run, n, data, ctx=ctx)
         return Next(n["next"], data)
+
+    async def _loop(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
+        """结构化循环：体结束时 next 指回本节点；journal 记录已完成迭代次数。"""
+        nid = n["id"]
+        step = await self._get_step(str(run["id"]), nid)
+        state = dict((step or {}).get("output") or {})
+        iteration = int(state.get("iteration") or 0)
+        max_i = int(n["max_iterations"])
+        # 若刚从体返回（ctx 里仍挂着本 loop），先记完一轮
+        active = ctx.get("_loop")
+        if active and active.get("id") == nid and active.get("phase") == "body":
+            iteration += 1
+            outs = list(state.get("outputs") or [])
+            outs.append(ctx.get(n["body"]))
+            state = {"iteration": iteration, "outputs": outs}
+            await self._upsert_step(run, nid, "loop", state)
+            ctx.pop("_loop", None)
+
+        while_ok = True
+        if n.get("while"):
+            while_ok = bool(expr.check(n["while"], ctx))
+        if iteration >= max_i or not while_ok:
+            ctx.pop("_loop", None)
+            out = {"iteration": iteration, "outputs": list(state.get("outputs") or [])}
+            await self._upsert_step(run, nid, "loop", out)
+            return Next(n["next"], out)
+
+        ctx["_loop"] = {"id": nid, "i": iteration + 1, "phase": "body"}
+        return Next(n["body"])
+
+    async def _parallel(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
+        """逻辑并行：分支顺序执行，全部汇合后再走 next（首期不做真并发）。"""
+        nid = n["id"]
+        branches: list[str] = list(n["branches"])
+        step = await self._get_step(str(run["id"]), nid)
+        state = dict((step or {}).get("output") or {})
+        done: list[str] = list(state.get("done") or [])
+        # 分支返回：current 再次落到 parallel，且上一跳来自分支入口链
+        active = ctx.get("_parallel")
+        if active and active.get("id") == nid and active.get("branch"):
+            b = active["branch"]
+            if b not in done:
+                done.append(b)
+            state = {"done": done, "outputs": {**(state.get("outputs") or {}), b: ctx.get(b)}}
+            await self._upsert_step(run, nid, "parallel", state)
+            ctx.pop("_parallel", None)
+
+        remaining = [b for b in branches if b not in done]
+        if not remaining:
+            out = {"done": done, "outputs": state.get("outputs") or {}}
+            await self._upsert_step(run, nid, "parallel", out)
+            return Next(n["next"], out)
+        nxt = remaining[0]
+        ctx["_parallel"] = {"id": nid, "branch": nxt}
+        return Next(nxt)
+
+    async def _sub_workflow(
+        self, run: dict[str, Any], principal: Principal, n: dict[str, Any], ctx: dict[str, Any]
+    ) -> Next | Park | Stop:
+        nid = n["id"]
+        step = await self._get_step(str(run["id"]), nid)
+        if step and step["status"] == "done":
+            return Next(n["next"], step["output"])
+        if step and step["status"] == "waiting":
+            child_id = (step["output"] or {}).get("child_run_id")
+            if not child_id:
+                return Stop("failed", "STEP_FAILED", "子流程缺少 child_run_id", nid)
+            child = await self.view(child_id)
+            if child["status"] not in FINAL:
+                return Park(min(run["deadline"], _now() + dt.timedelta(seconds=30)))
+            if child["status"] != "succeeded":
+                err = child.get("error") or {}
+                return Stop(
+                    "failed",
+                    err.get("code", "SUB_WORKFLOW_FAILED"),
+                    err.get("message", f"子流程 {n['ref']} 失败"),
+                    nid,
+                )
+            await self._done(run, n, child.get("result") or {})
+            return Next(n["next"], child.get("result") or {})
+
+        rel = self._workflow_spec(*split_ref(n["ref"]))
+        if rel is None:
+            return Stop("failed", "NOT_FOUND", f"子流程 {n['ref']} 不可用", nid)
+        args = resolve_args(n.get("args") or {}, ctx)
+        if not isinstance(args, dict):
+            return Stop("failed", "INVALID_ARGUMENT", "子流程 args 必须是对象", nid)
+        child_view = await self.start(
+            principal,
+            rel,
+            args,
+            trace_id=run["trace_id"] or "",
+            parent_run_id=str(run["id"]),
+            deadline=run["deadline"] if isinstance(run["deadline"], dt.datetime) else dt.datetime.fromisoformat(
+                str(run["deadline"])
+            ),
+            idempotency_key=f"sub:{run['id']}:{nid}",
+        )
+        await self._set_step(run, nid, "waiting", {"child_run_id": child_view["run_id"]})
+        dl = run["deadline"]
+        if isinstance(dl, str):
+            dl = dt.datetime.fromisoformat(dl)
+        return Park(min(dl, _now() + dt.timedelta(seconds=60)))
 
     async def _human(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
         nid = n["id"]
+        pid = self._persist_id(nid, ctx)
         assignee = n["assignee"]
         role, at, where = assignee.partition("@")
         path = assignee_org_path(where) if at else None
@@ -582,7 +745,7 @@ class WorkflowEngine:
         timeout = int(n.get("timeout_s") or DEFAULT_TASK_TIMEOUT_S)
         task_id = await self._create_task(
             run,
-            nid,
+            pid,
             n["kind"],
             assignee,
             n.get("summary") or f"{run['capability_id']} 的 {nid} 需要处理",
@@ -597,15 +760,59 @@ class WorkflowEngine:
         if status == "pending":
             async with self._tx() as conn:
                 await conn.execute(
-                    text("UPDATE exec.human_task SET status = 'timeout' WHERE id = :id AND status = 'pending'"),
+                    self._q("UPDATE exec.human_task SET status = 'timeout' WHERE id = :id AND status = 'pending'"),
                     {"id": task_id},
                 )
-            await self._journal(run, n, {"decision": "timeout"})
-            if n.get("on_timeout"):
-                return Next(n["on_timeout"], {"decision": "timeout"})
-            return Stop("failed", "HUMAN_TASK_TIMEOUT", f"人工任务 {nid} 超时", nid)
+            esc = n.get("escalate_to")
+            esc_pid = f"{pid}#esc"
+            if esc:
+                if await self._get_step(str(run["id"]), esc_pid) is None:
+                    esc_assignee = esc
+                    er, ea, ew = esc.partition("@")
+                    epath = assignee_org_path(ew) if ea else None
+                    if epath is not None:
+                        esc_assignee = f"{er}@{resolve_args('$' + epath, ctx)}"
+                    await self._upsert_step(run, esc_pid, "human_task", {"escalated_from": pid})
+                    await self._create_task(
+                        run,
+                        esc_pid,
+                        n["kind"],
+                        esc_assignee,
+                        f"[升级] {n.get('summary') or nid}",
+                        timeout,
+                        (
+                            {"input_schema": n.get("input_schema"), "escalated_from": pid}
+                            if n["kind"] == "input"
+                            else {"escalated_from": pid}
+                        ),
+                    )
+                esc_tid = await self._task_id_for_node(str(run["id"]), esc_pid)
+                et = await self.task(esc_tid) if esc_tid else None
+                if et is None:
+                    return Stop("failed", "HUMAN_TASK_TIMEOUT", f"人工任务 {nid} 升级失败", nid)
+                if et["status"] == "pending" and dt.datetime.fromisoformat(et["deadline"]) > _now():
+                    return Park(dt.datetime.fromisoformat(et["deadline"]))
+                if et["status"] == "pending":
+                    async with self._tx() as conn:
+                        await conn.execute(
+                            self._q(
+                                "UPDATE exec.human_task SET status = 'timeout' WHERE id = :id AND status = 'pending'"
+                            ),
+                            {"id": esc_tid},
+                        )
+                    await self._journal(run, n, {"decision": "timeout", "escalated": True}, ctx)
+                    if n.get("on_timeout"):
+                        return Next(n["on_timeout"], {"decision": "timeout"})
+                    return Stop("failed", "HUMAN_TASK_TIMEOUT", f"人工任务 {nid} 升级后仍超时", nid)
+                status = et["status"]
+                t = et
+            else:
+                await self._journal(run, n, {"decision": "timeout"}, ctx)
+                if n.get("on_timeout"):
+                    return Next(n["on_timeout"], {"decision": "timeout"})
+                return Stop("failed", "HUMAN_TASK_TIMEOUT", f"人工任务 {nid} 超时", nid)
         out = {"decision": status, "by": t["decided_by"], "data": ((t.get("data") or {}).get("submitted") or {})}
-        await self._journal(run, n, out)
+        await self._journal(run, n, out, ctx)
         if status == "rejected":
             if n.get("on_reject"):
                 return Next(n["on_reject"], out)
@@ -637,7 +844,7 @@ class WorkflowEngine:
         }
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     "UPDATE exec.wf_run SET error = CAST(:e AS jsonb), ctx = CAST(:ctx AS jsonb), updated_at = now() "
                     "WHERE id = :id AND lease_owner = :me"
                 ),
@@ -652,7 +859,7 @@ class WorkflowEngine:
         async with self._tx() as conn:
             done = (
                 await conn.execute(
-                    text(
+                    self._q(
                         "SELECT node_id FROM exec.wf_step WHERE run_id = :id AND kind = 'tool' AND status = 'done' "
                         "ORDER BY seq DESC"
                     ),
@@ -679,7 +886,7 @@ class WorkflowEngine:
             compensated.append({"node": nid, "compensation": n["compensation"], "status": res["status"]})
             async with self._tx() as conn:
                 await conn.execute(
-                    text("UPDATE exec.wf_step SET status = :s WHERE run_id = :id AND node_id = :n"),
+                    self._q("UPDATE exec.wf_step SET status = :s WHERE run_id = :id AND node_id = :n"),
                     {"id": run_id, "n": nid, "s": "compensated" if ok else "compensation_failed"},
                 )
         final = err.get("final", "failed")
@@ -697,9 +904,10 @@ class WorkflowEngine:
         result: Any = None,
         error: dict[str, Any] | None = None,
     ) -> None:
+        parent: Any = None
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     "UPDATE exec.wf_run SET status = :s, result = CAST(:r AS jsonb), error = CAST(:e AS jsonb), "
                     "ctx = CAST(:ctx AS jsonb), steps_used = :steps, llm_calls = :llm, tokens_used = :tok, "
                     "lease_owner = NULL, lease_until = NULL, wake_at = NULL, updated_at = now() WHERE id = :id"
@@ -716,9 +924,21 @@ class WorkflowEngine:
                 },
             )
             await conn.execute(
-                text("UPDATE exec.human_task SET status = 'cancelled' WHERE run_id = :id AND status = 'pending'"),
+                self._q("UPDATE exec.human_task SET status = 'cancelled' WHERE run_id = :id AND status = 'pending'"),
                 {"id": run_id},
             )
+            parent = (
+                await conn.execute(
+                    self._q("SELECT parent_run_id FROM exec.wf_run WHERE id = :id"), {"id": run_id}
+                )
+            ).scalar_one_or_none()
+            if parent:
+                await conn.execute(
+                    self._q(
+                        "UPDATE exec.wf_run SET wake_at = now() WHERE id = :id AND status = 'waiting'"
+                    ),
+                    {"id": str(parent)},
+                )
         await self._audit_run(
             "workflow.run.finished",
             run_id,
@@ -732,6 +952,8 @@ class WorkflowEngine:
                 "trace_id": run["trace_id"],
             },
         )
+        if parent:
+            self._kick.set()
 
     # ------------------------------------------------------------------ 持久化小工具
 
@@ -739,7 +961,7 @@ class WorkflowEngine:
         async with self._tx() as conn:
             owned = (
                 await conn.execute(
-                    text(
+                    self._q(
                         "UPDATE exec.wf_run SET lease_until = now() + make_interval(secs => :lease) "
                         "WHERE id = :id AND lease_owner = :me RETURNING 1"
                     ),
@@ -752,7 +974,7 @@ class WorkflowEngine:
     async def _advance(self, run: dict[str, Any], ctx: dict[str, Any], target: str) -> None:
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     "UPDATE exec.wf_run SET current = :c, ctx = CAST(:ctx AS jsonb), steps_used = :steps, "
                     "llm_calls = :llm, tokens_used = :tok, updated_at = now() WHERE id = :id AND lease_owner = :me"
                 ),
@@ -771,7 +993,7 @@ class WorkflowEngine:
         async with self._tx() as conn:
             # 当前节点的任务可能在建任务与挂起之间就被处理了：那样立即可再认领，不必等到截止时间
             await conn.execute(
-                text(
+                self._q(
                     """UPDATE exec.wf_run SET status = 'waiting', current = :c, ctx = CAST(:ctx AS jsonb),
                          lease_owner = NULL, lease_until = NULL, updated_at = now(),
                          wake_at = CASE WHEN EXISTS (
@@ -789,7 +1011,7 @@ class WorkflowEngine:
         run["taint_sources"] = [*run["taint_sources"], source]
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     "UPDATE exec.wf_run SET tainted = true, taint_sources = array_append(taint_sources, :s) "
                     "WHERE id = :id"
                 ),
@@ -802,7 +1024,8 @@ class WorkflowEngine:
             m = (
                 (
                     await conn.execute(
-                        text("SELECT * FROM exec.wf_step WHERE run_id = :id AND node_id = :n"), {"id": run_id, "n": nid}
+                        self._q("SELECT * FROM exec.wf_step WHERE run_id = :id AND node_id = :n"),
+                        {"id": run_id, "n": nid},
                     )
                 )
                 .mappings()
@@ -810,10 +1033,13 @@ class WorkflowEngine:
             )
         return dict(m) if m else None
 
-    async def _mark_started(self, run: dict[str, Any], n: dict[str, Any]) -> None:
+    async def _mark_started(
+        self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any] | None = None
+    ) -> None:
+        pid = self._persist_id(n["id"], ctx or {})
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, attempts,
                          started_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind,
@@ -823,7 +1049,7 @@ class WorkflowEngine:
                 ),
                 {
                     "id": str(run["id"]),
-                    "n": n["id"],
+                    "n": pid,
                     "company": str(run["company_id"]),
                     "kind": n["type"],
                     "me": self.me,
@@ -835,7 +1061,7 @@ class WorkflowEngine:
     ) -> None:
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, execution_id,
                          attempts, started_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, 'tool', :s,
@@ -854,10 +1080,18 @@ class WorkflowEngine:
                 },
             )
 
-    async def _done(self, run: dict[str, Any], n: dict[str, Any], output: Any, execution_id: str | None = None) -> None:
+    async def _done(
+        self,
+        run: dict[str, Any],
+        n: dict[str, Any],
+        output: Any,
+        execution_id: str | None = None,
+        ctx: dict[str, Any] | None = None,
+    ) -> None:
+        pid = self._persist_id(n["id"], ctx or {})
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, execution_id,
                          attempts, started_at, finished_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
@@ -867,7 +1101,7 @@ class WorkflowEngine:
                 ),
                 {
                     "id": str(run["id"]),
-                    "n": n["id"],
+                    "n": pid,
                     "company": str(run["company_id"]),
                     "kind": n["type"],
                     "o": _j(output),
@@ -876,11 +1110,36 @@ class WorkflowEngine:
                 },
             )
 
-    async def _journal(self, run: dict[str, Any], n: dict[str, Any], output: Any) -> Any:
-        """非 Tool 步骤：首次写入，之后读回首次的值（重放时结果不变）。"""
+    async def _upsert_step(self, run: dict[str, Any], nid: str, kind: str, output: Any) -> None:
+        """可覆盖写入（loop / parallel 状态推进）。"""
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
+                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, attempts,
+                         started_at, finished_at, executor)
+                       VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
+                               CAST(:o AS jsonb), 1, now(), now(), :me)
+                       ON CONFLICT (run_id, node_id) DO UPDATE SET output = CAST(:o AS jsonb), status = 'done',
+                         finished_at = now()"""
+                ),
+                {
+                    "id": str(run["id"]),
+                    "n": nid,
+                    "company": str(run["company_id"]),
+                    "kind": kind,
+                    "o": _j(output),
+                    "me": self.me,
+                },
+            )
+
+    async def _journal(
+        self, run: dict[str, Any], n: dict[str, Any], output: Any, ctx: dict[str, Any] | None = None
+    ) -> Any:
+        """非 Tool 步骤：首次写入，之后读回首次的值（重放时结果不变）。"""
+        pid = self._persist_id(n["id"], ctx or {})
+        async with self._tx() as conn:
+            await conn.execute(
+                self._q(
                     """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, attempts,
                          started_at, finished_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
@@ -889,7 +1148,7 @@ class WorkflowEngine:
                 ),
                 {
                     "id": str(run["id"]),
-                    "n": n["id"],
+                    "n": pid,
                     "company": str(run["company_id"]),
                     "kind": n["type"],
                     "o": _j(output),
@@ -898,8 +1157,8 @@ class WorkflowEngine:
             )
             return (
                 await conn.execute(
-                    text("SELECT output FROM exec.wf_step WHERE run_id = :id AND node_id = :n"),
-                    {"id": str(run["id"]), "n": n["id"]},
+                    self._q("SELECT output FROM exec.wf_step WHERE run_id = :id AND node_id = :n"),
+                    {"id": str(run["id"]), "n": pid},
                 )
             ).scalar_one()
 
@@ -914,10 +1173,13 @@ class WorkflowEngine:
         data: dict[str, Any] | None,
     ) -> str:
         user_id, role, org = self._resolve_assignee(run, assignee)
-        deadline = min(_now() + dt.timedelta(seconds=timeout_s), run["deadline"])
+        run_deadline = run["deadline"]
+        if isinstance(run_deadline, str):
+            run_deadline = dt.datetime.fromisoformat(run_deadline)
+        deadline = min(_now() + dt.timedelta(seconds=timeout_s), run_deadline)
         async with self._tx() as conn:
             await conn.execute(
-                text(
+                self._q(
                     """INSERT INTO exec.human_task (id, run_id, node_id, company_id, kind, assignee, assignee_user_id,
                          assignee_role, assignee_org_id, summary, status, deadline, data)
                        VALUES (:tid, :run, :n, :company, :kind, :assignee, :uid, :role, :org, :summary, 'pending',
@@ -939,9 +1201,25 @@ class WorkflowEngine:
                     "data": _j(data or {}),
                 },
             )
+            # 待办通知进 outbox（邮件通道；IM 有配置时由 flush 投递）
+            try:
+                from aip.libs.notify import enqueue
+
+                await enqueue(
+                    conn,
+                    company_id=str(run["company_id"]),
+                    channel="email",
+                    recipient=assignee,
+                    subject=f"待办：{summary[:80]}",
+                    body=f"任务需要处理（截止 {deadline.isoformat()}）。请登录控制台。",
+                    kind="human_task",
+                    ref={"run_id": str(run["id"]), "node_id": node_id},
+                )
+            except Exception:  # 通知失败不影响建任务
+                log.exception("enqueue human_task notify failed")
             tid = (
                 await conn.execute(
-                    text("SELECT id FROM exec.human_task WHERE run_id = :run AND node_id = :n"),
+                    self._q("SELECT id FROM exec.human_task WHERE run_id = :run AND node_id = :n"),
                     {"run": str(run["id"]), "n": node_id},
                 )
             ).scalar_one()
