@@ -419,4 +419,6 @@ export const enUS: Record<string, string> = {
   "高": "High",
   "默认密级（缺省继承上级）": "Default clearance (inherits from parent if empty)",
   "（停用）": " (disabled)",
+  "契约漂移劣化": "Contract drift degradation",
+  "探针连续失败或输出不符合契约后标记漂移；告警负责人，不自动 Suspended": "Marks contract drift after consecutive probe failures or schema mismatch; alerts owners; does not auto-suspend",
 };

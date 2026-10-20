@@ -419,4 +419,6 @@ export const viVN: Record<string, string> = {
   "高": "Cao",
   "默认密级（缺省继承上级）": "Cấp mật mặc định (để trống thì kế thừa cấp trên)",
   "（停用）": " (vô hiệu)",
+  "契约漂移劣化": "Suy giảm do lệch hợp đồng",
+  "探针连续失败或输出不符合契约后标记漂移；告警负责人，不自动 Suspended": "Đánh dấu lệch hợp đồng khi probe thất bại liên tục hoặc schema không khớp; cảnh báo người phụ trách; không Suspended tự động",
 };
