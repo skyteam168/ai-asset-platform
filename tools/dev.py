@@ -155,6 +155,13 @@ def bootstrap() -> None:
     print(f"bootstrap ok；管理员凭据见 {cred.relative_to(ROOT)}（仅 dev）")
 
 
+def seed_demo() -> None:
+    """M5 演示数据：采购单审核 Workflow 与需审批的付款调用（需先 serve）。"""
+    subprocess.run(
+        [PY, "tools/seed_m5_demo.py"], cwd=ROOT, env={**dev_env(), "PYTHONPATH": str(ROOT / "src")}, check=True
+    )
+
+
 def serve() -> None:
     env = dev_env()
     procs = [
@@ -187,6 +194,7 @@ TASKS = {
     "ci": lambda: (docs(), lint(), test()),
     "serve": serve,
     "bootstrap": bootstrap,
+    "seed-demo": seed_demo,
 }
 
 if __name__ == "__main__":
