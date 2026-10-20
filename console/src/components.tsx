@@ -4,6 +4,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { get, type Page } from "./api";
 import { useLoad } from "./hooks";
 import type { OrgUnit } from "./types";
+import { t } from "./i18n";
 
 // ---------- 组织字典：把 id 显示成编码与名称 ----------
 
@@ -69,7 +70,7 @@ export const jsonRule: Rule = {
     try {
       JSON.parse(v);
     } catch {
-      throw new Error("不是合法的 JSON");
+      throw new Error(t("不是合法的 JSON"));
     }
   },
 };

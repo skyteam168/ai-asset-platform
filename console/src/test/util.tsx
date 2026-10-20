@@ -1,8 +1,9 @@
-import { App as AntApp } from "antd";
+
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { vi } from "vitest";
 import { AuthProvider } from "../auth";
+import { ThemeProvider } from "../theme";
 
 type Route = (method: string, path: string, body: unknown) => { status?: number; body?: unknown } | undefined;
 
@@ -22,11 +23,11 @@ export function mockApi(route: Route) {
 
 export function wrap(ui: ReactNode, path = "/") {
   return (
-    <AntApp>
+    <ThemeProvider>
       <AuthProvider>
         <MemoryRouter initialEntries={[path]}>{ui}</MemoryRouter>
       </AuthProvider>
-    </AntApp>
+    </ThemeProvider>
   );
 }
 
