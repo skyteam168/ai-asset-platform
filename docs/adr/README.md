@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | [0001](0001.md) | 平台自建身份、组织、密级与授权；知识库作为普通旧系统接入 | Accepted |
 | [0002](0002.md) | 首期模块化单体加独立数据面进程 | Accepted |
-| [0003](0003.md) | 工作流引擎：自研 step journal 与 DBOS Transact 经 spike 后二选一，保留 WorkflowExecutor 抽象 | Open |
+| [0003](0003.md) | 工作流引擎：自研 step journal（spike 后选定，DBOS Transact 未采用），保留 WorkflowExecutor 抽象 | Accepted |
 | [0004](0004.md) | 授权用 OPA 五方交集；PrincipalResolver 预计算事实，OPA 只持策略；快照缺失即拒绝 | Accepted |
 | [0005](0005.md) | 认证：控制台本地账号加 TOTP；消费方 client\_credentials（private\_key\_jwt）与静态令牌；OIDC 为可选插件 | Proposed |
 | [0006](0006.md) | 终端用户身份：消费方签名的用户断言，推荐 RFC 7523 换平台令牌，兼容请求头模式；bind\_policy 默认 strict | Proposed |

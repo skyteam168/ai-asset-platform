@@ -551,7 +551,7 @@ Agent 决定目标与下一步，工作流引擎可靠推进多步流程，Tool 
 - human\_task 持久化，支持确认、审批、补录，带超时、升级与代理人；通知用 Notifier 插件（邮件 + 一个 IM）。
 - Saga：写步骤声明 compensation\_ref，失败后逆序补偿；不可逆步骤必须前置人工确认。
 - Run 启动时钉住 Release 快照。
-- 实现选择（ADR-0003）：接口抽象为 WorkflowExecutor。M5 开始前做 2 周 spike，对比自研 step journal 与 DBOS Transact（Python 库、仅依赖 PostgreSQL）；评判标准为崩溃恢复正确性、人工任务与定时器支持、可观测、团队可维护性。Temporal 仍不在首期。
+- 实现选择（ADR-0003，已决策）：自研 step journal，接口抽象为 WorkflowExecutor。2026-10-20 的 spike 对比了 DBOS Transact，开源版不能自动接管消失的 Worker、恢复绑定应用版本、系统表无法纳入 RLS，故不采用；对比记录见 [docs/ops/spike-adr-0003-workflow-engine.md](ops/spike-adr-0003-workflow-engine.md)。Run 认领用租约（lease），租约过期任何 Worker 可接手。Temporal 仍不在首期。
 
 ### 8.6 LLM Gateway 与 Result Guard
 
@@ -1107,7 +1107,7 @@ gantt
 | --- | --- | --- |
 | 0001 | 平台自建身份、组织、密级与授权；知识库作为普通旧系统接入 | Accepted |
 | 0002 | 首期模块化单体加独立数据面进程 | Accepted |
-| 0003 | 工作流引擎：自研 step journal 与 DBOS Transact 经 spike 后二选一，保留 WorkflowExecutor 抽象 | Open |
+| 0003 | 工作流引擎：自研 step journal（spike 后选定，DBOS Transact 未采用），保留 WorkflowExecutor 抽象 | Accepted |
 | 0004 | 授权用 OPA 五方交集；PrincipalResolver 预计算事实，OPA 只持策略；快照缺失即拒绝 | Accepted |
 | 0005 | 认证：控制台本地账号加 TOTP；消费方 client\_credentials（private\_key\_jwt）与静态令牌；OIDC 为可选插件 | Proposed |
 | 0006 | 终端用户身份：消费方签名的用户断言，推荐 RFC 7523 换平台令牌，兼容请求头模式；bind\_policy 默认 strict | Proposed |
@@ -1156,7 +1156,7 @@ docs/
 | 4 | 入离职、调动由谁维护 | 自建身份没有外部同步 | 分公司管理员负责，季度复核，绑定 1 年到期，90 天无调用自动停用 |
 | 5 | 数据范围默认粒度 | 决定 scope\_binding 默认拒绝面 | 主归属部门子树 |
 | 6 | 通知渠道与审批 SLA 日历 | 审批与人工任务时效 | 邮件加一个 IM，按分公司工作日历 |
-| 7 | 工作流引擎（ADR-0003） | 第二批的最大技术风险 | M5 前 2 周 spike |
+| 7 | 工作流引擎（ADR-0003） | 第二批的最大技术风险 | 已决策：自研 step journal；spike 的故障场景作为 M5 常驻回归 |
 | 8 | 可用的 LLM 来源（国内云、本地部署）与按公司白名单 | LLM Gateway 与成本 | OpenAI 兼容接口，首批 1 个云模型 + 1 个本地模型 |
 | 9 | 对外域名与内部 CA | 分公司客户端信任配置 | 集团内部 CA 签发 mcp.<域名>，提供根 CA 分发 |
 | 10 | 团队编制是否按第 14 章到位 | 工期 | 不足时首期去掉声明式 Importer 自动生成与选择评测自动化，保留手工 |
@@ -1174,7 +1174,7 @@ docs/
 | modelcontextprotocol/registry | server.json 目录导出格式（10.3） |
 | modelcontextprotocol/ext-auth | Enterprise-Managed Authorization（3.1） |
 | permitio/opal | 策略数据实时分发的备选实现（4.4） |
-| dbos-inc/dbos-transact-py | 工作流引擎候选（ADR-0003） |
+| dbos-inc/dbos-transact-py | 工作流引擎 spike 对照（ADR-0003，未采用） |
 | stoplightio/prism、python-trio/trustme | Mock 与测试证书 |
 | snyk/agent-scan、Presidio、promptfoo、Langfuse | 扫描、PII 识别、评测、LLM 可观测 |
 
