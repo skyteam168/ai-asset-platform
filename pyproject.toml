@@ -40,6 +40,9 @@ dev = [
     "mcp>=2.3",
 ]
 
+[project.scripts]
+corp-skill = "aip.cli.corp_skill:main"
+
 [build-system]
 requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"

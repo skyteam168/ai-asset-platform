@@ -400,6 +400,34 @@ CONN = obj(
     ],
 )
 
+# Skill（architecture.md 6.2、10.4）：标准 Agent Skills 目录的元数据；包体另存 skill_package
+SKILL = obj(
+    {
+        "name": {
+            "type": "string",
+            "pattern": r"^[a-z][a-z0-9_-]{1,63}$",
+            "description": "Skill 名（与 SKILL.md frontmatter name 一致）",
+        },
+        "description": {"type": "string", "minLength": 10, "maxLength": 2000},
+        "namespace": {"enum": ["global"], "default": "global", "description": "首期仅 global；company/{code} 预留"},
+        "capability_id": {
+            "type": "string",
+            "description": "可选；缺省 skill.{namespace}.{name}",
+        },
+        "license": {"type": "string"},
+        "compatibility": {"type": "string"},
+        "allowed_tools": {"type": "array", "items": {"type": "string"}},
+        "tools": {
+            "type": "array",
+            "items": REF_AT,
+            "description": "来自 skill.lock.json 的 Tool@版本引用",
+            "default": [],
+        },
+    },
+    ["name", "description"],
+    extra=False,
+)
+
 # 套件（architecture.md 8.7、10.1）：按场景打包 Tool；≤ 30 个；走门禁与组合约束
 BUNDLE = obj(
     {
@@ -431,6 +459,7 @@ SPECS = {
     "tool-spec": ("Tool Spec（architecture.md 6.1）", TOOL),
     "workflow-dsl": ("Workflow DSL（architecture.md 6.3）", WORKFLOW),
     "bundle-spec": ("套件 Spec（architecture.md 8.7、10.1）", BUNDLE),
+    "skill-spec": ("Skill Spec（architecture.md 6.2、10.4）", SKILL),
     "policy-input": ("PDP 输入（architecture.md 4.4）", POLICY),
     "declarative-connector": ("声明式 REST Connector 映射（architecture.md 9.1）", DECL),
     "system-connection": ("system_connection（architecture.md 9.6、11.3）", CONN),

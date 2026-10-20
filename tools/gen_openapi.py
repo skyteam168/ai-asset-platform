@@ -911,6 +911,71 @@ def control_plane() -> dict[str, Any]:
                 res={"type": "object"},
             )
         },
+        f"{A}/versions/{{id}}/skill-package": {
+            "post": {
+                **op(
+                    "uploadSkillPackage",
+                    "skill",
+                    "上传 Skill zip 包（签名入库，draft 阶段）",
+                    res={"type": "object"},
+                    code="201",
+                    params=["Id"],
+                ),
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": o({"file": {"type": "string", "format": "binary"}}, ["file"]),
+                        }
+                    },
+                },
+            }
+        },
+        f"{A}/skills": {
+            "get": {
+                **op("listSkills", "skill", "Skill 目录（含撤回标记）", res={"type": "object"}),
+                "parameters": [
+                    {"name": "q", "in": "query", "schema": S},
+                    {"name": "channel", "in": "query", "schema": {"enum": ["stable", "beta"]}},
+                    {"name": "include_retracted", "in": "query", "schema": {"type": "boolean"}},
+                ],
+            }
+        },
+        f"{A}/skills/{{name}}/versions/{{version}}/manifest": {
+            "get": {
+                **op("getSkillManifest", "skill", "Skill 文件清单与签名", res={"type": "object"}),
+                "parameters": [
+                    {"name": "name", "in": "path", "required": True, "schema": S},
+                    {"name": "version", "in": "path", "required": True, "schema": S},
+                ],
+            }
+        },
+        f"{A}/skills/{{name}}/versions/{{version}}/download": {
+            "get": {
+                **op("downloadSkill", "skill", "下载 Skill zip", res={"type": "string", "format": "binary"}),
+                "parameters": [
+                    {"name": "name", "in": "path", "required": True, "schema": S},
+                    {"name": "version", "in": "path", "required": True, "schema": S},
+                ],
+            }
+        },
+        f"{A}/skills/install-check": {
+            "post": op(
+                "skillInstallCheck",
+                "skill",
+                "安装前检查 Tool 授权与撤回状态",
+                req=o(
+                    {
+                        "consumer_id": S,
+                        "name": S,
+                        "version": S,
+                        "env": {"enum": ["test", "staging", "prod"]},
+                    },
+                    ["consumer_id", "name", "version"],
+                ),
+                res={"type": "object"},
+            )
+        },
         f"{A}/grant-ceilings/{{id}}/quota": {
             "put": op(
                 "setCeilingQuota",

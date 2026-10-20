@@ -45,7 +45,12 @@ def _validator(name: str) -> jsonschema.Draft202012Validator:
     return jsonschema.Draft202012Validator(json.loads((SPECS / f"{name}.schema.json").read_text(encoding="utf-8")))
 
 
-_SPEC_SCHEMAS = {"tool": "tool-spec", "workflow": "workflow-dsl", "bundle": "bundle-spec"}
+_SPEC_SCHEMAS = {
+    "tool": "tool-spec",
+    "workflow": "workflow-dsl",
+    "bundle": "bundle-spec",
+    "skill": "skill-spec",
+}
 
 
 def content_hash(spec: dict[str, Any], dep_lock: dict[str, Any]) -> str:

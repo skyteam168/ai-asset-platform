@@ -180,6 +180,30 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         for ref in refs:
             if split_ref(ref) not in tools:
                 problems.append(f"依赖不可解析：Tool {ref}")
+    if a["type"] == "skill" and not problems:
+        # Skill：须已上传包；扫描 SKILL 描述；lock 中 Tool 可解析（architecture.md 10.4）
+        from aip.control_plane.skill import service as skill_svc
+
+        try:
+            pkg_row = await skill_svc.package_row(conn, version_id)
+        except PlatformError:
+            problems.append("缺少已签名的 Skill 包（请先上传 zip）")
+            pkg_row = None
+        problems += scan_text(spec.get("description", ""), spec.get("name", ""))
+        if pkg_row is not None:
+            from aip.control_plane.skill import package as skill_pkg
+
+            try:
+                files = skill_pkg.unpack_zip(bytes(pkg_row["zip_bytes"]))
+                body = files[skill_pkg.SKILL_MD].decode("utf-8")
+                problems += scan_text(body)
+            except PlatformError as e:
+                problems.append(e.detail)
+        refs = list(spec.get("tools") or [])
+        tools = await _tool_versions(conn, refs)
+        for ref in refs:
+            if split_ref(ref) not in tools:
+                problems.append(f"依赖不可解析：Tool {ref}")
     ref = spec.get("connector_ref", {}).get("connector")
     if (
         ref
@@ -192,7 +216,7 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
     ):
         problems.append(f"依赖不可解析：Connector 实例 {ref} 不存在")
     kinds = {r[0] for r in await conn.execute(select(test_case.c.kind).where(test_case.c.version_id == version_id))}
-    if a["type"] not in ("workflow", "bundle") and kinds != {"functional", "permission"}:
+    if a["type"] not in ("workflow", "bundle", "skill") and kinds != {"functional", "permission"}:
         problems.append("至少需要一个功能用例和一个权限用例")
     if (
         await conn.execute(select(acceptance_sheet.c.version_id).where(acceptance_sheet.c.version_id == version_id))
@@ -221,7 +245,7 @@ async def run_lab(
     cases = [
         dict(r) for r in (await conn.execute(select(test_case).where(test_case.c.version_id == version_id))).mappings()
     ]
-    if a["type"] in ("workflow", "bundle"):
+    if a["type"] in ("workflow", "bundle", "skill"):
         return await _composition_lab(conn, actor, v, a)
     iam = await iam_snapshot.build_payload(conn)
     conns = await conn_service.snapshot_part(conn)
@@ -336,10 +360,14 @@ async def _composition_lab(
 ) -> dict[str, Any]:
     """Workflow / 套件的 G1–G3：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
     Workflow 在沙箱中的整体回放需要隔离的运行表，推迟到 M6e。"""
-    refs = _workflow_refs(v["spec"]) if a["type"] == "workflow" else _bundle_refs(v["spec"])
+    if a["type"] == "workflow":
+        refs = _workflow_refs(v["spec"])
+    else:
+        refs = _bundle_refs(v["spec"])  # bundle / skill 均用 tools 列表
     tools = await _tool_versions(conn, refs)
     states = {r: (tools.get(split_ref(r)) or {}).get("state", "missing") for r in refs}
-    ok = all(s in registry.RELEASABLE for s in states.values())
+    # Skill 可以不引用 Tool；有引用时须可发布
+    ok = all(s in registry.RELEASABLE for s in states.values()) if refs else True
     risk = composition_risk_of([t["spec"] for t in tools.values()]) if a["type"] == "bundle" else None
     evidence: dict[str, Any] = {"mode": "composition", "tool_versions": states}
     if risk:

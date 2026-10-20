@@ -19,6 +19,7 @@ tags:
 - name: registry
 - name: release
 - name: risk
+- name: skill
 - name: snapshot
 - name: webhook
 paths:
@@ -1631,6 +1632,155 @@ paths:
                 type: object
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/versions/{id}/skill-package:
+    post:
+      operationId: uploadSkillPackage
+      tags:
+      - skill
+      summary: 上传 Skill zip 包（签名入库，draft 阶段）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+  /api/v1/skills:
+    get:
+      operationId: listSkills
+      tags:
+      - skill
+      summary: Skill 目录（含撤回标记）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: q
+        in: query
+        schema:
+          type: string
+      - name: channel
+        in: query
+        schema:
+          enum:
+          - stable
+          - beta
+      - name: include_retracted
+        in: query
+        schema:
+          type: boolean
+  /api/v1/skills/{name}/versions/{version}/manifest:
+    get:
+      operationId: getSkillManifest
+      tags:
+      - skill
+      summary: Skill 文件清单与签名
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/skills/{name}/versions/{version}/download:
+    get:
+      operationId: downloadSkill
+      tags:
+      - skill
+      summary: 下载 Skill zip
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/skills/install-check:
+    post:
+      operationId: skillInstallCheck
+      tags:
+      - skill
+      summary: 安装前检查 Tool 授权与撤回状态
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                consumer_id:
+                  type: string
+                name:
+                  type: string
+                version:
+                  type: string
+                env:
+                  enum:
+                  - test
+                  - staging
+                  - prod
+              required:
+              - consumer_id
+              - name
+              - version
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota

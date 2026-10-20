@@ -16,10 +16,11 @@
 | M5 确认流、Workflow 引擎、G3、平台待办 | 完成 | f8a9a2d |
 | 控制台品牌、中英越三语、明暗主题、界面改版 | 完成 | 58c17e7、8c4b8ad |
 | **M6a** 风险规则、自动熔断与复核恢复、配额与计量 | 完成 | f96ddb1 |
-| **M6b** 套件、目录与 webhook | 完成（本切片待提交） | — |
-| **M6c–M6e、M7** | **待做**（见第 6、7 节） | — |
+| **M6b** 套件、目录与 webhook | 完成 | 0208d45 |
+| **M6c** Skill Registry 与 corp-skill | 完成 | （本切片提交） |
+| **M6d–M6e、M7** | **待做**（见第 6、7 节） | — |
 
-测试现状：后端在 M6a 基础上新增 M6b 相关用例（`test_m6_catalog` / `test_m6_webhook`）；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b/M6c 用例（`test_m6_catalog` / `test_m6_webhook` / `test_m6_skill`）；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -56,10 +57,10 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 
 | 路径 | 内容 |
 | --- | --- |
-| `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b 订阅与投递）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
+| `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b）、`skill/`（M6c 包与目录）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`oauth.py`、`pdp.py` / `facts.py` |
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
-| `migrations/versions/` | Alembic，当前到 0010（`notify` webhook；此前 0009 配额、0008 risk） |
+| `migrations/versions/` | Alembic，当前到 0011（`registry.skill_package`；此前 0010 notify、0009 配额、0008 risk） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
@@ -102,16 +103,11 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 
 ### M6b 套件、目录与 webhook — 已完成（见 milestones.md）
 
-### M6c Skill Registry 与 corp-skill（10.4、6.2）——**当前下一步**
+### M6c Skill Registry 与 corp-skill — 已完成（见 milestones.md）
 
-- `asset.type = skill`：包 = 标准 Agent Skills 目录（`SKILL.md` + 可选 references/、assets/），上传为 zip；存对象存储（SeaweedFS，S3 兼容）或数据库；生成文件清单（每个文件 sha256）并用平台密钥签名（`libs/tokens/keys.SigningKey`）。
-- G0：frontmatter 校验（name、description 等）、安全扫描（复用 `gates/service.scan_text`）、引用的 Tool@版本可解析（`skill.lock.json`）。
-- 渠道 stable / beta（沿用 release channel）；Suspended / Retired 时 API 返回撤回标记。
-- 接口：目录、下载 zip、清单与签名。
-- `corp-skill` 命令行（建议放 `src/aip/cli/corp_skill.py`，在 pyproject 登记入口）：`login`、`search`、`install name@ver`（验签、校验每个文件哈希、检查消费方是否已获授权，缺失提示申请）、`update`、`verify`（本地改过标记“本地修改”）、`list`（含撤回标记）。
-- 验收：篡改任一文件后 `verify` 失败；未授权的引用 Tool 在安装时提示；撤回后 `list` 显示撤回。
+首期 zip 存 `registry.skill_package`（bytea），非 SeaweedFS；带脚本的 Skill 硬拒。
 
-### M6d 合成探针与契约漂移（7.3 第 6 条、6.1 probe 字段）
+### M6d 合成探针与契约漂移（7.3 第 6 条、6.1 probe 字段）——**当前下一步**
 
 - 数据面 Probe Scheduler：按 Tool Spec 的 `probe`（只读参数、频率、期望断言）定时调用，带 `X-Platform-Probe` 标记、计入该系统限流、以专用探针身份经 PDP；write 类用其 reconcile 查询做探针。
 - 结果写 `probe_result`（经内部事件回传控制面）；连续 3 次失败或输出不符合 output_schema → 标记“契约漂移”、通知负责人、自动对该版本跑一次 G1 回归（`testlab.runner.run_cases`）；**不自动 Suspended**。

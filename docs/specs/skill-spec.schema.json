@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/skill-spec.schema.json",
+  "title": "Skill Spec（architecture.md 6.2、10.4）",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$",
+      "description": "Skill 名（与 SKILL.md frontmatter name 一致）"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 2000
+    },
+    "namespace": {
+      "enum": [
+        "global"
+      ],
+      "default": "global",
+      "description": "首期仅 global；company/{code} 预留"
+    },
+    "capability_id": {
+      "type": "string",
+      "description": "可选；缺省 skill.{namespace}.{name}"
+    },
+    "license": {
+      "type": "string"
+    },
+    "compatibility": {
+      "type": "string"
+    },
+    "allowed_tools": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"
+      },
+      "description": "来自 skill.lock.json 的 Tool@版本引用",
+      "default": []
+    }
+  },
+  "required": [
+    "name",
+    "description"
+  ],
+  "additionalProperties": false
+}

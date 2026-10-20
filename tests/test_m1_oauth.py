@@ -14,6 +14,7 @@ import pytest
 from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam import consumers, snapshot, users
 from aip.control_plane.iam.authz import Actor
+from aip.control_plane.registry import snapshot as release_snapshot
 from aip.data_plane.app import create_app
 from aip.data_plane.iam_cache import SnapshotRejected
 from aip.libs.common.config import get_settings
@@ -65,8 +66,13 @@ class Env:
         async with self.db.tx(DbScope.system()) as conn:
             await snapshot.publish(conn, PLATFORM)
             snap = await snapshot.latest(conn)
+            # Catalog（M6b）按发布快照过滤；无快照时 PDP 默认拒绝 → 503，测试里同步空目录快照
+            await release_snapshot.publish(conn, PLATFORM)
+            rel = await release_snapshot.latest(conn)
         assert snap is not None
         self.app.state.iam.load(snap)
+        if rel is not None:
+            self.app.state.releases.load(rel)
         return snap
 
     async def exchange(self, client_id: str, key: SigningKey, sub: str, **form: str) -> httpx.Response:

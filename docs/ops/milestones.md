@@ -311,7 +311,28 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 5 通过 | `test_m6_catalog.py` 2 + `test_m6_webhook.py` 3 |
 
-仍未完成（M6 后续切片）：M6c Skill Registry 与 corp-skill；M6d 合成探针；M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
+仍未完成（M6 后续切片）：M6d 合成探针；M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
+
+### M6c Skill Registry 与 corp-skill — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 篡改任一文件后 verify 失败 | 通过 | `test_m6_skill.py::test_tamper_fails_local_verify`、`test_corp_skill_verify_and_api`：改 SKILL.md 后 `corp-skill verify` 退出码 1 |
+| 未授权的引用 Tool 在安装时提示 | 通过 | `test_skill_gates_grant_and_retract`：`missing_tool_grants` 在无授权时报缺失；建 ceiling+grant 后为空 |
+| 撤回后 list 显示撤回 | 通过 | 同测：`suspended` 后 `list_skills(..., include_retracted=True)` 的 `retracted=True` |
+
+| 部分 | 内容 |
+| --- | --- |
+| skill_package | 迁移 0011：`registry.skill_package`（zip bytea、manifest、ECDSA 签名、content_sha256；RLS + aip_app） |
+| 包格式 | Agent Skills 目录（SKILL.md frontmatter + 可选 skill.lock.json / references / assets）；首期拒绝脚本后缀 |
+| G0 / 组合 lab | 须已上传包；扫描正文；lock 中 Tool@ver 可解析；skill 走 composition lab（同 bundle） |
+| API | 上传 zip、`GET /skills`、manifest/download、`POST /skills/install-check` |
+| corp-skill | `login` / `search` / `install` / `update` / `verify` / `list`（入口 `corp-skill`） |
+| Schema | `skill-spec` 写入 docs/specs |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 3 通过 | `test_m6_skill.py` |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
