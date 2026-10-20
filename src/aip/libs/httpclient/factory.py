@@ -204,6 +204,7 @@ def build_client(
     resolver: Resolver | None = None,
     on_event: EventSink | None = None,
     trace_id: str = "",
+    extra_headers: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
     """按连接的 scheme 与 tls_mode 构造出站客户端。所有 Connector 必须经此出站。"""
     sink = on_event if on_event is not None else _noop
@@ -246,13 +247,16 @@ def build_client(
             if target.scheme != base.scheme or target.host != base.host:
                 raise PlatformError(ErrorCode.REDIRECT_BLOCKED, "下游重定向到其他协议或主机，已拒绝")
 
+    headers: dict[str, str] = dict(extra_headers or {})
+    if len(trace_id) == 32:
+        headers.setdefault("traceparent", f"00-{trace_id}-{'0' * 15}1-01")
     return httpx.AsyncClient(
         base_url=conn.base_url,
         transport=_Transport(pool),
         follow_redirects=False,
         trust_env=False,
         timeout=httpx.Timeout(conn.read_timeout_s, connect=conn.connect_timeout_s),
-        headers={"traceparent": f"00-{trace_id}-{'0' * 15}1-01"} if len(trace_id) == 32 else None,
+        headers=headers or None,
         event_hooks={"request": [guard_request], "response": [guard_response]},
     )
 

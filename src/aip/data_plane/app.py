@@ -27,6 +27,7 @@ from aip.data_plane.oauth import AuthContext
 from aip.data_plane.oauth import router as oauth_router
 from aip.data_plane.pdp import OpaClient, PolicyService
 from aip.data_plane.principal import PrincipalResolver
+from aip.data_plane.probe_scheduler import ProbeScheduler
 from aip.data_plane.quota import MemoryQuotaStore, PgQuotaStore
 from aip.data_plane.release_cache import ReleaseCache
 from aip.data_plane.runtime import (
@@ -224,6 +225,9 @@ def create_app(
             tasks.append(asyncio.create_task(ship_audit(app, settings.audit_database_url)))
         if workflows is not None and settings.workflow_worker:
             tasks.append(asyncio.create_task(workflows.run_worker()))
+        probe = ProbeScheduler(runtime, releases, forwarder)
+        app.state.probe = probe
+        tasks.append(asyncio.create_task(probe.run()))
         yield
         for task in tasks:
             task.cancel()
@@ -237,6 +241,7 @@ def create_app(
     app.state.releases = releases
     app.state.policy = policy
     app.state.audit = audit
+    app.state.probe = ProbeScheduler(runtime, releases, forwarder)
     app.state.auth = ctx
     app.state.runtime = runtime
     app.state.events = forwarder

@@ -240,7 +240,8 @@ async def test_risk_api(db: Database, seeded: Seed, published: Published, tmp_pa
     sec = await login(cp, seeded, "security")
     vn = await login(cp, seeded, "vn_admin")
     rules = (await cp.get("/api/v1/risk-rules", headers=admin)).json()["items"]
-    assert len(rules) == 8
+    assert len(rules) == 9  # 含 M6d drift_degradation
+    assert any(r["code"] == "drift_degradation" for r in rules)
     # 本用例按真实时间扫描：关掉非工作时段规则，免得结果取决于运行时刻
     assert (
         await cp.put("/api/v1/risk-rules/off_hours_write", json={"enabled": False}, headers=admin)

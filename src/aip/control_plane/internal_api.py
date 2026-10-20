@@ -101,6 +101,48 @@ async def apply(conn: AsyncConnection, ev: Event) -> str:
         )
         await emit(conn, "binding.created", company, bid, None, {"source": "by_employee_no"})
         return "created"
+    if ev.kind == "probe.result":
+        from aip.connectors.credentials import OpenBaoSecretStore
+        from aip.control_plane.probe import service as probe_svc
+        from aip.control_plane.registry import tables as rt
+
+        vid: uuid.UUID | None = None
+        if d.get("version_id"):
+            try:
+                vid = uuid.UUID(str(d["version_id"]))
+            except ValueError:
+                vid = None
+        if vid is None and d.get("capability_id") and d.get("version"):
+            ver_row = (
+                await conn.execute(
+                    select(rt.asset_version.c.id)
+                    .select_from(rt.asset_version.join(rt.asset, rt.asset.c.id == rt.asset_version.c.asset_id))
+                    .where(rt.asset_version.c.semver == str(d["version"]))
+                    .where(rt.asset_version.c.spec["capability_id"].astext == str(d["capability_id"]))
+                    .limit(1)
+                )
+            ).first()
+            if ver_row is not None:
+                vid = uuid.UUID(str(ver_row[0]))
+        if vid is None:
+            return "ignored"
+        settings = get_settings()
+        secrets = OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token)
+        await probe_svc.record_probe(
+            conn,
+            version_id=vid,
+            capability_id=str(d.get("capability_id") or ""),
+            outcome=str(d.get("outcome") or "failed"),
+            schema_valid=bool(d.get("schema_valid", False)),
+            latency_ms=d.get("latency_ms"),
+            detail={
+                k: v
+                for k, v in d.items()
+                if k not in ("version_id", "capability_id", "outcome", "schema_valid", "latency_ms")
+            },
+            secrets=secrets,
+        )
+        return "recorded"
     return "ignored"
 
 

@@ -522,6 +522,41 @@ async def promote(
     return {"passed": True, **evidence}
 
 
+async def run_g1_regression(
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    *,
+    secrets: SecretStore,
+    resolver: Any = None,
+) -> dict[str, Any]:
+    """上线后契约漂移触发的 G1 回归：只记 gate_result，不改版本状态（architecture.md 7.3）。"""
+    v = await registry.version_row(conn, version_id)
+    a = await registry.asset_row(conn, v["asset_id"])
+    if a["type"] != "tool":
+        await _record(conn, actor, v, "G1_regression", True, {"skipped": "not a tool"})
+        return {"passed": True, "skipped": True}
+    cases = [
+        dict(r) for r in (await conn.execute(select(test_case).where(test_case.c.version_id == version_id))).mappings()
+    ]
+    iam = await iam_snapshot.build_payload(conn)
+    conns = await conn_service.snapshot_part(conn)
+    report = await run_cases(
+        spec=v["spec"],
+        classification=a["classification"],
+        cases=cases,
+        iam_payload=iam,
+        connectors=conns["connectors"],
+        allowlist=conns["network_allowlist"],
+        opa_url=get_settings().opa_url,
+        secrets=secrets,
+        resolver=resolver,
+        repeats=1,
+    )
+    await _record(conn, actor, v, "G1_regression", report.g1_passed, report.evidence())
+    return {"passed": report.g1_passed, **report.evidence()}
+
+
 async def gate_history(conn: AsyncConnection, version_id: uuid.UUID) -> list[dict[str, Any]]:
     rows = await conn.execute(
         select(gate_result).where(gate_result.c.version_id == version_id).order_by(gate_result.c.created_at)

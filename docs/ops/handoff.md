@@ -18,9 +18,10 @@
 | **M6a** 风险规则、自动熔断与复核恢复、配额与计量 | 完成 | f96ddb1 |
 | **M6b** 套件、目录与 webhook | 完成 | 0208d45 |
 | **M6c** Skill Registry 与 corp-skill | 完成 | 04063f7 |
-| **M6d–M6e、M7** | **待做**（见第 6、7 节） | — |
+| **M6d** 合成探针与契约漂移 | 完成（本切片待提交） | — |
+| **M6e、M7** | **待做**（见第 6、7 节） | — |
 
-测试现状：后端含 M6b/M6c 用例（`test_m6_catalog` / `test_m6_webhook` / `test_m6_skill`）；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M6d 用例（catalog / webhook / skill / probe）；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -60,7 +61,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b）、`skill/`（M6c 包与目录）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`oauth.py`、`pdp.py` / `facts.py` |
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
-| `migrations/versions/` | Alembic，当前到 0011（`registry.skill_package`；此前 0010 notify、0009 配额、0008 risk） |
+| `migrations/versions/` | Alembic，当前到 0012（probe_result / contract_drift；此前 0011 skill、0010 notify） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
@@ -107,14 +108,11 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 
 首期 zip 存 `registry.skill_package`（bytea），非 SeaweedFS；带脚本的 Skill 硬拒。
 
-### M6d 合成探针与契约漂移（7.3 第 6 条、6.1 probe 字段）——**当前下一步**
+### M6d 合成探针与契约漂移 — 已完成（见 milestones.md）
 
-- 数据面 Probe Scheduler：按 Tool Spec 的 `probe`（只读参数、频率、期望断言）定时调用，带 `X-Platform-Probe` 标记、计入该系统限流、以专用探针身份经 PDP；write 类用其 reconcile 查询做探针。
-- 结果写 `probe_result`（经内部事件回传控制面）；连续 3 次失败或输出不符合 output_schema → 标记“契约漂移”、通知负责人、自动对该版本跑一次 G1 回归（`testlab.runner.run_cases`）；**不自动 Suspended**。
-- 风控增加“漂移劣化”规则（`risk.rule` 新增一条，数据来源领域事件）。
-- 验收：探针连续失败后版本带漂移标记并产生 G1 回归记录。
+write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不自动 Suspended。
 
-### M6e M5 延后项与控制台
+### M6e M5 延后项与控制台——**当前下一步**
 
 - Workflow 引擎补 `loop`（必须有上限）、`parallel`、`sub_workflow` 节点（`src/aip/data_plane/workflow/engine.py`；`libs/workflow/dsl.py` 里去掉对应的“暂不支持”）。
 - Workflow 在 Test Lab 沙箱整体回放：需要与生产隔离的运行表（如 `exec_sandbox` schema）与独立 Worker，避免被生产 Worker 认领。

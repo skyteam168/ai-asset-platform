@@ -62,6 +62,7 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
             {
                 "release_id": str(r["id"]),
                 "asset_id": str(r["asset_id"]),
+                "version_id": str(r["version_id"]),
                 "asset_type": r["type"],
                 "name": r["name"],
                 "capability_id": spec.get("capability_id", r["name"]),

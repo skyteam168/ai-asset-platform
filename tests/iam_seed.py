@@ -81,6 +81,8 @@ async def truncate() -> None:
             "notify.webhook_endpoint",
             "notify.subscription",
             "registry.skill_package",
+            "registry.probe_result",
+            "registry.contract_drift",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:

@@ -72,6 +72,10 @@ def build_input(
     if release.get("asset_type") == "workflow":
         # 启动 Workflow 本身不触达数据；每个 Tool 步骤都以 Run 的 Principal 单独经过 PDP（含确认）
         spec = {"risk_level": "read", "confirm_policy": "auto", "app_identity_allowed": True, **spec}
+    is_probe = bool(principal.extra.get("probe"))
+    if is_probe:
+        # 专用探针：只读探测，跳过消费方授权与入参组织范围（仍经 OPA 的 release/密级/exposure）
+        spec = {**spec, "risk_level": "read", "confirm_policy": "auto", "app_identity_allowed": True}
     return {
         "principal": {
             "identity_kind": principal.identity_kind,
@@ -83,12 +87,14 @@ def build_input(
             "agent_profile_id": principal.agent_profile_id,
         },
         "facts": {
-            "release_in_scope": _release_in_scope(release["scope"], principal),
-            "app_grant": bool(app_grants),
-            "within_ceiling": any(g["within_ceiling"] for g in app_grants) if app_grants else True,
-            "user_grant_required": bool(user_grants),
+            "release_in_scope": True if is_probe else _release_in_scope(release["scope"], principal),
+            "app_grant": True if is_probe else bool(app_grants),
+            "within_ceiling": (
+                True if is_probe else (any(g["within_ceiling"] for g in app_grants) if app_grants else True)
+            ),
+            "user_grant_required": False if is_probe else bool(user_grants),
             "user_grant": user_grant,
-            "scope_check": _scope_check(release, args, principal, iam),
+            "scope_check": {} if is_probe else _scope_check(release, args, principal, iam),
         },
         "resource": {
             "capability_id": release["capability_id"],
@@ -100,7 +106,7 @@ def build_input(
             "app_identity_allowed": bool(spec.get("app_identity_allowed", False)),
             "transport_exception": False,
             "exposure": release["exposure"],
-            "required_scopes": spec.get("required_scopes", []),
+            "required_scopes": [] if is_probe else spec.get("required_scopes", []),
         },
-        "context": {"env": env, "channel": release["channel"], "exposure": exposure},
+        "context": {"env": env, "channel": release["channel"], "exposure": exposure, "probe": is_probe},
     }

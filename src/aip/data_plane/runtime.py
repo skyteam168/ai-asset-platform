@@ -820,12 +820,14 @@ class ToolRuntime:
         )
         if inst.connection:
             conn = inst.connection
+            probe_headers = {"X-Platform-Probe": "1"} if principal.extra.get("probe") else None
             ctx.http = lambda: build_client(
                 conn,
                 allowlist=inst.allowlist,
                 resolver=self.registry.resolver,
                 on_event=lambda k, d: self.registry.event(inst, k, d),
                 trace_id=rec["trace_id"],
+                extra_headers=probe_headers,
             )
         attempt = 0
         while True:

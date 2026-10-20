@@ -311,8 +311,6 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 5 通过 | `test_m6_catalog.py` 2 + `test_m6_webhook.py` 3 |
 
-仍未完成（M6 后续切片）：M6d 合成探针；M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
-
 ### M6c Skill Registry 与 corp-skill — 2026-10-20
 
 | 验收项 | 结果 | 证据（tests/） |
@@ -333,6 +331,25 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 其他验收 | 结果 | 证据 |
 | --- | --- | --- |
 | 本切片测试 | 3 通过 | `test_m6_skill.py` |
+
+### M6d 合成探针与契约漂移 — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 探针连续失败后版本带漂移标记并产生 G1 回归 | 通过 | `test_m6_probe.py::test_three_failures_mark_drift_and_g1`：连续 3 次失败 → `contract_drift` + `gate=G1_regression` |
+
+| 部分 | 内容 |
+| --- | --- |
+| probe_result / contract_drift | 迁移 0012；发布版本内容不可变，漂移记单独表 |
+| ProbeScheduler | 数据面按 `spec.probe` 调度；`X-Platform-Probe`；platform_probe 身份经 PDP；结果经内部事件回传 |
+| G1 回归 | 漂移时跑 `run_g1_regression`（不改版本状态、不 Suspended） |
+| 风控 | 规则 `drift_degradation`（领域事件 `contract.drift`，alert） |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 3 通过 | `test_m6_probe.py` |
+
+仍未完成（M6 后续切片）：M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
