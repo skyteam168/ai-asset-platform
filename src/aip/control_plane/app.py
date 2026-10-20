@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import contextlib
+import pathlib
 from collections.abc import AsyncIterator
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from aip.control_plane.conn.api import router as conn_router
+from aip.control_plane.console_api import router as console_router
 from aip.control_plane.db import Database
 from aip.control_plane.gates.api import router as gates_router
 from aip.control_plane.iam.api import router as iam_router
@@ -16,6 +19,8 @@ from aip.control_plane.registry.api import router as registry_router
 from aip.control_plane.snapshot_feed import SnapshotFeed
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
+
+CONSOLE_DIST = pathlib.Path(__file__).resolve().parents[3] / "console" / "dist"
 
 
 def create_app(db: Database | None = None) -> FastAPI:
@@ -36,6 +41,10 @@ def create_app(db: Database | None = None) -> FastAPI:
     app.include_router(conn_router())
     app.include_router(gates_router())
     app.include_router(internal_router())
+    app.include_router(console_router())
+    # 控制台静态文件（console/dist，构建后存在时才挂载）；同源访问，无需 CORS
+    if CONSOLE_DIST.is_dir():
+        app.mount("/console", StaticFiles(directory=CONSOLE_DIST, html=True), name="console")
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="cpHealth")
     async def healthz() -> web.Health:

@@ -569,17 +569,6 @@ def control_plane() -> dict[str, Any]:
                 "createAsset", "registry", "新建资产", req=ref("Asset"), res=ref("Asset"), code="201", idem=True
             ),
         },
-        f"{A}/assets/{{id}}/versions": {
-            "post": op(
-                "createVersion",
-                "registry",
-                "新建资产版本",
-                req=ref("AssetVersion"),
-                res=ref("AssetVersion"),
-                code="201",
-                params=["Id"],
-            )
-        },
         f"{A}/versions/{{id}}/submit": {
             "post": op("submitVersion", "release", "提交门禁", res=ref("AssetVersion"), params=["Id"])
         },
@@ -641,16 +630,6 @@ def control_plane() -> dict[str, Any]:
                 code="201",
             )
         },
-        f"{A}/usage-requests": {
-            "post": op(
-                "requestUsage",
-                "grant",
-                "使用申请（上限内，由本公司管理员审批）",
-                req={"type": "object"},
-                res={"type": "object"},
-                code="201",
-            )
-        },
         f"{A}/access-reviews": {
             "post": op(
                 "openAccessReview",
@@ -666,6 +645,39 @@ def control_plane() -> dict[str, Any]:
                 "closeAccessReview", "grant", "关闭复核（未确认的授权撤销）", res={"type": "object"}, params=["Id"]
             )
         },
+        f"{A}/assets/{{id}}/versions": {
+            "get": op("listVersions", "registry", "资产的版本列表", res={"type": "object"}, params=["Id"]),
+            "post": op(
+                "createVersion",
+                "registry",
+                "新建资产版本",
+                req=ref("AssetVersion"),
+                res=ref("AssetVersion"),
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/versions/{{id}}": {
+            "get": op("getVersion", "registry", "版本详情（含用例与验收单）", res={"type": "object"}, params=["Id"])
+        },
+        f"{A}/grant-ceilings": {
+            "get": op("listCeilings", "grant", "授权上限列表", res={"type": "object"}),
+            "post": op(
+                "createCeiling", "grant", "设置授权上限", req=ref("GrantCeiling"), res=ref("GrantCeiling"), code="201"
+            ),
+        },
+        f"{A}/usage-requests": {
+            "get": op("listUsageRequests", "grant", "使用申请列表", res={"type": "object"}),
+            "post": op(
+                "requestUsage",
+                "grant",
+                "使用申请（上限内，由本公司管理员审批）",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+            ),
+        },
+        f"{A}/audit-logs/verify": {"post": op("verifyAudit", "audit", "校验审计哈希链与锚点", res={"type": "object"})},
         f"{A}/releases": {
             "post": op(
                 "createRelease", "release", "发布", req=ref("Release"), res=ref("Release"), code="201", idem=True
@@ -673,11 +685,6 @@ def control_plane() -> dict[str, Any]:
         },
         f"{A}/releases/{{id}}/rollback": {
             "post": op("rollbackRelease", "release", "一键回滚", res=ref("Release"), params=["Id"])
-        },
-        f"{A}/grant-ceilings": {
-            "post": op(
-                "createCeiling", "grant", "设置授权上限", req=ref("GrantCeiling"), res=ref("GrantCeiling"), code="201"
-            )
         },
         f"{A}/grants": {
             "get": op("listGrants", "grant", "授权列表", res=page("Grant"), params=LIST),
@@ -732,7 +739,22 @@ def control_plane() -> dict[str, Any]:
         f"{A}/approvals/{{id}}/decide": {
             "post": op("decideApproval", "approval", "审批", req=ref("Decision"), res=ref("Approval"), params=["Id"])
         },
-        f"{A}/audit-logs": {"get": op("searchAudit", "audit", "审计检索", res=page("AuditRecord"), params=LIST)},
+        f"{A}/audit-logs": {
+            "get": {
+                **op("searchAudit", "audit", "审计检索（按时间倒序；分公司管理员只看本公司）", res=page("AuditRecord")),
+                "parameters": [
+                    {"name": "kind", "in": "query", "schema": S},
+                    {"name": "trace_id", "in": "query", "schema": S},
+                    {"name": "since", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+                    {"name": "until", "in": "query", "schema": {"type": "string", "format": "date-time"}},
+                    {
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100},
+                    },
+                ],
+            }
+        },
         f"{A}/internal/events": {
             "post": op(
                 "ingestDataPlaneEvents",

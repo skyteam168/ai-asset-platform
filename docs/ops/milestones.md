@@ -149,9 +149,47 @@
 
 | 项 | 现状 | 计划 |
 | --- | --- | --- |
-| 控制台前端（最小页面集） | 只有 HTTP API 与 OpenAPI 契约 | 单独排期（React + Ant Design） |
+| 控制台前端（最小页面集） | 已完成，见下节 | - |
 | 控制面响应体 Pydantic 模型 | 字段与契约一致，未用响应模型强校验 | 随控制台一起补 |
 | 批量密级提升、启用 by_employee_no 的双人复核 | 仅限平台管理员 | 接入审批引擎（M5） |
 | Kubernetes 清单 | 已编写并通过 YAML 校验，未在真实集群部署 | 首个 staging 集群上线时验证 |
 | CI 工作流 | 已编写，未在 GitHub 上运行 | 推送远端仓库后启用 |
 | 多进程 / 多副本线性扩展 | 只测了单进程 | M7 故障演练与容量测试 |
+
+## 控制台最小页面集 — 2026-10-20 通过
+
+React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（同源，无 CORS）；会话令牌只放 sessionStorage，401 自动回登录页。菜单按角色裁剪，权限与数据范围仍以后端为准。
+
+| 页面 | 功能 | 用到的接口 |
+| --- | --- | --- |
+| 登录 | 用户名 + 口令 + TOTP | `/auth/login`、`/me`、`/auth/logout` |
+| 组织与用户 | 组织树、按子树过滤用户、新建下级与停用、新建用户（一次性展示 TOTP）、CSV 导入预览与确认 | `/orgs`、`/users`、`/users/import` |
+| 消费方与绑定 | 注册消费方、用户绑定、签发静态 Token（只显示一次）、登记 JWK、断言调试器 | `/consumers`、`/consumers/{id}/bindings`、`/credentials`、`/jwks`、`/assertion-debug` |
+| 系统连接 | 登记连接（system_ca / custom_ca / pinned / insecure / http，例外理由与 ≤ 90 天到期）、审批例外、连接测试（解析地址、白名单、证书链、两种指纹）、生成 pinned 草稿 | `/connections`、`/test`、`/approve-exception`、`/trust-draft` |
+| 资产与门禁 | 资产与版本、Spec 模板、门禁用例、验收单模板、提交 G0、运行 G1 / G2、门禁记录、灰度与全量 | `/assets`、`/assets/{id}/versions`、`/versions/{id}`、`/test-cases`、`/acceptance`、`/submit`、`/run-tests`、`/gates`、`/canary`、`/promote` |
+| 审批待办 | G5 / G6 / 使用申请，显示“资产@版本”或“资产（环境）”，G5 填写实测结果，驳回必须写理由 | `/approvals`、`/approvals/{id}/decide` |
+| 授权 | 授权上限、授权（只能选上限内资产）、使用申请、访问复核发起与关闭 | `/grant-ceilings`、`/grants`、`/usage-requests`、`/access-reviews` |
+| 审计 | 按类型、trace_id、时间、条数检索；展开原始记录；校验哈希链与签名锚点 | `/audit-logs`、`/audit-logs/verify` |
+
+为控制台补充的后端接口（契约已更新）：版本列表与详情（含用例与验收单）、授权上限列表、使用申请列表、审计检索过滤（分公司管理员只看本公司，最多 500 条）、审计链校验（仅审计员与平台管理员）、审批待办的可读摘要。
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 类型检查与构建 | 通过 | `npm run typecheck`、`npm run build` |
+| 组件测试 | 14 通过 | `console/src/**/*.test.ts(x)`：RFC 9457 错误解析、401 回调、登录（错误动态码提示、成功后进入首页）、菜单按角色裁剪、传输标签、审计筛选与校验按钮的角色可见性、驳回必须写理由 |
+| 后端接口测试 | 4 通过 | `tests/test_m4_console_api.py`：版本列表与详情、上限与审批待办的 RLS 隔离与摘要、审计检索过滤与公司范围、校验权限、`/console/` 静态托管 |
+| 全量后端测试 | 256 通过，0 失败，0 跳过 | `python -m pytest -q`，约 4.6 分钟；ruff、mypy --strict（76 个文件）、TLS 约束、spectral、链接检查均通过 |
+| 浏览器端到端 | 6 通过 | `console/e2e/console.spec.ts`（Playwright + Chromium，对 `tools/dev.py serve` 的真实控制面）：TOTP 登录（先错后对）、组织树、登记明文 HTTP 连接并执行连接测试、新建资产与版本并由 G0 列出缺失项、下发授权上限、审计链校验、退出 |
+
+本次发现并修复的问题：
+
+- 组织树数据异步到达时 `defaultExpandAll` 不生效，树只显示根节点 → 数据到达后再挂载。
+- 连接测试对明文 HTTP / 不校验证书的通过文案写着“已批准的传输例外”，而连接实际仍待审批 → 改为“传输例外：须经数据 Owner 审批生效”。
+
+仍未完成：
+
+| 项 | 现状 | 计划 |
+| --- | --- | --- |
+| 镜像内置控制台 | Dockerfile 未构建 console/dist，镜像里的控制面不托管控制台 | 加 Node 构建阶段 |
+| 单包体积 | 1.27 MB（gzip 398 KB），未分包 | 按路由懒加载 |
+| 控制面响应体 Pydantic 模型 | 前端类型按契约手写 | 引入响应模型后由 OpenAPI 生成前端类型 |

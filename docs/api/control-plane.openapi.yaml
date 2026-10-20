@@ -657,29 +657,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Asset'
-  /api/v1/assets/{id}/versions:
-    post:
-      operationId: createVersion
-      tags:
-      - registry
-      summary: 新建资产版本
-      responses:
-        '201':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AssetVersion'
-        default:
-          $ref: '#/components/responses/Problem'
-      parameters:
-      - $ref: '#/components/parameters/Id'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AssetVersion'
   /api/v1/versions/{id}/submit:
     post:
       operationId: submitVersion
@@ -844,27 +821,6 @@ paths:
           application/json:
             schema:
               type: object
-  /api/v1/usage-requests:
-    post:
-      operationId: requestUsage
-      tags:
-      - grant
-      summary: 使用申请（上限内，由本公司管理员审批）
-      responses:
-        '201':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-        default:
-          $ref: '#/components/responses/Problem'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
   /api/v1/access-reviews:
     post:
       operationId: openAccessReview
@@ -903,6 +859,147 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
+  /api/v1/assets/{id}/versions:
+    get:
+      operationId: listVersions
+      tags:
+      - registry
+      summary: 资产的版本列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      operationId: createVersion
+      tags:
+      - registry
+      summary: 新建资产版本
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetVersion'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssetVersion'
+  /api/v1/versions/{id}:
+    get:
+      operationId: getVersion
+      tags:
+      - registry
+      summary: 版本详情（含用例与验收单）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/grant-ceilings:
+    get:
+      operationId: listCeilings
+      tags:
+      - grant
+      summary: 授权上限列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createCeiling
+      tags:
+      - grant
+      summary: 设置授权上限
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GrantCeiling'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantCeiling'
+  /api/v1/usage-requests:
+    get:
+      operationId: listUsageRequests
+      tags:
+      - grant
+      summary: 使用申请列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: requestUsage
+      tags:
+      - grant
+      summary: 使用申请（上限内，由本公司管理员审批）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/audit-logs/verify:
+    post:
+      operationId: verifyAudit
+      tags:
+      - audit
+      summary: 校验审计哈希链与锚点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/releases:
     post:
       operationId: createRelease
@@ -943,27 +1040,6 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
-  /api/v1/grant-ceilings:
-    post:
-      operationId: createCeiling
-      tags:
-      - grant
-      summary: 设置授权上限
-      responses:
-        '201':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/GrantCeiling'
-        default:
-          $ref: '#/components/responses/Problem'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/GrantCeiling'
   /api/v1/grants:
     get:
       operationId: listGrants
@@ -1208,7 +1284,7 @@ paths:
       operationId: searchAudit
       tags:
       - audit
-      summary: 审计检索
+      summary: 审计检索（按时间倒序；分公司管理员只看本公司）
       responses:
         '200':
           description: OK
@@ -1233,8 +1309,31 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
       parameters:
-      - $ref: '#/components/parameters/Limit'
-      - $ref: '#/components/parameters/Cursor'
+      - name: kind
+        in: query
+        schema:
+          type: string
+      - name: trace_id
+        in: query
+        schema:
+          type: string
+      - name: since
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: until
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
   /api/v1/internal/events:
     post:
       operationId: ingestDataPlaneEvents

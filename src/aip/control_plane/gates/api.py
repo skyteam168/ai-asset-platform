@@ -8,6 +8,8 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
 from aip.control_plane.approval import service as approval
@@ -71,6 +73,30 @@ def _secrets(request: Request) -> SecretStore:
 
 def _str(v: Any) -> Any:
     return str(v) if isinstance(v, uuid.UUID | dt.datetime) else v
+
+
+async def _subject(conn: AsyncConnection, row: dict[str, Any]) -> str:
+    """审批单的可读摘要：门禁审批显示资产名与版本，使用申请显示资产名与环境。"""
+    from aip.control_plane.registry import tables as rt
+
+    if row["kind"] in ("G5", "G6"):
+        r = (
+            await conn.execute(
+                select(rt.asset.c.name, rt.asset_version.c.semver)
+                .select_from(rt.asset_version.join(rt.asset, rt.asset.c.id == rt.asset_version.c.asset_id))
+                .where(rt.asset_version.c.id == row["subject_id"])
+            )
+        ).first()
+        return f"{r.name}@{r.semver}" if r else str(row["subject_id"])
+    if row["kind"] == "usage":
+        asset_id = row["payload"].get("asset_id")
+        name = (
+            (await conn.execute(select(rt.asset.c.name).where(rt.asset.c.id == uuid.UUID(asset_id)))).scalar()
+            if asset_id
+            else None
+        )
+        return f"{name or asset_id}（{row['payload'].get('env', '')}）"
+    return str(row["subject_id"])
 
 
 def router() -> APIRouter:
@@ -139,9 +165,11 @@ def router() -> APIRouter:
     async def pending(actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
             rows = await approval.pending_for(conn, actor)
-        items = [
-            {k: (_str(v) if not isinstance(v, list) else [_str(x) for x in v]) for k, v in row.items()} for row in rows
-        ]
+            items = []
+            for row in rows:
+                item = {k: (_str(v) if not isinstance(v, list) else [_str(x) for x in v]) for k, v in row.items()}
+                item["subject"] = await _subject(conn, row)
+                items.append(item)
         return {"items": items, "next_cursor": None, "has_more": False}
 
     @r.post(f"{V}/approvals/{{id}}/decide", tags=["approval"], operation_id="decideApproval")

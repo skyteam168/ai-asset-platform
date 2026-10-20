@@ -95,7 +95,7 @@ async def probe(
             w.close()
         except (OSError, TimeoutError):
             return _result(conn, **common, error_code="DOWNSTREAM_UNAVAILABLE")
-        return _result(conn, **common, verdict="pass", detail="明文 HTTP（已批准的传输例外）")
+        return _result(conn, **common, verdict="pass", detail="明文 HTTP 可达（传输例外：须经数据 Owner 审批生效）")
 
     # 先用不校验的握手取证书（仅用于展示与比对），再按配置模式判定
     raw = ssl.create_default_context()
@@ -140,7 +140,9 @@ async def probe(
     if mode == "insecure":
         if conn.tls_check_hostname and not shown["hostname_match"]:
             return _result(conn, **shown, error_code="TLS_HOSTNAME_MISMATCH")
-        return _result(conn, **shown, verdict="pass", detail="不校验证书（已批准的传输例外）")
+        return _result(
+            conn, **shown, verdict="pass", detail="握手成功但未校验证书（传输例外：须经数据 Owner 审批生效）"
+        )
     try:
         await _handshake(ips[0], port, host, _ssl_context(conn), timeout)
     except ssl.SSLCertVerificationError as e:
