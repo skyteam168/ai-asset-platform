@@ -8,12 +8,31 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$"
     },
+    "capability_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$"
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 1000
+    },
     "version": {
       "type": "string",
       "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?$"
     },
+    "data_classification": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4
+    },
     "input_schema": {
       "type": "object"
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object"
+      }
     },
     "output_schema": {
       "type": "object"
@@ -120,9 +139,16 @@
                 "type": "string",
                 "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"
               },
+              "args": {
+                "type": "object",
+                "description": "参数映射；以 $ 开头的字符串是数据路径，如 $input.po_no"
+              },
               "compensation": {
                 "type": "string",
                 "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"
+              },
+              "compensation_args": {
+                "type": "object"
               },
               "irreversible": {
                 "type": "boolean"
@@ -157,8 +183,41 @@
                 "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"
               },
               "output_schema": {
-                "type": "string"
+                "type": "string",
+                "description": "引用顶层 schemas 中的名字"
+              },
+              "inputs": {
+                "type": "object"
               }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "then"
+                  ]
+                },
+                {
+                  "required": [
+                    "else"
+                  ]
+                },
+                {
+                  "required": [
+                    "on_timeout"
+                  ]
+                },
+                {
+                  "required": [
+                    "on_reject"
+                  ]
+                },
+                {
+                  "required": [
+                    "branches"
+                  ]
+                }
+              ]
             }
           }
         },
@@ -230,8 +289,26 @@
                   "input"
                 ]
               },
+              "assignee": {
+                "type": "string",
+                "pattern": "^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@([A-Za-z0-9_.-]+|\\$input\\.[A-Za-z0-9_.]+|org_of\\(input\\.[A-Za-z0-9_.]+\\)))$"
+              },
+              "summary": {
+                "type": "string",
+                "maxLength": 500
+              },
               "timeout_s": {
-                "type": "integer"
+                "type": "integer",
+                "minimum": 1
+              },
+              "on_timeout": {
+                "type": "string"
+              },
+              "on_reject": {
+                "type": "string"
+              },
+              "input_schema": {
+                "type": "object"
               }
             }
           }
@@ -290,7 +367,32 @@
           "then": {
             "required": [
               "seconds"
+            ],
+            "properties": {
+              "seconds": {
+                "type": "number",
+                "minimum": 0
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "end"
+              }
+            },
+            "required": [
+              "type"
             ]
+          },
+          "then": {
+            "properties": {
+              "output": {
+                "type": "object"
+              }
+            }
           }
         }
       ]

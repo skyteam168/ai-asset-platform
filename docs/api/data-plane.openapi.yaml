@@ -10,6 +10,7 @@ security:
 tags:
 - name: catalog
 - name: confirmation
+- name: internal
 - name: invoke
 - name: mcp
 - name: oauth
@@ -211,6 +212,131 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Run'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/internal/todo:
+    post:
+      operationId: internalTodo
+      tags:
+      - internal
+      summary: 内部（服务凭据）：待处理的确认与人工任务，按公司过滤
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                company_ids:
+                  type:
+                  - array
+                  - 'null'
+                  items:
+                    type: string
+  /api/v1/internal/confirmations/{id}:
+    get:
+      operationId: internalGetConfirmation
+      tags:
+      - internal
+      summary: 内部（服务凭据）：确认摘要
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/internal/confirmations/{id}/decide:
+    post:
+      operationId: internalDecideConfirmation
+      tags:
+      - internal
+      summary: 内部（服务凭据）：控制台审批后执行或拒绝
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalDecision'
+  /api/v1/internal/tasks/{id}:
+    get:
+      operationId: internalGetTask
+      tags:
+      - internal
+      summary: 内部（服务凭据）：人工任务
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/internal/tasks/{id}/decide:
+    post:
+      operationId: internalDecideTask
+      tags:
+      - internal
+      summary: 内部（服务凭据）：处理人工任务
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InternalDecision'
+  /api/v1/internal/runs/{id}:
+    get:
+      operationId: internalGetRun
+      tags:
+      - internal
+      summary: 内部（服务凭据）：Run 全量视图
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -574,6 +700,9 @@ components:
               - 'null'
         trace_id:
           type: string
+        run_id:
+          type: string
+          description: Workflow 能力：与 execution_id 相同
       required:
       - execution_id
       - status
@@ -584,12 +713,31 @@ components:
         run_id:
           type: string
         status:
-          type: string
+          enum:
+          - running
+          - waiting
+          - succeeded
+          - failed
+          - compensated
+          - rejected
+          - cancelled
         result: {}
+        error:
+          type:
+          - object
+          - 'null'
+        tainted:
+          type: boolean
         pending_tasks:
           type: array
           items:
             type: object
+        steps:
+          type: array
+          items:
+            type: object
+        trace_id:
+          type: string
       required:
       - run_id
       - status
@@ -598,5 +746,25 @@ components:
       properties:
         assertion:
           type: string
+          description: 被代表用户的新断言（jti 未用过、iat 不早于确认创建）
         comment:
           type: string
+        args:
+          type: object
+          description: 可选：声明所确认的参数，必须与冻结内容一致
+    InternalDecision:
+      type: object
+      properties:
+        decision:
+          enum:
+          - approve
+          - reject
+        user_id:
+          type: string
+        comment:
+          type: string
+        data:
+          type: object
+      required:
+      - decision
+      - user_id

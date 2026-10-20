@@ -309,6 +309,19 @@
     "confirm_template": {
       "type": "string"
     },
+    "approver_role": {
+      "enum": [
+        "data_owner",
+        "business_owner",
+        "company_admin",
+        "platform_admin"
+      ],
+      "description": "confirm_policy=approval 时由谁审批（同公司范围），缺省 data_owner"
+    },
+    "untrusted_output": {
+      "type": "boolean",
+      "description": "输出含旧系统自由文本、知识库文档或上游 MCP 内容；Workflow 用到后 Run 被标记 tainted（8.7）"
+    },
     "app_identity_allowed": {
       "type": "boolean"
     },

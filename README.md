@@ -30,10 +30,11 @@ Linux / macOS 可用 `make up`、`make ci` 等同名任务。Windows 下用 `.ve
 
 | 路径 | 内容 |
 | --- | --- |
-| `src/aip/libs` | 共享库：common（错误码、配置、web 装配）、tokens、httpclient（唯一允许关闭证书校验的位置） |
+| `src/aip/libs` | 共享库：common（错误码、配置、web 装配）、tokens、httpclient（唯一允许关闭证书校验的位置）、workflow（DSL 校验与条件表达式） |
 | `src/aip/control_plane` | 控制面：IAM、Registry、Release、Grant、连接、审批、审计 |
-| `src/aip/data_plane` | 数据面：Gateway（MCP + REST + OAuth）、Runtime、PDP 客户端 |
+| `src/aip/data_plane` | 数据面：Gateway（MCP + REST + OAuth）、Runtime、PDP 客户端、确认流、Workflow 引擎（自研 step journal，ADR-0003） |
 | `console/` | 控制台：组织与用户、消费方与绑定、系统连接与连接测试、资产门禁与审批、授权、审计 |
+| `spikes/` | 技术选型 spike（不进入产品代码），如 `adr0003` 工作流引擎对比 |
 | `migrations/` | Alembic（异步），expand / contract 规则 |
 | `deploy/` | docker-compose（dev），后续 Helm / Kustomize |
 | `docs/` | 架构、ADR、OpenAPI 契约、JSON Schema、运维与里程碑记录 |

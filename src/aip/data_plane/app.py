@@ -14,9 +14,11 @@ import httpx
 from fastapi import FastAPI, Header, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
+from aip.data_plane.confirm_api import router as confirm_router
+from aip.data_plane.confirmation import MemoryConfirmationStore, PgConfirmationStore
 from aip.data_plane.events import EventForwarder
 from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.mcp_gateway import McpGateway
@@ -34,6 +36,8 @@ from aip.data_plane.runtime import (
     ToolRuntime,
 )
 from aip.data_plane.snapshots import SnapshotCache, SnapshotRejected
+from aip.data_plane.workflow.engine import WorkflowEngine
+from aip.data_plane.workflow.llm import LlmClient
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.audit.store import anchor, ship
 from aip.libs.common import web
@@ -137,6 +141,8 @@ def create_app(
     secrets: SecretStore | None = None,
     exec_store: ExecutionStore | None = None,
     resolver: Resolver | None = None,
+    runtime_engine: AsyncEngine | None = None,
+    llm: LlmClient | None = None,
 ) -> FastAPI:
     settings = get_settings()
     # 签名用当前密钥；验签信任全部已发布版本（Transit 轮换期间旧令牌与旧快照仍有效）
@@ -155,12 +161,10 @@ def create_app(
         replay=replay or ValkeyReplayStore(settings.valkey_url),
         verify_keys=trusted,
     )
+    if runtime_engine is None and settings.runtime_database_url:
+        runtime_engine = create_async_engine(settings.runtime_database_url)
     if exec_store is None:
-        exec_store = (
-            PgExecutionStore(create_async_engine(settings.runtime_database_url))
-            if settings.runtime_database_url
-            else MemoryExecutionStore()
-        )
+        exec_store = PgExecutionStore(runtime_engine) if runtime_engine else MemoryExecutionStore()
     forwarder = EventForwarder(control_plane_url, settings.internal_service_token, settings.instance_id)
     ctx.resolver.on_employee_match = forwarder
     registry = ConnectorRegistry(
@@ -174,7 +178,24 @@ def create_app(
         store=exec_store,
         audit=audit,
         mode=settings.runtime_mode,
+        confirmations=PgConfirmationStore(runtime_engine) if runtime_engine else MemoryConfirmationStore(),
     )
+    runtime.workflow_sync_wait_s = settings.workflow_sync_wait_s
+    # Workflow 需要持久化运行表；没有运行库（纯内存开发模式）时不启用
+    workflows = (
+        WorkflowEngine(
+            runtime_engine,
+            runtime,
+            audit,
+            instance_id=settings.instance_id,
+            llm=llm,
+            lease_s=settings.workflow_lease_s,
+            stale_s=settings.workflow_stale_s,
+        )
+        if runtime_engine
+        else None
+    )
+    runtime.workflows = workflows
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -189,6 +210,8 @@ def create_app(
             tasks.append(asyncio.create_task(forwarder.run()))
         if settings.audit_database_url:
             tasks.append(asyncio.create_task(ship_audit(app, settings.audit_database_url)))
+        if workflows is not None and settings.workflow_worker:
+            tasks.append(asyncio.create_task(workflows.run_worker()))
         yield
         for task in tasks:
             task.cancel()
@@ -205,9 +228,11 @@ def create_app(
     app.state.auth = ctx
     app.state.runtime = runtime
     app.state.events = forwarder
+    app.state.workflows = workflows
     store = exec_store
     app.include_router(oauth_router(ctx))
     app.include_router(mcp_router(McpGateway(ctx, runtime)))
+    app.include_router(confirm_router(ctx, runtime, workflows))
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="dpHealth")
     async def healthz() -> web.Health:
@@ -271,6 +296,27 @@ def create_app(
             "data": rec.get("result"),
             "error": {"code": rec["error_code"]} if rec.get("error_code") else None,
             "trace_id": rec["trace_id"],
+        }
+
+    @app.get("/api/v1/runs/{id}", tags=["invoke"], operation_id="getRun")
+    async def get_run(
+        id: str,
+        authorization: Annotated[str | None, Header()] = None,
+        x_user_assertion: Annotated[str | None, Header()] = None,
+    ) -> dict[str, Any]:
+        principal = await ctx.principal_from_request(authorization, x_user_assertion)
+        if workflows is None:
+            raise PlatformError(ErrorCode.NOT_FOUND, "Run 不存在")
+        view = await workflows.view(id, consumer_id=principal.consumer_id)
+        return {
+            "run_id": view["run_id"],
+            "status": view["status"],
+            "result": view["result"],
+            "error": view["error"],
+            "tainted": view["tainted"],
+            "pending_tasks": [{k: t[k] for k in ("id", "kind", "summary", "deadline")} for t in view["pending_tasks"]],
+            "steps": view["steps"],
+            "trace_id": view["trace_id"],
         }
 
     return app

@@ -20,10 +20,13 @@ from aip.control_plane.conn import service as conn_service
 from aip.control_plane.iam import snapshot as iam_snapshot
 from aip.control_plane.iam.authz import Actor
 from aip.control_plane.registry import service as registry
+from aip.control_plane.registry import tables as rt
 from aip.control_plane.testlab.runner import run_cases
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
+from aip.libs.workflow.dsl import split_ref
+from aip.libs.workflow.dsl import validate as validate_dsl
 
 md = MetaData(schema="registry")
 U = UUID(as_uuid=True)
@@ -166,6 +169,10 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         problems.append(e.detail)
     spec = v["spec"]
     problems += scan_text(spec.get("description", ""), spec.get("usage_notes", ""), *spec.get("not_for", []))
+    if a["type"] == "workflow" and not problems:
+        # DSL 静态校验：无环、可达、表达式、引用的 Tool 版本可解析、写节点有补偿或前置人工确认（6.3）
+        tools = await _tool_versions(conn, _workflow_refs(spec))
+        problems += validate_dsl(spec, lambda cap, ver: (tools.get((cap, ver)) or {}).get("spec"))
     ref = spec.get("connector_ref", {}).get("connector")
     if (
         ref
@@ -178,7 +185,7 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
     ):
         problems.append(f"依赖不可解析：Connector 实例 {ref} 不存在")
     kinds = {r[0] for r in await conn.execute(select(test_case.c.kind).where(test_case.c.version_id == version_id))}
-    if kinds != {"functional", "permission"}:
+    if a["type"] != "workflow" and kinds != {"functional", "permission"}:
         problems.append("至少需要一个功能用例和一个权限用例")
     if (
         await conn.execute(select(acceptance_sheet.c.version_id).where(acceptance_sheet.c.version_id == version_id))
@@ -207,6 +214,8 @@ async def run_lab(
     cases = [
         dict(r) for r in (await conn.execute(select(test_case).where(test_case.c.version_id == version_id))).mappings()
     ]
+    if a["type"] == "workflow":
+        return await _workflow_lab(conn, actor, v, a)
     iam = await iam_snapshot.build_payload(conn)
     conns = await conn_service.snapshot_part(conn)
     report = await run_cases(
@@ -219,13 +228,20 @@ async def run_lab(
         opa_url=get_settings().opa_url,
         secrets=secrets,
         resolver=resolver,
+        repeats=get_settings().g3_repeats,
     )
     await _record(conn, actor, v, "G1", report.g1_passed, report.evidence())
     await _record(conn, actor, v, "G2", report.g2_passed, report.evidence())
-    if not (report.g1_passed and report.g2_passed):
-        await registry.transition(conn, actor, version_id, "draft", "G1/G2 failed")
+    await _record(conn, actor, v, "G3", report.g3_passed, {"stability": report.stability})
+    if not (report.g1_passed and report.g2_passed and report.g3_passed):
+        await registry.transition(conn, actor, version_id, "draft", "G1/G2/G3 failed")
         return {"passed": False, **report.evidence()}
-    await registry.transition(conn, actor, version_id, "in_review", "G1/G2 passed")
+    await registry.transition(conn, actor, version_id, "in_review", "G1/G2/G3 passed")
+    return {"passed": True, **(await _open_reviews(conn, v, a)), **report.evidence()}
+
+
+async def _open_reviews(conn: AsyncConnection, v: dict[str, Any], a: dict[str, Any]) -> dict[str, str]:
+    version_id = v["id"]
     submitter = v["submitted_by"]
     g5 = await approval.create(
         conn,
@@ -248,7 +264,49 @@ async def run_lab(
         sla_business_days=2,
         payload={"fast_track": required == 1},
     )
-    return {"passed": True, "g5_approval": str(g5), "g6_approval": str(g6), **report.evidence()}
+    return {"g5_approval": str(g5), "g6_approval": str(g6)}
+
+
+def _workflow_refs(spec: dict[str, Any]) -> list[str]:
+    return [
+        n[k] for n in spec.get("nodes", []) for k in ("ref", "compensation") if n.get("type") == "tool" and n.get(k)
+    ]
+
+
+async def _tool_versions(conn: AsyncConnection, refs: list[str]) -> dict[tuple[str, str], dict[str, Any]]:
+    """Workflow 引用的 Tool 版本：(capability_id, semver) → {spec, state}。"""
+    wanted = {split_ref(r) for r in refs}
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+    if not wanted:
+        return out
+    rows = await conn.execute(
+        select(rt.asset_version.c.spec, rt.asset_version.c.semver, rt.asset_version.c.state)
+        .select_from(rt.asset_version.join(rt.asset, rt.asset.c.id == rt.asset_version.c.asset_id))
+        .where(rt.asset.c.type == "tool")
+        .where(rt.asset_version.c.semver.in_([ver for _, ver in wanted]))
+    )
+    for spec, semver, state in rows:
+        key = (spec.get("capability_id", ""), semver)
+        if key in wanted:
+            out[key] = {"spec": spec, "state": state}
+    return out
+
+
+async def _workflow_lab(conn: AsyncConnection, actor: Actor, v: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
+    """Workflow 的 G1–G3（M5）：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
+    Workflow 在沙箱中的整体回放需要隔离的运行表，推迟到 M6（见 docs/ops/milestones.md）。"""
+    refs = _workflow_refs(v["spec"])
+    tools = await _tool_versions(conn, refs)
+    states = {r: (tools.get(split_ref(r)) or {}).get("state", "missing") for r in refs}
+    ok = all(s in registry.RELEASABLE for s in states.values())
+    evidence = {"mode": "composition", "tool_versions": states}
+    for gate in ("G1", "G2", "G3"):
+        await _record(conn, actor, v, gate, ok, evidence)
+    if not ok:
+        await registry.transition(conn, actor, v["id"], "draft", "referenced tools not released")
+        return {"passed": False, **evidence}
+    await registry.transition(conn, actor, v["id"], "in_review", "composition gates passed")
+    return {"passed": True, **(await _open_reviews(conn, v, a)), **evidence}
 
 
 async def decide(

@@ -165,7 +165,13 @@ def test_workflow_dsl_example_from_architecture() -> None:
                 "next": "n3",
             },
             {"id": "n3", "type": "condition", "expr": "n2.risk_level == 'high'", "then": "n4", "else": "n5"},
-            {"id": "n4", "type": "human_task", "kind": "approve", "assignee": "role:purchase_manager", "next": "n5"},
+            {
+                "id": "n4",
+                "type": "human_task",
+                "kind": "approve",
+                "assignee": "role:purchase_manager@org_of(input.company)",
+                "next": "n5",
+            },
             {
                 "id": "n5",
                 "type": "tool",

@@ -1279,6 +1279,93 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Decision'
+  /api/v1/todo:
+    get:
+      operationId: listTodo
+      tags:
+      - approval
+      summary: 我的待办：可处理的调用确认（审批 / 本人确认）与 Workflow 人工任务
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  confirmations:
+                    type: array
+                    items:
+                      type: object
+                  tasks:
+                    type: array
+                    items:
+                      type: object
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/todo/confirmations/{id}/decide:
+    post:
+      operationId: decideConfirmation
+      tags:
+      - approval
+      summary: 处理调用确认（approval 需具备 approver_role 且不是被代表用户；user_confirm 只能本人）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoDecision'
+  /api/v1/todo/tasks/{id}/decide:
+    post:
+      operationId: decideTask
+      tags:
+      - approval
+      summary: 处理 Workflow 人工任务（确认、审批、补录）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TodoDecision'
+  /api/v1/runs/{id}:
+    get:
+      operationId: getRunConsole
+      tags:
+      - approval
+      summary: 控制台查看 Workflow Run
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/audit-logs:
     get:
       operationId: searchAudit
@@ -1800,6 +1887,19 @@ components:
           - reject
         comment:
           type: string
+      required:
+      - decision
+    TodoDecision:
+      type: object
+      properties:
+        decision:
+          enum:
+          - approve
+          - reject
+        comment:
+          type: string
+        data:
+          type: object
       required:
       - decision
     Consumer:

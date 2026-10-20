@@ -69,6 +69,9 @@ def build_input(
             for g in user_grants
         )
     spec = release["spec"]
+    if release.get("asset_type") == "workflow":
+        # 启动 Workflow 本身不触达数据；每个 Tool 步骤都以 Run 的 Principal 单独经过 PDP（含确认）
+        spec = {"risk_level": "read", "confirm_policy": "auto", "app_identity_allowed": True, **spec}
     return {
         "principal": {
             "identity_kind": principal.identity_kind,

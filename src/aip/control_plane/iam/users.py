@@ -258,9 +258,8 @@ async def load_actor(conn: AsyncConnection, user_id: uuid.UUID) -> Actor:
         )
     ).all()
     grants = tuple(RoleGrant(r.role, r.scope_org_id, r.company_id) for r in rows)
-    subtrees = {
-        g.scope_org_id: frozenset(await descendants(conn, g.scope_org_id)) for g in grants if g.role == "company_admin"
-    }
+    # 每个角色生效节点的后代集合：company_admin 管理范围、审批与待办的角色覆盖范围都用它判断
+    subtrees = {g.scope_org_id: frozenset(await descendants(conn, g.scope_org_id)) for g in grants}
     return Actor(user_id=user_id, company_id=u["company_id"], roles=grants, subtrees=subtrees)
 
 

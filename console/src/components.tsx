@@ -74,9 +74,11 @@ export const jsonRule: Rule = {
   },
 };
 
-export function JsonInput(props: { value?: string; onChange?: (v: string) => void; rows?: number }) {
+// id 由 Form.Item 注入：让标签与输入框关联（读屏与按标签定位都依赖它）
+export function JsonInput(props: { id?: string; value?: string; onChange?: (v: string) => void; rows?: number }) {
   return (
     <Input.TextArea
+      id={props.id}
       value={props.value}
       onChange={(e) => props.onChange?.(e.target.value)}
       rows={props.rows ?? 6}

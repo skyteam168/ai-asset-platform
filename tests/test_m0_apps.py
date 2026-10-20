@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+from typing import Any
 
 import pytest
 import yaml
@@ -43,9 +44,18 @@ def test_unknown_path_returns_problem_json() -> None:
     assert r.json()["code"] == "NOT_FOUND"
 
 
+def _flatten(routes: list[Any]) -> list[Any]:
+    """FastAPI 0.146 起 include_router 产生 _IncludedRouter 包装（没有 path），要展开到原始路由。"""
+    out: list[Any] = []
+    for r in routes:
+        inner = getattr(r, "original_router", None)
+        out += _flatten(list(inner.routes)) if inner is not None else [r]
+    return out
+
+
 def _routes(app: FastAPI) -> set[tuple[str, str]]:
     out = set()
-    for r in app.routes:
+    for r in _flatten(list(app.routes)):
         methods = getattr(r, "methods", None) or set()
         path = getattr(r, "path", "")
         if path.startswith(("/docs", "/openapi", "/redoc")):

@@ -254,6 +254,9 @@ def control_plane() -> dict[str, Any]:
                 ["user_id", "requested_level", "reason", "expires_at"],
             ),
             "Decision": o({"decision": {"enum": ["approve", "reject"]}, "comment": S}, ["decision"]),
+            "TodoDecision": o(
+                {"decision": {"enum": ["approve", "reject"]}, "comment": S, "data": {"type": "object"}}, ["decision"]
+            ),
             "Consumer": o(
                 {
                     "id": ID,
@@ -739,6 +742,43 @@ def control_plane() -> dict[str, Any]:
         f"{A}/approvals/{{id}}/decide": {
             "post": op("decideApproval", "approval", "审批", req=ref("Decision"), res=ref("Approval"), params=["Id"])
         },
+        f"{A}/todo": {
+            "get": op(
+                "listTodo",
+                "approval",
+                "我的待办：可处理的调用确认（审批 / 本人确认）与 Workflow 人工任务",
+                res={
+                    "type": "object",
+                    "properties": {
+                        "confirmations": {"type": "array", "items": {"type": "object"}},
+                        "tasks": {"type": "array", "items": {"type": "object"}},
+                    },
+                },
+            )
+        },
+        f"{A}/todo/confirmations/{{id}}/decide": {
+            "post": op(
+                "decideConfirmation",
+                "approval",
+                "处理调用确认（approval 需具备 approver_role 且不是被代表用户；user_confirm 只能本人）",
+                req=ref("TodoDecision"),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/todo/tasks/{{id}}/decide": {
+            "post": op(
+                "decideTask",
+                "approval",
+                "处理 Workflow 人工任务（确认、审批、补录）",
+                req=ref("TodoDecision"),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/runs/{{id}}": {
+            "get": op("getRunConsole", "approval", "控制台查看 Workflow Run", res={"type": "object"}, params=["Id"])
+        },
         f"{A}/audit-logs": {
             "get": {
                 **op("searchAudit", "audit", "审计检索（按时间倒序；分公司管理员只看本公司）", res=page("AuditRecord")),
@@ -873,19 +913,44 @@ def data_plane() -> dict[str, Any]:
                         },
                     },
                     "trace_id": S,
+                    "run_id": {"type": "string", "description": "Workflow 能力：与 execution_id 相同"},
                 },
                 ["execution_id", "status", "trace_id"],
             ),
             "Run": o(
                 {
                     "run_id": S,
-                    "status": S,
+                    "status": {
+                        "enum": ["running", "waiting", "succeeded", "failed", "compensated", "rejected", "cancelled"]
+                    },
                     "result": {},
+                    "error": {"type": ["object", "null"]},
+                    "tainted": B,
                     "pending_tasks": {"type": "array", "items": {"type": "object"}},
+                    "steps": {"type": "array", "items": {"type": "object"}},
+                    "trace_id": S,
                 },
                 ["run_id", "status"],
             ),
-            "ConfirmRequest": o({"assertion": S, "comment": S}),
+            "ConfirmRequest": o(
+                {
+                    "assertion": {
+                        "type": "string",
+                        "description": "被代表用户的新断言（jti 未用过、iat 不早于确认创建）",
+                    },
+                    "comment": S,
+                    "args": {"type": "object", "description": "可选：声明所确认的参数，必须与冻结内容一致"},
+                }
+            ),
+            "InternalDecision": o(
+                {
+                    "decision": {"enum": ["approve", "reject"]},
+                    "user_id": S,
+                    "comment": S,
+                    "data": {"type": "object"},
+                },
+                ["decision", "user_id"],
+            ),
         }
     )
     paths: dict[str, Any] = {
@@ -945,6 +1010,54 @@ def data_plane() -> dict[str, Any]:
             "get": op("getExecution", "invoke", "查询执行结果", res=ref("ExecutionResult"), params=["Id"])
         },
         f"{V}/runs/{{id}}": {"get": op("getRun", "invoke", "查询 Workflow Run", res=ref("Run"), params=["Id"])},
+        f"{V}/internal/todo": {
+            "post": op(
+                "internalTodo",
+                "internal",
+                "内部（服务凭据）：待处理的确认与人工任务，按公司过滤",
+                req=o({"company_ids": {"type": ["array", "null"], "items": S}}),
+                res={"type": "object"},
+            )
+        },
+        f"{V}/internal/confirmations/{{id}}": {
+            "get": op(
+                "internalGetConfirmation",
+                "internal",
+                "内部（服务凭据）：确认摘要",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{V}/internal/confirmations/{{id}}/decide": {
+            "post": op(
+                "internalDecideConfirmation",
+                "internal",
+                "内部（服务凭据）：控制台审批后执行或拒绝",
+                req=ref("InternalDecision"),
+                res=ref("ExecutionResult"),
+                params=["Id"],
+            )
+        },
+        f"{V}/internal/tasks/{{id}}": {
+            "get": op(
+                "internalGetTask", "internal", "内部（服务凭据）：人工任务", res={"type": "object"}, params=["Id"]
+            )
+        },
+        f"{V}/internal/tasks/{{id}}/decide": {
+            "post": op(
+                "internalDecideTask",
+                "internal",
+                "内部（服务凭据）：处理人工任务",
+                req=ref("InternalDecision"),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{V}/internal/runs/{{id}}": {
+            "get": op(
+                "internalGetRun", "internal", "内部（服务凭据）：Run 全量视图", res={"type": "object"}, params=["Id"]
+            )
+        },
         f"{V}/confirmations/{{id}}/confirm": {
             "post": op(
                 "confirm",

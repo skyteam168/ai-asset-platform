@@ -46,7 +46,7 @@ export const SECTIONS: Section[] = [
   { path: "/assets", label: "资产与门禁", icon: <ApiOutlined />, element: <AssetsPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
   { path: "/approvals", label: "审批待办", icon: <CheckSquareOutlined />, element: <ApprovalsPage />,
-    roles: ["platform_admin", "data_owner", "business_owner", "company_admin"] },
+    roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/grants", label: "授权", icon: <SafetyCertificateOutlined />, element: <GrantsPage />,
     roles: ["platform_admin", "company_admin"] },
   { path: "/audit", label: "审计", icon: <AuditOutlined />, element: <AuditPage />,

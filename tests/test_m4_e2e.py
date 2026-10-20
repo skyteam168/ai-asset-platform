@@ -255,7 +255,7 @@ async def test_end_to_end_publish_and_call_over_mcp(stack: Stack, seeded: Seed, 
         ).json()
         assert done["passed"], done
         gates = [g["gate"] for g in (await cp.get(f"/api/v1/versions/{vid}/gates", headers=dev)).json()["items"]]
-        assert gates == ["G0", "G1", "G2", "G5", "G6", "G7", "G8"]
+        assert gates == ["G0", "G1", "G2", "G3", "G5", "G6", "G7", "G8"]
 
         # ---- 2. 授权与消费方配置 ----
         ceiling = (

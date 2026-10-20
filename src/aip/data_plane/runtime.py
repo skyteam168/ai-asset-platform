@@ -13,7 +13,7 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -26,6 +26,14 @@ from aip.connectors.base import Connector, ExecContext
 from aip.connectors.credentials import CredentialManager, SecretStore
 from aip.connectors.declarative import DeclarativeConnector, kb_connector
 from aip.connectors.mock import MockConnector
+from aip.data_plane.confirmation import (
+    ConfirmationStore,
+    MemoryConfirmationStore,
+    args_digest,
+    frozen_args,
+    new_confirmation,
+    principal_from_json,
+)
 from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.pdp import Decision, PolicyService
 from aip.data_plane.principal import Principal
@@ -225,6 +233,7 @@ class PgExecutionStore:
         "transport",
         "tls_verified",
         "trace_id",
+        "confirmation_id",
     )
 
     def __init__(self, engine: AsyncEngine) -> None:
@@ -351,6 +360,38 @@ def _result(
     }
 
 
+def run_result(view: dict[str, Any]) -> dict[str, Any]:
+    """Run 视图映射为统一执行结果：execution_id = run_id；未结束时 next_action=wait。"""
+    status = view["status"]
+    mapped = {"waiting": "running", "rejected": "cancelled"}.get(status, status)
+    err = view.get("error") or None
+    pending = view.get("pending_tasks") or []
+    if mapped == "running":
+        nxt: dict[str, Any] | None = {
+            "type": "ask_human" if pending else "wait",
+            "message": pending[0]["summary"] if pending else "Workflow 运行中，用 GET /api/v1/runs/{id} 查询",
+            "retry_after_s": 2,
+        }
+    else:
+        nxt = None
+    return {
+        "execution_id": view["run_id"],
+        "run_id": view["run_id"],
+        "status": mapped,
+        "data": view.get("result"),
+        "page": {"next_cursor": None, "truncated": False},
+        "error": {"code": err.get("code"), "message": err.get("message", ""), "retryable": False} if err else None,
+        "next_action": nxt,
+        "trace_id": view.get("trace_id") or "",
+    }
+
+
+def _confirm_action(rec: dict[str, Any]) -> dict[str, Any] | None:
+    if rec.get("status") != "pending_confirm":
+        return None
+    return {"type": "confirm", "message": "等待确认", "confirmation_id": rec.get("confirmation_id")}
+
+
 def _next_action(code: ErrorCode) -> dict[str, Any] | None:
     kind = {
         ErrorCode.INVALID_ARGUMENT: "fix_args",
@@ -378,9 +419,16 @@ class ToolRuntime:
         store: ExecutionStore,
         audit: AuditSpool,
         mode: str = "sandbox",
+        confirmations: ConfirmationStore | None = None,
     ) -> None:
         self.iam, self.releases, self.policy, self.registry = iam, releases, policy, registry
         self.store, self.audit, self.mode = store, audit, mode
+        self.confirmations: ConfirmationStore = confirmations or MemoryConfirmationStore()
+        # 确认被执行或拒绝后通知 Workflow 引擎唤醒对应 Run（由引擎注入）
+        self.on_confirmation_done: Callable[[str], Awaitable[None]] | None = None
+        # 启动 Workflow 类能力（由引擎注入；没有引擎时 Workflow 不可调用）
+        self.workflows: Any = None
+        self.workflow_sync_wait_s = 0.0
 
     def _deny_code(self, d: Decision) -> ErrorCode:
         for r in d.reasons:
@@ -401,6 +449,7 @@ class ToolRuntime:
         channel: str = "stable",
         version: str | None = None,
         trace_id: str = "",
+        run_id: str | None = None,
     ) -> dict[str, Any]:
         trace_id = trace_id or uuid.uuid4().hex
         rec: dict[str, Any] = {
@@ -421,6 +470,7 @@ class ToolRuntime:
             "transport": None,
             "tls_verified": None,
             "trace_id": trace_id,
+            "confirmation_id": None,
         }
         try:
             release = self.releases.resolve(capability_id, self.policy.env, channel=channel, version=version)
@@ -441,11 +491,10 @@ class ToolRuntime:
             return await self._finish_without_record(
                 rec, PlatformError(self._deny_code(decision), ",".join(decision.reasons))
             )
+        if release.get("asset_type") == "workflow":
+            return await self._start_workflow(rec, principal, release, args, idempotency_key, decision)
         if decision.result == "require_confirmation":
-            rec.update(status="pending_confirm", error_code=str(ErrorCode.CONFIRMATION_REQUIRED))
-            return _result(
-                rec, next_action={"type": "confirm", "message": f"需要{decision.kind}", "confirmation_id": None}
-            )
+            return await self._require_confirmation(rec, principal, release, args, decision.kind or "approval", run_id)
         connector_name, op = spec["connector_ref"]["connector"], spec["connector_ref"]["operation"]
         try:
             inst = self.registry.get(connector_name)
@@ -471,10 +520,214 @@ class ToolRuntime:
                         "error_message": "同一幂等键对应不同参数",
                     }
                 )
+            idempotent = bool((spec.get("idempotency") or {}).get("idempotent"))
+            if prev["status"] == "failed" and prev.get("reconcile_status") == "not_executed" and idempotent:
+                # 对账确认下游未执行：按幂等策略用同一幂等键重试（architecture.md 8.3）
+                retry = {**prev, "status": "running", "error_code": None, "reconcile_status": "retried"}
+                await self.store.update(retry)
+                return await self._execute(retry, release, inst, op, args, write, principal)
             return _result(
                 prev, next_action=_next_action(ErrorCode.OUTCOME_UNKNOWN) if prev["status"] == "unknown" else None
             )
         return await self._execute(rec, release, inst, op, args, write, principal)
+
+    async def _start_workflow(
+        self,
+        rec: dict[str, Any],
+        principal: Principal,
+        release: dict[str, Any],
+        args: dict[str, Any],
+        idempotency_key: str | None,
+        decision: Decision,
+    ) -> dict[str, Any]:
+        """Workflow 类能力：启动 Run，短暂同步等待；未完成则返回 running + run_id（architecture.md 8.5）。"""
+        if self.workflows is None:
+            return await self._finish_without_record(
+                rec, PlatformError(ErrorCode.PRECONDITION_FAILED, "本数据面未启用 Workflow 引擎")
+            )
+        if decision.result != "allow":
+            return await self._finish_without_record(rec, PlatformError(ErrorCode.CONFIRMATION_REQUIRED, "需要确认"))
+        try:
+            view = await self.workflows.start(
+                principal, release, args, trace_id=rec["trace_id"], idempotency_key=idempotency_key
+            )
+            view = await self.workflows.wait_settled(view["run_id"], self.workflow_sync_wait_s)
+        except PlatformError as e:
+            return await self._finish_without_record(rec, e)
+        return run_result(view)
+
+    async def _require_confirmation(
+        self,
+        rec: dict[str, Any],
+        principal: Principal,
+        release: dict[str, Any],
+        args: dict[str, Any],
+        kind: str,
+        run_id: str | None,
+    ) -> dict[str, Any]:
+        """冻结调用内容并创建 confirmation（architecture.md 4.5）；执行记录以 pending_confirm 落库，
+        确认后在同一条记录上执行，消费方用 execution_id 轮询或用同一幂等键重试都能拿到结果。"""
+        conf = new_confirmation(
+            kind=kind,
+            principal=principal,
+            spec=release["spec"],
+            capability_id=rec["capability_id"],
+            version=release["version"],
+            args=args,
+            execution_id=rec["id"],
+            trace_id=rec["trace_id"],
+            run_id=run_id,
+        )
+        rec.update(
+            status="pending_confirm", error_code=str(ErrorCode.CONFIRMATION_REQUIRED), confirmation_id=conf["id"]
+        )
+        try:
+            await self.store.create(rec)
+        except IdempotencyHit as hit:
+            prev = hit.existing
+            if prev["args_sha256"] != rec["args_sha256"]:
+                return _result(
+                    {
+                        **rec,
+                        "status": "failed",
+                        "error_code": str(ErrorCode.IDEMPOTENCY_CONFLICT),
+                        "error_message": "同一幂等键对应不同参数",
+                    }
+                )
+            return _result(prev, next_action=_confirm_action(prev))
+        await self.confirmations.create(conf)
+        await self.audit.append_async(
+            "confirmation.created",
+            company_id=rec["company_id"],
+            record={
+                "confirmation_id": conf["id"],
+                "kind": kind,
+                "execution_id": rec["id"],
+                "run_id": run_id,
+                "capability_id": rec["capability_id"],
+                "version": release["version"],
+                "args_sha256": conf["args_sha256"],
+                "end_user_id": rec["end_user_id"],
+            },
+        )
+        return _result(rec, next_action={"type": "confirm", "message": conf["summary"], "confirmation_id": conf["id"]})
+
+    async def execute_confirmation(
+        self,
+        cid: str,
+        *,
+        by: str,
+        via: str,
+        comment: str | None = None,
+        expect_args: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """确认后执行冻结的调用：先核对参数（调用方声明的与冻结的一致、冻结内容未被篡改），
+        再把 pending 条件更新为 confirmed——并发或重复确认只有一个会执行，其余拿到同一条执行记录。"""
+        row = await self.confirmations.get(cid)
+        if row is None:
+            raise PlatformError(ErrorCode.NOT_FOUND, "确认不存在")
+        if expect_args is not None and args_digest(expect_args) != row["args_sha256"]:
+            await self._audit_confirmation("confirmation.mismatch", row, by, via)
+            raise PlatformError(ErrorCode.CONFIRMATION_MISMATCH, "确认的参数与冻结的调用内容不一致")
+        try:
+            args = frozen_args(row)
+        except PlatformError:
+            await self._audit_confirmation("confirmation.tampered", row, by, via)
+            raise
+        claimed = await self.confirmations.claim(cid, by=by, via=via, comment=comment)
+        if claimed is None:
+            row = await self.confirmations.get(cid) or row
+            if row["status"] in ("confirmed", "executed"):
+                prev = await self.store.get(str(row["execution_id"]))
+                if prev is not None:
+                    return _result(prev)
+            raise PlatformError(ErrorCode.PRECONDITION_FAILED, f"确认已处于 {row['status']} 状态，不能再确认")
+        await self._audit_confirmation("confirmation.confirmed", claimed, by, via)
+        try:
+            return await self._run_confirmed(claimed, args)
+        finally:
+            await self.confirmations.finish(cid, "executed")
+            await self._notify_run(claimed)
+
+    async def _notify_run(self, row: dict[str, Any]) -> None:
+        if row.get("run_id") and self.on_confirmation_done is not None:
+            await self.on_confirmation_done(str(row["run_id"]))
+
+    async def settle_stale(self, execution_id: str, older_than_s: float) -> str:
+        """执行记录停在 running（执行中进程崩溃）且超过陈旧阈值：转为 unknown 等待对账，返回当前状态。"""
+        rec = await self.store.get(execution_id)
+        if rec is None:
+            return "missing"
+        if rec["status"] != "running":
+            return str(rec["status"])
+        updated = rec.get("updated_at") or rec.get("created_at")
+        if isinstance(updated, dt.datetime) and (_now() - updated).total_seconds() < older_than_s:
+            return "running"
+        rec = dict(rec)
+        rec.update(status="unknown", error_code=str(ErrorCode.OUTCOME_UNKNOWN), reconcile_status="pending")
+        await self.store.update(rec)
+        await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+        return "unknown"
+
+    async def _run_confirmed(self, row: dict[str, Any], args: dict[str, Any]) -> dict[str, Any]:
+        principal = principal_from_json(row["principal"])
+        found = await self.store.get(str(row["execution_id"]))
+        if found is None:
+            raise PlatformError(ErrorCode.NOT_FOUND, "执行记录不存在")
+        rec = dict(found)
+        rec.update(status="running", error_code=None)
+        try:
+            release = self.releases.resolve(row["capability_id"], self.policy.env, version=row["version"])
+        except PlatformError as e:
+            rec.update(status="failed", error_code=str(e.code), error_message=e.detail)
+            await self.store.update(rec)
+            return _result(rec)
+        # 确认期间授权可能已变：执行前重新判定（确认要求视为已满足）
+        decision = await self.policy.decide(
+            principal, row["capability_id"], args, exposure="internal", version=row["version"]
+        )
+        if decision.result == "deny":
+            rec.update(
+                status="failed", error_code=str(self._deny_code(decision)), error_message=",".join(decision.reasons)
+            )
+            await self.store.update(rec)
+            return _result(rec)
+        spec = release["spec"]
+        inst = self.registry.get(spec["connector_ref"]["connector"])
+        op = spec["connector_ref"]["operation"]
+        # 幂等键 = confirmation_id：同一确认无论被触发几次，下游只执行一次
+        rec["idempotency_key"] = str(row["id"])
+        return await self._execute(rec, release, inst, op, args, inst.connector.is_write(op), principal)
+
+    async def reject_confirmation(self, cid: str, *, by: str, via: str, comment: str | None = None) -> dict[str, Any]:
+        row = await self.confirmations.get(cid)
+        if row is None:
+            raise PlatformError(ErrorCode.NOT_FOUND, "确认不存在")
+        if not await self.confirmations.reject(cid, by=by, via=via, comment=comment):
+            raise PlatformError(ErrorCode.PRECONDITION_FAILED, f"确认已处于 {row['status']} 状态")
+        await self._audit_confirmation("confirmation.rejected", row, by, via)
+        await self._notify_run(row)
+        found = await self.store.get(str(row["execution_id"]))
+        if found is None:
+            raise PlatformError(ErrorCode.NOT_FOUND, "执行记录不存在")
+        rec = dict(found)
+        rec.update(status="cancelled", error_code=None, error_message="确认被拒绝")
+        await self.store.update(rec)
+        return _result(rec)
+
+    async def _audit_confirmation(self, kind: str, row: dict[str, Any], by: str, via: str) -> None:
+        await self.audit.append_async(
+            kind,
+            company_id=str(row["company_id"]),
+            record={
+                "confirmation_id": str(row["id"]),
+                "kind": row["kind"],
+                "by": by,
+                "via": via,
+                "execution_id": str(row["execution_id"]),
+                "args_sha256": row["args_sha256"],
+            },
+        )
 
     async def _finish_without_record(self, rec: dict[str, Any], e: PlatformError) -> dict[str, Any]:
         rec.update(status="failed", error_code=str(e.code), error_message=e.detail)

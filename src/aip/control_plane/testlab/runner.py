@@ -11,6 +11,7 @@ principal 画像：{"identity": "user" | "app", "company": "VN01", "scope": "com
 from __future__ import annotations
 
 import copy
+import hashlib
 import pathlib
 import tempfile
 import uuid
@@ -28,7 +29,7 @@ from aip.data_plane.release_cache import ReleaseCache
 from aip.data_plane.runtime import ConnectorRegistry, MemoryExecutionStore, ToolRuntime
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.common.errors import ErrorCode, PlatformError
-from aip.libs.tokens.keys import SigningKey
+from aip.libs.tokens.keys import SigningKey, canonical_json
 from aip.libs.tokens.signed import sign_payload
 
 TEST_CONSUMER = "0192e3a0-7e57-7000-8000-00000000c0de"
@@ -46,11 +47,18 @@ class CaseResult:
     error_code: str | None
     detail: str = ""
     contract_ok: bool | None = None
+    fingerprint: str = ""
 
 
 @dataclass
 class LabReport:
     cases: list[CaseResult] = field(default_factory=list)
+    # G3：用例名 → {runs, distinct}；确定性 Tool 要求每个用例只有一种结果
+    stability: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    @property
+    def g3_passed(self) -> bool:
+        return bool(self.stability) and all(v["distinct"] == 1 for v in self.stability.values())
 
     @property
     def g1_passed(self) -> bool:
@@ -68,6 +76,7 @@ class LabReport:
             "cases": [c.__dict__ for c in self.cases],
             "total": len(self.cases),
             "passed_count": sum(c.passed for c in self.cases),
+            "stability": self.stability,
         }
 
 
@@ -89,6 +98,7 @@ async def run_cases(
     opa_url: str,
     secrets: SecretStore,
     resolver: Any = None,
+    repeats: int = 1,
 ) -> LabReport:
     key = SigningKey.generate()
     work = pathlib.Path(tempfile.mkdtemp(prefix="aip-testlab-"))
@@ -123,9 +133,15 @@ async def run_cases(
     opa = OpaClient(opa_url)
     try:
         for case in cases:
-            report.cases.append(
-                await _run_one(case, spec, classification, iam_payload, rel_payload, key, work, opa, secrets, resolver)
-            )
+            args = (case, spec, classification, iam_payload, rel_payload, key, work, opa, secrets, resolver)
+            first = await _run_one(*args)
+            report.cases.append(first)
+            # G3：同一用例重复执行，比对状态、错误码与返回内容（architecture.md 7.1）
+            prints = {first.fingerprint}
+            for _ in range(repeats - 1):
+                prints.add((await _run_one(*args)).fingerprint)
+            if repeats > 1:
+                report.stability[case["name"]] = {"runs": repeats, "distinct": len(prints)}
     finally:
         await opa.aclose()
     return report
@@ -240,6 +256,7 @@ async def _run_one(
         contract_ok = False if expect.get("status", "succeeded") == "succeeded" else None
     if not passed and not detail:
         detail = f"期望 {expect.get('status', 'succeeded')}，实际 {res['status']}（{code}）"
+    fingerprint = hashlib.sha256(canonical_json({"s": res["status"], "c": code, "d": res["data"]})).hexdigest()
     return CaseResult(
         case["name"],
         case.get("kind", "functional"),
@@ -249,4 +266,5 @@ async def _run_one(
         code,
         detail,
         contract_ok,
+        fingerprint,
     )

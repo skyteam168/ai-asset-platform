@@ -160,8 +160,14 @@ class World:
         resolver: Any = None,
         consumer_jwk: dict[str, str] | None = None,
         exposure: list[str] | None = None,
+        workflows: list[dict[str, Any]] | None = None,
+        runtime_engine: Any = None,
+        llm: Any = None,
+        static_token: str | None = None,
+        extra_users: dict[str, dict[str, Any]] | None = None,
     ) -> None:
-        self.store = store or MemoryExecutionStore()
+        # 有运行库时用 PostgreSQL 存储（确认、Workflow 需要），否则进程内存储
+        self.store = store or (None if runtime_engine is not None else MemoryExecutionStore())
         self.app = create_app(
             key=KEY,
             replay=MemoryReplayStore(),
@@ -169,10 +175,22 @@ class World:
             secrets=MemorySecretStore(secrets or {}),
             exec_store=self.store,
             resolver=resolver,
+            runtime_engine=runtime_engine,
+            llm=llm,
         )
+        self.store = self.app.state.runtime.store
         iam = iam_payload(clearance)
         if consumer_jwk:
             iam["consumers"][CONSUMER]["jwks"] = {consumer_jwk["kid"]: consumer_jwk}
+        if static_token:
+            from aip.libs.tokens.secrets_util import token_hash
+
+            iam["consumers"][CONSUMER]["static_tokens"] = {
+                token_hash(static_token): {"expires_at": "2099-01-01T00:00:00+00:00", "ip_binding": []}
+            }
+        for subject, user in (extra_users or {}).items():
+            iam["users"][user["id"]] = {k: v for k, v in user.items() if k != "id"}
+            iam["consumers"][CONSUMER]["bindings"][subject] = user["id"]
         releases = []
         for i, spec in enumerate(tools):
             asset = f"asset-{i}"
@@ -204,6 +222,38 @@ class World:
                     "status": "active",
                     "classification": spec["data_classification"],
                     "spec": spec,
+                }
+            )
+        for j, dsl in enumerate(workflows or []):
+            asset = f"wf-asset-{j}"
+            iam["grants"].append(
+                {
+                    "id": f"wg{j}",
+                    "asset_id": asset,
+                    "grantee_type": "consumer",
+                    "grantee_id": CONSUMER,
+                    "env": "test",
+                    "company_id": VN,
+                    "within_ceiling": True,
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                }
+            )
+            releases.append(
+                {
+                    "release_id": f"wr{j}",
+                    "asset_id": asset,
+                    "asset_type": "workflow",
+                    "name": dsl["name"],
+                    "capability_id": dsl["capability_id"],
+                    "version": dsl["version"],
+                    "content_hash": "x",
+                    "env": "test",
+                    "channel": "stable",
+                    "scope": {"group": True, "company_ids": [], "consumer_ids": []},
+                    "exposure": exposure or ["rest", "mcp"],
+                    "status": "active",
+                    "classification": dsl.get("data_classification", 2),
+                    "spec": dsl,
                 }
             )
         rel = {

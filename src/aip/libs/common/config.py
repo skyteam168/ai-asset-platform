@@ -40,6 +40,15 @@ class Settings(BaseSettings):
     # 服务间认证（生产为 mTLS + 短期服务令牌，architecture.md 3.3）；dev 用共享令牌
     internal_service_token: str = "aip-dev-internal-service-token"
     control_plane_url: str = ""
+    # 控制面经服务凭据调用数据面内部接口（平台待办：确认与人工任务）
+    data_plane_url: str = "http://127.0.0.1:18082"
+    # Workflow：本进程是否运行 Worker；启动 Run 后同步等待的秒数（预计 30 秒内完成的同步返回，architecture.md 8.5）
+    workflow_worker: bool = True
+    workflow_sync_wait_s: float = Field(default=2.0, ge=0, le=30)
+    workflow_lease_s: float = Field(default=30.0, ge=1)
+    workflow_stale_s: float = Field(default=30.0, ge=1)
+    # G3 稳定性：同一用例重复执行次数（architecture.md 7.1，≥ 20）
+    g3_repeats: int = Field(default=20, ge=2)
     # 数据面本地状态：快照落盘目录与审计 spool（architecture.md 4.4、12.4）
     data_dir: str = ".aip-data"
     # 控制台静态文件目录；为空时用仓库内 console/dist（镜像里显式设为 /app/console/dist）

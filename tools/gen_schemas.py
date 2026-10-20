@@ -115,6 +115,14 @@ TOOL = obj(
         "pii_fields": {"type": "array", "items": {"type": "string"}},
         "confirm_policy": CONFIRM,
         "confirm_template": {"type": "string"},
+        "approver_role": {
+            "enum": ["data_owner", "business_owner", "company_admin", "platform_admin"],
+            "description": "confirm_policy=approval 时由谁审批（同公司范围），缺省 data_owner",
+        },
+        "untrusted_output": {
+            "type": "boolean",
+            "description": "输出含旧系统自由文本、知识库文档或上游 MCP 内容；Workflow 用到后 Run 被标记 tainted（8.7）",
+        },
         "app_identity_allowed": {"type": "boolean"},
         "probe": obj(
             {
@@ -161,7 +169,13 @@ NODE = obj(
             "tool",
             {
                 "required": ["ref"],
-                "properties": {"ref": REF_AT, "compensation": REF_AT, "irreversible": {"type": "boolean"}},
+                "properties": {
+                    "ref": REF_AT,
+                    "args": {"type": "object", "description": "参数映射；以 $ 开头的字符串是数据路径，如 $input.po_no"},
+                    "compensation": REF_AT,
+                    "compensation_args": {"type": "object"},
+                    "irreversible": {"type": "boolean"},
+                },
             },
         ),
         when(
@@ -169,7 +183,13 @@ NODE = obj(
             "llm",
             {
                 "required": ["model_profile", "prompt", "output_schema"],
-                "properties": {"model_profile": REF_AT, "prompt": REF_AT, "output_schema": {"type": "string"}},
+                "properties": {
+                    "model_profile": REF_AT,
+                    "prompt": REF_AT,
+                    "output_schema": {"type": "string", "description": "引用顶层 schemas 中的名字"},
+                    "inputs": {"type": "object"},
+                },
+                "not": {"anyOf": [{"required": [k]} for k in ("then", "else", "on_timeout", "on_reject", "branches")]},
             },
         ),
         when("type", "condition", {"required": ["expr", "then", "else"]}),
@@ -186,19 +206,37 @@ NODE = obj(
             "human_task",
             {
                 "required": ["kind", "assignee"],
-                "properties": {"kind": {"enum": ["confirm", "approve", "input"]}, "timeout_s": {"type": "integer"}},
+                "properties": {
+                    "kind": {"enum": ["confirm", "approve", "input"]},
+                    "assignee": {
+                        "type": "string",
+                        # 组织：编码或 id、$input.x、org_of(input.x)（architecture.md 6.3 示例写法）
+                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@("
+                        r"[A-Za-z0-9_.-]+|\$input\.[A-Za-z0-9_.]+|org_of\(input\.[A-Za-z0-9_.]+\)))$",
+                    },
+                    "summary": {"type": "string", "maxLength": 500},
+                    "timeout_s": {"type": "integer", "minimum": 1},
+                    "on_timeout": {"type": "string"},
+                    "on_reject": {"type": "string"},
+                    "input_schema": {"type": "object"},
+                },
             },
         ),
         when("type", "sub_workflow", {"required": ["ref"], "properties": {"ref": REF_AT}}),
         when("type", "parallel", {"required": ["branches"]}),
-        when("type", "wait", {"required": ["seconds"]}),
+        when("type", "wait", {"required": ["seconds"], "properties": {"seconds": {"type": "number", "minimum": 0}}}),
+        when("type", "end", {"properties": {"output": {"type": "object"}}}),
     ],
 )
 WORKFLOW = obj(
     {
         "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+        "capability_id": CAP,
+        "description": {"type": "string", "maxLength": 1000},
         "version": SEMVER,
+        "data_classification": {"type": "integer", "minimum": 1, "maximum": 4},
         "input_schema": {"type": "object"},
+        "schemas": {"type": "object", "additionalProperties": {"type": "object"}},
         "output_schema": {"type": "object"},
         "trigger": {"enum": ["api", "schedule", "event"], "default": "api"},
         "budget": obj(

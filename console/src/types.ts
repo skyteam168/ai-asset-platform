@@ -158,3 +158,49 @@ export interface AuditRecord {
   record: Record<string, unknown>;
   hash: string;
 }
+
+export interface TodoConfirmation {
+  id: string;
+  kind: "user_confirm" | "approval";
+  company_id: string;
+  capability_id: string;
+  version: string;
+  summary: string;
+  approver_role: string | null;
+  end_user_id: string | null;
+  args_sha256: string;
+  execution_id: string;
+  run_id: string | null;
+  expires_at: string;
+}
+
+export interface TodoTask {
+  id: string;
+  run_id: string;
+  node_id: string;
+  kind: "confirm" | "approve" | "input";
+  summary: string;
+  assignee: string;
+  deadline: string;
+  data?: { input_schema?: Record<string, unknown> } | null;
+}
+
+export interface Todo {
+  confirmations: TodoConfirmation[];
+  tasks: TodoTask[];
+}
+
+export interface RunView {
+  run_id: string;
+  capability_id: string;
+  version: string;
+  status: string;
+  current: string;
+  result: unknown;
+  error: { code: string; message?: string } | null;
+  tainted: boolean;
+  taint_sources: string[];
+  budget_used: { steps: number; llm_calls: number; tokens: number };
+  steps: { node_id: string; kind: string; status: string; attempts: number; executor: string }[];
+  trace_id: string;
+}

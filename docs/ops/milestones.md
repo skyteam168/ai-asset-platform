@@ -193,3 +193,59 @@ React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（�
 | 项 | 现状 | 计划 |
 | --- | --- | --- |
 | 控制面响应体 Pydantic 模型 | 前端类型按契约手写 | 引入响应模型后由 OpenAPI 生成前端类型 |
+
+## M5 写操作与工作流（P8）— 2026-10-20 通过（含已记录的延后项）
+
+ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），决策为自研 step journal（ADR-0003 已改为 Accepted）。
+
+| 第 14 章 M5 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 杀掉 worker 后 Run 可恢复 | 通过 | `test_m5_crash.py`：数据面作为独立进程运行，在写请求“下游已生效、平台未记结果”时 TerminateProcess（等同 kill -9）；另一个实例在租约过期后接手，执行记录判定陈旧转 unknown，用幂等键对账确认已执行，Run 成功，下游只收到一次写请求；接手到完成约 2.6 秒（租约 2 秒、陈旧阈值 1 秒），连续 4 次稳定。`test_m5_workflow.py::test_lease_takeover_after_worker_dies`：进程内同样场景，对账确认未执行时按幂等策略重试 |
+| 补偿逆序执行 | 通过 | `test_saga_compensates_in_reverse_order`：预算预留 → 审批 → 记账失败，补偿顺序为撤回审批、释放预算；人工驳回同样触发补偿 |
+| LLM 节点无法改变分支 | 通过 | 静态：LLM 节点带 then / else / on_timeout / on_reject / branches 时 G0 拒绝；运行：LLM 输出夹带 `next`、`goto`、`decision` 等字段被按 output_schema 裁掉，流程只由 condition 决定 |
+| 确认参数被篡改时拒绝执行 | 通过 | `test_m5_confirmations.py`：消费方声明的确认参数与冻结内容不一致、存储中的参数哈希被改动，都返回 CONFIRMATION_MISMATCH 且不执行 |
+| 同一 confirmation 只执行一次 | 通过 | 重复确认返回同一执行记录；6 个并发确认只有一个执行；下游幂等键 = confirmation_id |
+
+实现要点：
+
+| 部分 | 内容 |
+| --- | --- |
+| 确认对象（4.5） | `exec.confirmation`：参数加密存放 + 规范化 JSON 的 SHA-256，执行前解密核对；文案只由 Tool Spec 的 `confirm_template`（沙箱 Jinja）渲染。user_confirm 默认 10 分钟、approval 1 天过期 |
+| 确认通道 | 消费方回调 `POST /confirmations/{id}/confirm`：同一用户的新断言（jti 未用过、iat 不早于确认创建、用户一致），审批类不能走回调；平台待办：控制台 `GET /todo` 与 `POST /todo/confirmations/{id}/decide`，approval 需具备 approver_role 且角色范围覆盖该公司、不能是被代表用户本人，user_confirm 只能本人。MCP 交互式确认（elicitation / MRTR）按计划在 M7 |
+| DSL 静态校验（6.3） | `aip.libs.workflow.dsl`（控制面 G0 与数据面启动共用）：JSON Schema + 节点 id 唯一、跳转目标存在、可达、无环、表达式只引用一定先执行的节点、写节点有补偿或不可逆且每条路径先经人工确认、assignee 可解析、引用的 Tool 版本可解析 |
+| 条件表达式 | CEL 子集：比较、`&&` `||` `!`、`in`、列表、字面量、数据路径；不能调用函数或写入；路径缺失为 null |
+| 引擎（8.5） | `exec.wf_run / wf_step / human_task`；FOR UPDATE SKIP LOCKED + 租约；节点完成与指针前移同一事务；wait、人工任务、确认、对账退避、Run 总期限都落在 `wake_at`；预算（步数、LLM 调用、token、总期限）；Run 钉住 DSL、版本与 Principal |
+| Tool 节点 | 经统一执行链（PDP、确认、幂等、重试、审计），以 Run 的 Principal、`exposure=internal` 判定；写操作与需确认的调用带幂等键 `wf:{run}:{node}`，只读调用崩溃后直接重做；结果未知按指数退避对账，5 次仍不确定生成平台管理员补录任务 |
+| 污点（8.7） | Tool Spec 新增 `untrusted_output`；用到后 Run 标记 tainted，之后 write / danger / egress=external 节点强制人工确认（发起人本人，应用身份则数据 Owner） |
+| G3（7.1） | Test Lab 每个用例重复 20 次（`AIP_G3_REPEATS`），比对状态、错误码与返回内容哈希；不一致则 G3 失败、退回 draft。M4 的门禁序列相应变为 G0、G1、G2、G3、G5…… |
+| Workflow 门禁 | G0 跑 DSL 静态校验；G1–G3 为组合门禁：引用的每个 Tool 版本必须已是 approved 及以后状态 |
+| 控制台 | 审批待办增加“调用确认”“工作流任务”两页：通过 / 驳回 / 补录（按 input_schema），可展开 Run 的节点轨迹、预算用量与污点来源 |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 引擎场景 | 11 通过 | `test_m5_workflow.py`：人工审批、低风险跳过、补偿、驳回、Run 内确认只执行一次、污点强制确认、步数 / LLM 调用 / 总期限预算、结果未知对账、租约接手、REST 幂等启动与 Run 可见性（应用身份启动时写步骤被 PDP 拒绝） |
+| 确认流 | 6 通过 | `test_m5_confirmations.py`：上表两项之外，还有断言规则（缺断言、换人、重放、早于创建）、平台待办审批执行、拒绝与过期 |
+| 门禁与待办 | 3 通过 | `test_m5_gates_todo.py`：G3 拒绝不确定的 Tool；Workflow G0（环、引用不存在的版本）与组合门禁；待办授权（角色范围、职责分离、本人确认、指定人任务） |
+| 崩溃恢复 | 1 通过 | `test_m5_crash.py` |
+| 控制台 | 15 通过 | 新增待办组件测试：审批调用确认、补录任务提交 JSON |
+| 全量后端测试 | 277 通过，0 失败，0 跳过（新增 21） | `python -m pytest -q`，约 5.6 分钟；ruff、mypy --strict（85 个文件）、TLS 约束、spectral、链接检查 |
+
+本里程碑发现并修复的问题：
+
+- 契约测试一直没有检查经 `include_router` 挂载的路由（FastAPI 0.146 起包装为 `_IncludedRouter`，没有 path 属性，被静默跳过）→ 展开后检查；此前的路由全部已登记，只有本次新增的需要补。
+- 只有 company_admin 的角色生效范围被展开，审批与待办无法按角色范围判断 → 所有角色都展开。
+- 架构文档 6.3 示例的 `role:purchase_manager@org_of(input.company)` 写法 M0 测试里被简化掉了 → Schema、校验器、引擎都支持 `org_of(input.x)`，测试与文档一致。
+- `JsonInput` 没有把表单项 id 传给输入框，标签与输入框不关联（读屏与按标签定位都受影响）→ 透传 id。
+
+仍未完成：
+
+| 项 | 现状 | 计划 |
+| --- | --- | --- |
+| loop、parallel、sub_workflow 节点 | Schema 已有，G0 明确拒绝（“M5 引擎暂不支持”） | M6 |
+| Workflow 在 Test Lab 沙箱整体回放 | 组合门禁代替；沙箱 Run 需要与生产运行表隔离，否则会被生产 Worker 认领 | M6：独立的沙箱运行 schema 与 Worker |
+| 业务角色（如 purchase_manager） | 人工任务只能分派给平台角色 | 随 IAM 业务角色一起做 |
+| LLM Gateway（8.6） | 引擎只依赖接口；未配置时 LLM 节点失败 | 单独模块 |
+| 通知（Notifier：邮件 + IM） | 待办只在控制台与 API 可见 | M6 |
+| MCP 交互式确认（elicitation / MRTR）、tasks 扩展 | 未做 | M7 |
+| 人工任务的升级与代理人 | 超时走 on_timeout 或失败；未接审批代理人 | M6 |
+| Run 上下文与执行结果加密存放（12.6 信封加密） | 与 tool_execution 一样明文 JSON | 与 KMS 信封加密一起做 |

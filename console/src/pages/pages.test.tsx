@@ -89,3 +89,44 @@ describe("审批页", () => {
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ decision: "reject", comment: "缺少权限用例" }));
   });
 });
+
+describe("平台待办：调用确认与工作流任务", () => {
+  const todo = {
+    confirmations: [{
+      id: "c1", kind: "approval", company_id: "o1", capability_id: "finance.erp.wire", version: "1.0.0",
+      summary: "向 ACME 付款 800 元", approver_role: "data_owner", end_user_id: "u9", args_sha256: "ab".repeat(32),
+      execution_id: "e1", run_id: null, expires_at: "2026-10-21T00:00:00Z",
+    }],
+    tasks: [{
+      id: "t1", run_id: "r-123456789", node_id: "fill", kind: "input", summary: "补录到货数量", assignee: "initiator",
+      deadline: "2026-10-21T00:00:00Z", data: { input_schema: { type: "object", required: ["qty"] } },
+    }],
+  };
+
+  it("审批调用确认走 /todo/confirmations，补录任务提交 JSON 数据", async () => {
+    session.set("s");
+    const calls = mockApi((method, path) => {
+      if (path === "/me") return { body: me("data_owner") };
+      if (path === "/todo") return { body: todo };
+      if (method === "POST") return { body: { status: "succeeded" } };
+      return method === "GET" ? page([]) : undefined;
+    });
+    render(wrap(<ApprovalsPage />));
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: /调用确认/ }));
+    expect(await screen.findByText("向 ACME 付款 800 元")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /处\s*理/ }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /确\s*定|OK/ }));
+    await waitFor(() => expect(calls.find((c) => c.path === "/todo/confirmations/c1/decide")?.body).toEqual({ decision: "approve" }));
+
+    await user.click(screen.getByRole("tab", { name: /工作流任务/ }));
+    expect(await screen.findByText("补录到货数量")).toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: /处\s*理/ }).at(-1)!);
+    const box = await screen.findByLabelText("补录内容（JSON）");
+    fireEvent.change(box, { target: { value: '{"qty": 12}' } });
+    await user.click(screen.getAllByRole("button", { name: /确\s*定|OK/ }).at(-1)!);
+    await waitFor(() =>
+      expect(calls.find((c) => c.path === "/todo/tasks/t1/decide")?.body).toEqual({ decision: "approve", data: { qty: 12 } }),
+    );
+  });
+});
