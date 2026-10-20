@@ -20,7 +20,7 @@
 | **M6c** Skill Registry 与 corp-skill | 完成 | 04063f7 |
 | **M6d** 合成探针与契约漂移 | 完成 | 412ef8b |
 | **M6e** M5 延后项与控制台 | 完成 | 3184785 |
-| **M7a** MCP tasks + get_run_status | 完成（本切片提交后填 SHA） | — |
+| **M7a** MCP tasks + get_run_status | 完成 | 05269d9 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7a 用例；控制台组件测试与端到端在提交前再跑全量。
