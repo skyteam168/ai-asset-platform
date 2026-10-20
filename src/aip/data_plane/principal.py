@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
@@ -42,6 +43,8 @@ class Principal:
 class PrincipalResolver:
     def __init__(self, cache: IamCache) -> None:
         self.cache = cache
+        # 按工号匹配成功（且尚无绑定）时回调，用于把绑定回写控制面（architecture.md 3.1）
+        self.on_employee_match: Callable[[str, dict[str, Any]], None] | None = None
 
     def consumer(self, client_id: str) -> tuple[str, dict[str, Any]]:
         found = self.cache.consumer_by_client_id(client_id)
@@ -57,6 +60,11 @@ class PrincipalResolver:
         user_id = consumer["bindings"].get(subject)
         if user_id is None and policy == "by_employee_no":
             user_id = self.cache.data["employee_index"].get(consumer["company_id"], {}).get(subject)
+            if user_id is not None and self.on_employee_match is not None:
+                self.on_employee_match(
+                    "binding.employee_no_matched",
+                    {"consumer_id": consumer_id, "external_subject": subject, "user_id": str(user_id)},
+                )
         if user_id is None:
             raise PlatformError(ErrorCode.USER_NOT_BOUND, "该员工未绑定平台用户")
         return str(user_id)

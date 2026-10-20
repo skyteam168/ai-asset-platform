@@ -184,7 +184,7 @@ async def test_data_plane_resolves_tools_after_control_plane_goes_down(
     await publish_tool(db, seeded)
     from aip.libs.tokens import keys
 
-    keys.platform_key.cache_clear()
+    keys.platform_keys.cache_clear()
     cp_app = create_cp(db=Database(app_url()))
     cp = httpx.AsyncClient(transport=httpx.ASGITransport(app=cp_app), base_url="https://cp")
     key = keys.platform_key()

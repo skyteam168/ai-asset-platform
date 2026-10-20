@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aip
+resources:
+  - namespace.yaml
+  - config.yaml
+  - control-plane.yaml
+  - data-plane.yaml
+  - migrate-job.yaml
+images:
+  - name: aip
+    newName: registry.internal/aip/platform
+    newTag: "0.1.0"

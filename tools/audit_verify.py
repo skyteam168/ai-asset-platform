@@ -16,13 +16,13 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from aip.libs.audit.store import verify
 from aip.libs.common.config import get_settings
-from aip.libs.tokens.keys import platform_key
+from aip.libs.tokens.keys import platform_keys
 
 
 async def main(dsn: str) -> int:
     engine = create_async_engine(dsn)
     async with engine.connect() as conn:
-        problems = await verify(conn, [platform_key()])
+        problems = await verify(conn, list(platform_keys()))
     await engine.dispose()
     for p in problems:
         print(p)

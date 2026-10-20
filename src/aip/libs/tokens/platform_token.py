@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
+import json
 import secrets
 from dataclasses import dataclass
 from typing import Any, Literal
 
 import jwt
+from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.tokens.keys import SigningKey
@@ -24,6 +27,21 @@ class AccessClaims:
     agent_profile: str | None
     jti: str
     expires_at: dt.datetime
+
+
+def _b64url(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def jws_es256(claims: dict[str, Any], key: SigningKey, headers: dict[str, str]) -> str:
+    """手工组装 JWS：签名来自 key.sign()（本地或 Transit），DER 转为 ES256 要求的 r||s 定长格式。"""
+    header = {"alg": "ES256", **headers}
+    signing_input = (
+        f"{_b64url(json.dumps(header, separators=(',', ':')).encode())}."
+        f"{_b64url(json.dumps(claims, separators=(',', ':')).encode())}"
+    )
+    r, s = decode_dss_signature(key.sign(signing_input.encode()))
+    return f"{signing_input}.{_b64url(r.to_bytes(32, 'big') + s.to_bytes(32, 'big'))}"
 
 
 def issue(
@@ -51,7 +69,7 @@ def issue(
     }
     if agent_profile:
         claims["agent_profile"] = agent_profile
-    return jwt.encode(claims, key.private, algorithm="ES256", headers={"kid": key.kid, "typ": "at+jwt"}), ttl_s
+    return jws_es256(claims, key, {"kid": key.kid, "typ": "at+jwt"}), ttl_s
 
 
 def verify(token: str, *, keys: list[SigningKey], issuer: str, audience: str) -> AccessClaims:
@@ -62,7 +80,7 @@ def verify(token: str, *, keys: list[SigningKey], issuer: str, audience: str) ->
             raise PlatformError(ErrorCode.UNAUTHENTICATED, "令牌签名密钥未知")
         c: dict[str, Any] = jwt.decode(
             token,
-            key=key.private.public_key(),
+            key=key.public_key,
             algorithms=["ES256"],
             audience=audience,
             issuer=issuer,

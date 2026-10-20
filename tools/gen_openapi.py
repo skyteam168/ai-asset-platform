@@ -129,6 +129,12 @@ COMMON_COMPONENTS: dict[str, Any] = {
             "schema": {"type": "string", "minLength": 1, "maxLength": 128},
         },
         "AfterSeq": {"name": "after_seq", "in": "query", "schema": {"type": "integer", "minimum": 0, "default": 0}},
+        "WaitS": {
+            "name": "wait_s",
+            "in": "query",
+            "description": "长轮询等待秒数（0 到 25）",
+            "schema": {"type": "number", "minimum": 0, "maximum": 25, "default": 0},
+        },
     },
     "securitySchemes": {"bearer": {"type": "http", "scheme": "bearer"}},
 }
@@ -456,6 +462,15 @@ def control_plane() -> dict[str, Any]:
             "get": op("listUsers", "iam", "用户列表", res=page("User"), params=LIST),
             "post": op("createUser", "iam", "新建用户", req=ref("UserCreate"), res=ref("User"), code="201", idem=True),
         },
+        f"{A}/users/import/{{id}}/rollback": {
+            "post": op(
+                "rollbackImport",
+                "iam",
+                "按批次回滚导入（未使用的删除，已使用的停用）",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
         f"{A}/users/import": {
             "post": op(
                 "importUsers", "iam", "批量导入用户（支持 dry_run）", req=ref("ImportRequest"), res=ref("ImportResult")
@@ -568,6 +583,89 @@ def control_plane() -> dict[str, Any]:
         f"{A}/versions/{{id}}/submit": {
             "post": op("submitVersion", "release", "提交门禁", res=ref("AssetVersion"), params=["Id"])
         },
+        f"{A}/versions/{{id}}/test-cases": {
+            "post": op(
+                "addTestCase",
+                "release",
+                "添加门禁用例（功能 / 权限）",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+                params=["Id"],
+            )
+        },
+        f"{A}/versions/{{id}}/acceptance": {
+            "put": op(
+                "setAcceptance",
+                "release",
+                "设置验收单模板（G5）",
+                req={"type": "object"},
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/versions/{{id}}/run-tests": {
+            "post": op("runTests", "release", "Test Lab 执行 G1 / G2", res={"type": "object"}, params=["Id"])
+        },
+        f"{A}/versions/{{id}}/gates": {
+            "get": op("gateHistory", "release", "门禁记录", res={"type": "object"}, params=["Id"])
+        },
+        f"{A}/versions/{{id}}/canary": {
+            "post": op(
+                "startCanary",
+                "release",
+                "G7 灰度发布",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+                params=["Id"],
+            )
+        },
+        f"{A}/versions/{{id}}/promote": {
+            "post": op(
+                "promoteVersion",
+                "release",
+                "G7 指标达标后全量（G8）",
+                req={"type": "object"},
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/approval-delegates": {
+            "post": op(
+                "addApprovalDelegate",
+                "approval",
+                "设置审批代理人",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+            )
+        },
+        f"{A}/usage-requests": {
+            "post": op(
+                "requestUsage",
+                "grant",
+                "使用申请（上限内，由本公司管理员审批）",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+            )
+        },
+        f"{A}/access-reviews": {
+            "post": op(
+                "openAccessReview",
+                "grant",
+                "发起授权复核活动",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+            )
+        },
+        f"{A}/access-reviews/{{id}}/close": {
+            "post": op(
+                "closeAccessReview", "grant", "关闭复核（未确认的授权撤销）", res={"type": "object"}, params=["Id"]
+            )
+        },
         f"{A}/releases": {
             "post": op(
                 "createRelease", "release", "发布", req=ref("Release"), res=ref("Release"), code="201", idem=True
@@ -635,11 +733,28 @@ def control_plane() -> dict[str, Any]:
             "post": op("decideApproval", "approval", "审批", req=ref("Decision"), res=ref("Approval"), params=["Id"])
         },
         f"{A}/audit-logs": {"get": op("searchAudit", "audit", "审计检索", res=page("AuditRecord"), params=LIST)},
+        f"{A}/internal/events": {
+            "post": op(
+                "ingestDataPlaneEvents",
+                "snapshot",
+                "数据面事件回传（服务凭据）",
+                req={"type": "object"},
+                res={"type": "object"},
+            )
+        },
         f"{A}/snapshots/iam": {
-            "get": op("pullIamSnapshot", "snapshot", "数据面拉取 IAM 快照", res=ref("Snapshot"), params=["AfterSeq"])
+            "get": op(
+                "pullIamSnapshot", "snapshot", "数据面拉取 IAM 快照", res=ref("Snapshot"), params=["AfterSeq", "WaitS"]
+            )
         },
         f"{A}/snapshots/release": {
-            "get": op("pullReleaseSnapshot", "snapshot", "数据面拉取发布快照", res=ref("Snapshot"), params=["AfterSeq"])
+            "get": op(
+                "pullReleaseSnapshot",
+                "snapshot",
+                "数据面拉取发布快照",
+                res=ref("Snapshot"),
+                params=["AfterSeq", "WaitS"],
+            )
         },
     }
     return doc("AIP Control Plane API", "控制面：IAM、资产、发布、授权、连接、审批、审计", paths, sch)

@@ -17,7 +17,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
+from aip.data_plane.events import EventForwarder
 from aip.data_plane.iam_cache import IamCache
+from aip.data_plane.mcp_gateway import McpGateway
+from aip.data_plane.mcp_gateway import router as mcp_router
 from aip.data_plane.oauth import AuthContext
 from aip.data_plane.oauth import router as oauth_router
 from aip.data_plane.pdp import OpaClient, PolicyService
@@ -37,7 +40,7 @@ from aip.libs.common import web
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.httpclient.config import Resolver
-from aip.libs.tokens.keys import SigningKey, platform_key
+from aip.libs.tokens.keys import SigningKey, platform_keys
 from aip.libs.tokens.replay import ReplayStore, ValkeyReplayStore
 
 log = logging.getLogger("aip.data_plane")
@@ -72,10 +75,10 @@ class Readiness:
         return all(v == "loaded" for v in self.checks().values())
 
 
-async def pull_once(client: httpx.AsyncClient, cache: SnapshotCache, token: str) -> bool:
+async def pull_once(client: httpx.AsyncClient, cache: SnapshotCache, token: str, wait_s: float = 0) -> bool:
     r = await client.get(
         f"/api/v1/snapshots/{cache.kind}",
-        params={"after_seq": cache.seq or 0},
+        params={"after_seq": cache.seq or 0, "wait_s": wait_s},
         headers={"Authorization": f"Bearer {token}"},
     )
     if r.status_code == 200:
@@ -83,18 +86,24 @@ async def pull_once(client: httpx.AsyncClient, cache: SnapshotCache, token: str)
     return False
 
 
-async def pull_snapshots(app: FastAPI, control_plane_url: str, interval_s: float = 2.0) -> None:
-    """从控制面拉取快照；控制面不可用时继续使用已加载（或从磁盘恢复）的快照。"""
+async def pull_snapshots(app: FastAPI, control_plane_url: str, wait_s: float = 20.0) -> None:
+    """长轮询控制面：每类快照一条循环，有变更立即返回（通常 1 秒内生效）；控制面不可用时继续使用已加载的快照。"""
     token = get_settings().internal_service_token
-    async with httpx.AsyncClient(base_url=control_plane_url, timeout=5) as client:
-        while True:
-            for cache in (app.state.iam, app.state.releases):
+
+    async def loop(cache: SnapshotCache) -> None:
+        backoff = 1.0
+        async with httpx.AsyncClient(base_url=control_plane_url, timeout=wait_s + 10) as client:
+            while True:
                 try:
-                    if await pull_once(client, cache, token) and cache is app.state.releases:
+                    if await pull_once(client, cache, token, wait_s) and cache is app.state.releases:
                         await app.state.policy.sync_policy()
+                    backoff = 1.0
                 except (httpx.HTTPError, SnapshotRejected, KeyError) as e:
                     log.warning("%s snapshot pull failed: %s", cache.kind, e)
-            await asyncio.sleep(interval_s)
+                    await asyncio.sleep(backoff)
+                    backoff = min(backoff * 2, 30.0)
+
+    await asyncio.gather(loop(app.state.iam), loop(app.state.releases))
 
 
 async def ship_audit(app: FastAPI, database_url: str) -> None:
@@ -130,10 +139,12 @@ def create_app(
     resolver: Resolver | None = None,
 ) -> FastAPI:
     settings = get_settings()
-    key = key or platform_key()
+    # 签名用当前密钥；验签信任全部已发布版本（Transit 轮换期间旧令牌与旧快照仍有效）
+    trusted = [key] if key is not None else list(platform_keys())
+    key = trusted[0]
     data_dir = data_dir or pathlib.Path(settings.data_dir)
-    iam = IamCache([key], data_dir / "snapshots")
-    releases = ReleaseCache([key], data_dir / "snapshots")
+    iam = IamCache(trusted, data_dir / "snapshots")
+    releases = ReleaseCache(trusted, data_dir / "snapshots")
     opa = OpaClient(opa_url or settings.opa_url, settings.opa_timeout_s)
     audit = AuditSpool(data_dir / "audit-spool", settings.instance_id, settings.audit_spool_max_bytes)
     policy = PolicyService(iam, releases, opa, audit, env=settings.env if settings.env != "dev" else "test")
@@ -142,6 +153,7 @@ def create_app(
         resolver=PrincipalResolver(iam),
         key=key,
         replay=replay or ValkeyReplayStore(settings.valkey_url),
+        verify_keys=trusted,
     )
     if exec_store is None:
         exec_store = (
@@ -149,8 +161,10 @@ def create_app(
             if settings.runtime_database_url
             else MemoryExecutionStore()
         )
+    forwarder = EventForwarder(control_plane_url, settings.internal_service_token, settings.instance_id)
+    ctx.resolver.on_employee_match = forwarder
     registry = ConnectorRegistry(
-        releases, secrets or OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token), resolver
+        releases, secrets or OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token), resolver, forwarder
     )
     runtime = ToolRuntime(
         iam=iam,
@@ -172,6 +186,7 @@ def create_app(
         tasks = []
         if control_plane_url:
             tasks.append(asyncio.create_task(pull_snapshots(app, control_plane_url)))
+            tasks.append(asyncio.create_task(forwarder.run()))
         if settings.audit_database_url:
             tasks.append(asyncio.create_task(ship_audit(app, settings.audit_database_url)))
         yield
@@ -189,8 +204,10 @@ def create_app(
     app.state.audit = audit
     app.state.auth = ctx
     app.state.runtime = runtime
+    app.state.events = forwarder
     store = exec_store
     app.include_router(oauth_router(ctx))
+    app.include_router(mcp_router(McpGateway(ctx, runtime)))
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="dpHealth")
     async def healthz() -> web.Health:

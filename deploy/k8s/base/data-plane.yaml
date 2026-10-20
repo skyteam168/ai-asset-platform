@@ -1,0 +1,78 @@
+# 数据面 + OPA sidecar（architecture.md 4.4、12.1）。快照与审计 spool 落在每个 Pod 的持久卷上：
+# 控制面宕机或 Pod 重启时从本地已验签快照恢复；审计库不可用时 spool 继续累积。
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: data-plane
+  labels: {app: data-plane}
+spec:
+  serviceName: data-plane
+  replicas: 3
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels: {app: data-plane}
+  template:
+    metadata:
+      labels: {app: data-plane}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: data-plane
+          image: aip
+          ports: [{containerPort: 8080, name: http}]
+          env:
+            - name: AIP_INSTANCE_ID
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          envFrom:
+            - configMapRef: {name: aip-config}
+            - secretRef: {name: aip-secrets}
+          # 就绪 = IAM 快照、发布快照、策略均已加载；缺任何一个都不接流量（fail closed）
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - {name: state, mountPath: /var/lib/aip}
+            - {name: tmp, mountPath: /tmp}
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "4", memory: 8Gi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true,
+                            capabilities: {drop: [ALL]}}
+        - name: opa
+          image: openpolicyagent/opa:1.10.0
+          args: ["run", "--server", "--addr=127.0.0.1:8181", "--log-level=error"]
+          readinessProbe:
+            httpGet: {path: /health, port: 8181, host: 127.0.0.1}
+          resources:
+            requests: {cpu: 200m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true,
+                            capabilities: {drop: [ALL]}}
+      volumes:
+        - {name: tmp, emptyDir: {medium: Memory, sizeLimit: 64Mi}}
+  volumeClaimTemplates:
+    - metadata: {name: state}
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources: {requests: {storage: 20Gi}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: data-plane
+spec:
+  selector: {app: data-plane}
+  ports: [{port: 8080, targetPort: http, name: http}]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: data-plane
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels: {app: data-plane}

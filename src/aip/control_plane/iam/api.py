@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Header, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam import auth, consumers, orgs, snapshot, users
@@ -249,6 +250,11 @@ def router() -> APIRouter:
             "errors": res.errors,
         }
 
+    @r.post(f"{V}/users/import/{{id}}/rollback", tags=["iam"], operation_id="rollbackImport")
+    async def rollback_import(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return {"batch_id": str(id), **await users.rollback_import(conn, actor, id)}
+
     @r.get(f"{V}/users/{{id}}", tags=["iam"], operation_id="getUser")
     async def get_user(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
@@ -392,13 +398,20 @@ def router() -> APIRouter:
 
     @r.get(f"{V}/snapshots/iam", tags=["snapshot"], operation_id="pullIamSnapshot", response_model=None)
     async def pull_iam(
-        db: DbDep, after_seq: int = 0, authorization: Annotated[str | None, Header()] = None
+        request: Request,
+        db: DbDep,
+        after_seq: int = 0,
+        wait_s: float = 0,
+        authorization: Annotated[str | None, Header()] = None,
     ) -> Response | dict[str, Any]:
         if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
             raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
-        async with db.tx(DbScope.system()) as conn:
+
+        async def fetch(conn: AsyncConnection) -> dict[str, Any] | None:
             await snapshot.publish(conn, platform_key())
-            snap = await snapshot.latest(conn, after_seq)
+            return await snapshot.latest(conn, after_seq)
+
+        snap = await request.app.state.snapshot_feed.serve(fetch, wait_s)
         return snap if snap is not None else Response(status_code=204)
 
     return r

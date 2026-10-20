@@ -108,3 +108,50 @@
 | 写操作确认对象（confirmation）与确认通道 | Runtime 返回 pending_confirm，不执行 | M5（P8） |
 | 对账自动调度 | 提供 `reconcile()`，由调用方触发 | M5 reconcile worker |
 | Result Guard 的“不可信内容”标注 | 未加 | M4 MCP 出口一并实现 |
+
+## M4 Gateway、门禁、审批、首期上线（P5、P6、P7、P12 部署部分）— 2026-10-20 通过（含已记录的延后项）
+
+| 第 14 章 M4 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 同一调用经 MCP（两个版本）与 REST 结果与审计一致 | 通过 | `test_m4_mcp.py`：官方 MCP Python SDK 2.3 客户端分别以 legacy（2025-11-25 握手）、2026-07-28（无状态）与 auto 协商连接；三条调用返回同一数据，审计中三条决策同一用户、同一参数摘要、exposure 分别为 mcp / mcp / rest |
+| 未授权工具不出现在 tools/list | 通过 | 无权（密级不足）与只开放 REST 的工具不可见；直接调用它们与调用不存在的工具返回同一个 `Unknown tool` 错误，不泄露能力是否存在 |
+| 一个读类 Tool 从 Draft 走到 Active | 通过 | `test_read_tool_from_draft_to_active`（服务层）与 `test_end_to_end_publish_and_call_over_mcp`（全程 HTTP）：G0 → Test Lab G1 / G2 → 业务 Owner G5 签字 → 数据 Owner G6 → G7 灰度 → G8 全量；门禁记录依次为 G0、G1、G2、G5、G6、G7、G8 |
+| 上限收缩后下游授权自动失效 | 通过 | `test_usage_request_within_ceiling_creates_grant`：经使用申请批准产生的授权，在上限撤销后的快照中 within_ceiling=false，PDP 拒绝（M2 已验证拒绝路径） |
+| 端到端演示 | 通过 | 控制面与数据面以真实 HTTP 运行：越南分公司消费方以员工身份经 MCP 查询本厂工单成功、查询他厂返回 OUT_OF_SCOPE |
+| 压测校准非功能指标并写入 docs/ops/slo.md | 通过 | 单请求平台附加延迟 P95：REST 12.8ms、MCP 14.7ms（目标 ≤ 100ms）；单进程并发 20 时约 200 req/s；停用传播 0.14 秒（目标 ≤ 30 秒）。详见 [slo.md](slo.md) |
+| 其他 | 通过 | G0 拦截零宽字符、诱导越权措辞、外链与缺少权限用例；用例失败退回 draft 并给出原因；write 工具 G6 双人复核；验收人不能再做安全审核；审批代理人；使用申请只能在上限内且申请人不能自批；复核活动（续期 / 关闭时撤销未确认）；MCP 协议细节（401 + RFC 9728 元数据、-32022 版本不支持、-32020 路由头不一致、-32601、-32700、通知 202、cacheScope private、确定性排序、写工具幂等重放） |
+| lint | 通过 | ruff、mypy --strict（75 个文件）、TLS 约束检查、spectral、链接检查 |
+| 测试总数 | 252 通过，0 失败，0 跳过（M0 34 + M1 64 + M2 80 + M3 51 + M4 23） | `python -m pytest -q`，约 4.5 分钟 |
+
+关闭的延后项：
+
+| 来自 | 项 | 结果 |
+| --- | --- | --- |
+| M1 / M2 | 平台签名密钥、审计锚点签名、TOTP 种子加密改用 OpenBao Transit | `signing_backend=transit` / `secret_backend=transit`；私钥不出 OpenBao，访问令牌手工组装 ES256 JWS；轮换后旧令牌与旧快照仍可验签、只有最新版本可签名；旧本地密文可继续解密（`test_m4_transit.py`） |
+| M1 / M2 | 30 秒传播与推送 | 控制面 LISTEN / NOTIFY + 长轮询，实测 0.14 秒 |
+| M1 | by_employee_no 首次匹配回写绑定 | 数据面事件回传 `/api/v1/internal/events`，控制面写入绑定 |
+| M1 | 导入批次回滚 | `/users/import/{id}/rollback`：未使用的删除、已有绑定或角色的停用 |
+| M2 | 发布与授权的审批流 | 通用审批引擎（G5 / G6 / 使用申请），职责分离、双人复核、代理人、工作日到期 |
+| M2 | docs/specs 与 policies 打包进镜像 | `deploy/Dockerfile`；镜像实测：只读根文件系统、非 root（uid 10001）下控制面健康并能生成带策略的发布快照，数据面无快照时 503（fail closed） |
+| M3 | insecure 指纹回写控制面 | 同一事件通道，控制面记录首次指纹，指纹变化与传输例外到期作为风险事件并触发新快照 |
+| M3 | MCP 结果的不可信内容标注 | `_meta` 中 `aip.internal/untrusted: true` 与执行 id |
+
+本里程碑发现并修复的问题：
+
+- 审计 spool 在事件循环上同步 fsync，并发下整个进程排队 → 组提交（每条记录返回前仍已落盘）。
+- 运行环境缺少 `sniffio` 时 httpcore 每次请求重新尝试 import 并扫描磁盘 → 显式依赖。
+- `jsonschema` 只在开发依赖里，镜像启动即失败 → 改为运行时依赖，并新增“src 的第三方导入必须是运行时依赖”的测试。
+- 资产开发者不是跨公司角色，Test Lab 看不到分公司组织 → 资产开发者列为总部全局角色（architecture.md 2.5 已同步）。
+- 分公司在 RLS 下看不到总部资产，无法发起使用申请 → 迁移 0006：上限内的总部资产对该公司只读可见。
+- 请求头断言模式（模式 B）不适用于 MCP 客户端（同一组头被复用，第二个请求即被判重放）→ architecture.md 3.1 明确 MCP 只用令牌交换。
+
+仍未完成：
+
+| 项 | 现状 | 计划 |
+| --- | --- | --- |
+| 控制台前端（最小页面集） | 只有 HTTP API 与 OpenAPI 契约 | 单独排期（React + Ant Design） |
+| 控制面响应体 Pydantic 模型 | 字段与契约一致，未用响应模型强校验 | 随控制台一起补 |
+| 批量密级提升、启用 by_employee_no 的双人复核 | 仅限平台管理员 | 接入审批引擎（M5） |
+| Kubernetes 清单 | 已编写并通过 YAML 校验，未在真实集群部署 | 首个 staging 集群上线时验证 |
+| CI 工作流 | 已编写，未在 GitHub 上运行 | 推送远端仓库后启用 |
+| 多进程 / 多副本线性扩展 | 只测了单进程 | M7 故障演练与容量测试 |

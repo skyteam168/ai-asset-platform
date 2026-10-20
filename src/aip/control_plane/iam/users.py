@@ -312,3 +312,34 @@ async def import_users_csv(conn: AsyncConnection, actor: Actor, content: str, dr
 
 def is_global_role(role: str) -> bool:
     return role in GLOBAL_ROLES
+
+
+async def rollback_import(conn: AsyncConnection, actor: Actor, batch_id: uuid.UUID) -> dict[str, int]:
+    """按批次回滚导入：尚未被使用的用户删除；已有绑定或角色的只停用，保留历史（architecture.md 2.2）。"""
+    rows = (
+        await conn.execute(
+            select(t.iam_user.c.id, t.iam_user.c.home_org_id, t.iam_user.c.company_id).where(
+                t.iam_user.c.import_batch_id == batch_id
+            )
+        )
+    ).all()
+    if not rows:
+        raise PlatformError(ErrorCode.NOT_FOUND, "导入批次不存在或不可见")
+    deleted = disabled = 0
+    for uid, home, company in rows:
+        actor.require(actor.manages_org(home), "只能回滚自己管理范围内的导入")
+        used = (
+            await conn.execute(select(t.user_binding.c.id).where(t.user_binding.c.user_id == uid).limit(1))
+        ).first() or (await conn.execute(select(t.user_role.c.id).where(t.user_role.c.user_id == uid).limit(1))).first()
+        if used:
+            await conn.execute(
+                update(t.iam_user).where(t.iam_user.c.id == uid).values(status="disabled", updated_at=utcnow())
+            )
+            await emit(conn, "user.disabled", company, uid, actor.user_id, {"reason": "import_rollback"})
+            disabled += 1
+        else:
+            await conn.execute(t.user_org_membership.delete().where(t.user_org_membership.c.user_id == uid))
+            await conn.execute(t.iam_user.delete().where(t.iam_user.c.id == uid))
+            await emit(conn, "user.deleted", company, uid, actor.user_id, {"reason": "import_rollback"})
+            deleted += 1
+    return {"deleted": deleted, "disabled": disabled}

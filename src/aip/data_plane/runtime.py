@@ -13,6 +13,7 @@ import json
 import logging
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -107,10 +108,22 @@ class Instance:
 class ConnectorRegistry:
     """按发布快照中的 connectors 构造 Connector 实例；快照变化时重建。"""
 
-    def __init__(self, releases: ReleaseCache, secrets: SecretStore, resolver: Resolver | None = None) -> None:
-        self.releases, self.secrets, self.resolver = releases, secrets, resolver
+    def __init__(
+        self,
+        releases: ReleaseCache,
+        secrets: SecretStore,
+        resolver: Resolver | None = None,
+        sink: Callable[[str, dict[str, Any]], None] | None = None,
+    ) -> None:
+        self.releases, self.secrets, self.resolver, self.sink = releases, secrets, resolver, sink
         self._built_for: int | None = None
         self._instances: dict[str, Instance] = {}
+
+    def event(self, inst: Instance, kind: str, data: dict[str, Any]) -> None:
+        """连接事件：进程内记录，并回传控制面（指纹记录、传输例外到期禁用等）。"""
+        inst.events.append((kind, data))
+        if self.sink is not None:
+            self.sink(kind, data)
 
     def get(self, name: str) -> Instance:
         if self._built_for != self.releases.seq:
@@ -412,7 +425,7 @@ class ToolRuntime:
         try:
             release = self.releases.resolve(capability_id, self.policy.env, channel=channel, version=version)
         except PlatformError as e:
-            return self._finish_without_record(rec, e)
+            return await self._finish_without_record(rec, e)
         spec = release["spec"]
         rec["version"] = release["version"]
         errors = sorted(
@@ -420,12 +433,12 @@ class ToolRuntime:
             key=lambda e: list(e.path),
         )
         if errors:
-            return self._finish_without_record(rec, PlatformError(ErrorCode.INVALID_ARGUMENT, errors[0].message))
+            return await self._finish_without_record(rec, PlatformError(ErrorCode.INVALID_ARGUMENT, errors[0].message))
         decision = await self.policy.decide(
             principal, capability_id, args, exposure=exposure, channel=channel, version=version
         )
         if decision.result == "deny":
-            return self._finish_without_record(
+            return await self._finish_without_record(
                 rec, PlatformError(self._deny_code(decision), ",".join(decision.reasons))
             )
         if decision.result == "require_confirmation":
@@ -437,10 +450,12 @@ class ToolRuntime:
         try:
             inst = self.registry.get(connector_name)
         except PlatformError as e:
-            return self._finish_without_record(rec, e)
+            return await self._finish_without_record(rec, e)
         write = inst.connector.is_write(op)
         if write and not idempotency_key:
-            return self._finish_without_record(rec, PlatformError(ErrorCode.INVALID_ARGUMENT, "写操作必须带幂等键"))
+            return await self._finish_without_record(
+                rec, PlatformError(ErrorCode.INVALID_ARGUMENT, "写操作必须带幂等键")
+            )
         if inst.connection:
             rec.update(transport=inst.connection.scheme, tls_verified=inst.connection.tls_verified)
         try:
@@ -461,9 +476,9 @@ class ToolRuntime:
             )
         return await self._execute(rec, release, inst, op, args, write, principal)
 
-    def _finish_without_record(self, rec: dict[str, Any], e: PlatformError) -> dict[str, Any]:
+    async def _finish_without_record(self, rec: dict[str, Any], e: PlatformError) -> dict[str, Any]:
         rec.update(status="failed", error_code=str(e.code), error_message=e.detail)
-        self.audit.append("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+        await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
         return _result(rec, next_action=_next_action(e.code))
 
     def _audit(self, rec: dict[str, Any]) -> dict[str, Any]:
@@ -512,7 +527,7 @@ class ToolRuntime:
                 conn,
                 allowlist=inst.allowlist,
                 resolver=self.registry.resolver,
-                on_event=lambda k, d: inst.events.append((k, d)),
+                on_event=lambda k, d: self.registry.event(inst, k, d),
                 trace_id=rec["trace_id"],
             )
         attempt = 0
@@ -528,7 +543,7 @@ class ToolRuntime:
                 data, truncated = result_guard(res.data, spec, principal)
                 rec.update(status="succeeded", result=data, retry_count=attempt - 1)
                 await self.store.update(rec)
-                self.audit.append("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+                await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
                 return _result(rec, next_cursor=res.next_cursor, truncated=truncated)
             except (TimeoutError, PlatformError) as e:
                 err = e if isinstance(e, PlatformError) else PlatformError(ErrorCode.DOWNSTREAM_TIMEOUT, "下游超时")
@@ -543,7 +558,9 @@ class ToolRuntime:
                         retry_count=attempt - 1,
                     )
                     await self.store.update(rec)
-                    self.audit.append("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+                    await self.audit.append_async(
+                        "tool.execution", company_id=rec["company_id"], record=self._audit(rec)
+                    )
                     return _result(rec, next_action=_next_action(ErrorCode.OUTCOME_UNKNOWN))
                 rule = retry_cfg.get(
                     str(err.code), {"max_attempts": 2 if (not write or idempotent) else 0, "backoff_ms": 100}
@@ -559,7 +576,7 @@ class ToolRuntime:
                     continue
                 rec.update(status="failed", error_code=str(err.code), error_message=err.detail, retry_count=attempt - 1)
                 await self.store.update(rec)
-                self.audit.append("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+                await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
                 return _result(rec, next_action=_next_action(err.code))
 
     async def reconcile(self, execution_id: str) -> dict[str, Any]:
@@ -590,7 +607,7 @@ class ToolRuntime:
         else:
             rec.update(reconcile_status="escalated")
         await self.store.update(rec)
-        self.audit.append("tool.reconcile", company_id=rec["company_id"], record=self._audit(rec))
+        await self.audit.append_async("tool.reconcile", company_id=rec["company_id"], record=self._audit(rec))
         return _result(rec)
 
 

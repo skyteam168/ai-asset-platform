@@ -7,11 +7,11 @@ import secrets
 import uuid
 from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Header, Response
+from fastapi import APIRouter, Header, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncConnection
 
-from aip.control_plane.db import DbScope
 from aip.control_plane.grant import service as grants
 from aip.control_plane.iam.api import ActorDep, DbDep, _bearer
 from aip.control_plane.registry import service as registry
@@ -92,15 +92,6 @@ def router() -> APIRouter:
             vid = await registry.create_version(conn, actor, id, body.semver, body.spec, body.dep_lock)
             return _out(await registry.version_row(conn, vid))
 
-    @r.post(f"{V}/versions/{{id}}/submit", tags=["release"], operation_id="submitVersion")
-    async def submit_version(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
-        """提交 = draft → testing（G0 已在建版本时校验 Spec）；后续门禁在 P6 接入。"""
-        async with db.tx(actor.db_scope()) as conn:
-            v = await registry.version_row(conn, id)
-            actor.require(actor.user_id == v["submitted_by"] or actor.has("platform_admin"))
-            await registry.transition(conn, actor, id, "testing", "submitted")
-            return _out(await registry.version_row(conn, id))
-
     @r.post(f"{V}/releases", tags=["release"], operation_id="createRelease", status_code=201)
     async def create_release(body: ReleaseIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
@@ -158,13 +149,20 @@ def router() -> APIRouter:
 
     @r.get(f"{V}/snapshots/release", tags=["snapshot"], operation_id="pullReleaseSnapshot", response_model=None)
     async def pull_release(
-        db: DbDep, after_seq: int = 0, authorization: Annotated[str | None, Header()] = None
+        request: Request,
+        db: DbDep,
+        after_seq: int = 0,
+        wait_s: float = 0,
+        authorization: Annotated[str | None, Header()] = None,
     ) -> Response | dict[str, Any]:
         if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
             raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
-        async with db.tx(DbScope.system()) as conn:
+
+        async def fetch(conn: AsyncConnection) -> dict[str, Any] | None:
             await snapshot.publish(conn, platform_key())
-            snap = await snapshot.latest(conn, after_seq)
+            return await snapshot.latest(conn, after_seq)
+
+        snap = await request.app.state.snapshot_feed.serve(fetch, wait_s)
         return snap if snap is not None else Response(status_code=204)
 
     return r

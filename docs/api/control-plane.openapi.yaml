@@ -270,6 +270,23 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UserCreate'
+  /api/v1/users/import/{id}/rollback:
+    post:
+      operationId: rollbackImport
+      tags:
+      - iam
+      summary: 按批次回滚导入（未使用的删除，已使用的停用）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/users/import:
     post:
       operationId: importUsers
@@ -680,6 +697,212 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
+  /api/v1/versions/{id}/test-cases:
+    post:
+      operationId: addTestCase
+      tags:
+      - release
+      summary: 添加门禁用例（功能 / 权限）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/versions/{id}/acceptance:
+    put:
+      operationId: setAcceptance
+      tags:
+      - release
+      summary: 设置验收单模板（G5）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/versions/{id}/run-tests:
+    post:
+      operationId: runTests
+      tags:
+      - release
+      summary: Test Lab 执行 G1 / G2
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/versions/{id}/gates:
+    get:
+      operationId: gateHistory
+      tags:
+      - release
+      summary: 门禁记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/versions/{id}/canary:
+    post:
+      operationId: startCanary
+      tags:
+      - release
+      summary: G7 灰度发布
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/versions/{id}/promote:
+    post:
+      operationId: promoteVersion
+      tags:
+      - release
+      summary: G7 指标达标后全量（G8）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/approval-delegates:
+    post:
+      operationId: addApprovalDelegate
+      tags:
+      - approval
+      summary: 设置审批代理人
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/usage-requests:
+    post:
+      operationId: requestUsage
+      tags:
+      - grant
+      summary: 使用申请（上限内，由本公司管理员审批）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/access-reviews:
+    post:
+      operationId: openAccessReview
+      tags:
+      - grant
+      summary: 发起授权复核活动
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/access-reviews/{id}/close:
+    post:
+      operationId: closeAccessReview
+      tags:
+      - grant
+      summary: 关闭复核（未确认的授权撤销）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/releases:
     post:
       operationId: createRelease
@@ -1012,6 +1235,27 @@ paths:
       parameters:
       - $ref: '#/components/parameters/Limit'
       - $ref: '#/components/parameters/Cursor'
+  /api/v1/internal/events:
+    post:
+      operationId: ingestDataPlaneEvents
+      tags:
+      - snapshot
+      summary: 数据面事件回传（服务凭据）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
   /api/v1/snapshots/iam:
     get:
       operationId: pullIamSnapshot
@@ -1029,6 +1273,7 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/AfterSeq'
+      - $ref: '#/components/parameters/WaitS'
   /api/v1/snapshots/release:
     get:
       operationId: pullReleaseSnapshot
@@ -1046,6 +1291,7 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/AfterSeq'
+      - $ref: '#/components/parameters/WaitS'
 components:
   responses:
     Problem:
@@ -1087,6 +1333,15 @@ components:
       schema:
         type: integer
         minimum: 0
+        default: 0
+    WaitS:
+      name: wait_s
+      in: query
+      description: 长轮询等待秒数（0 到 25）
+      schema:
+        type: number
+        minimum: 0
+        maximum: 25
         default: 0
   securitySchemes:
     bearer:

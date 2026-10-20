@@ -70,6 +70,19 @@ class PolicyService:
     async def sync_policy(self) -> None:
         await self.opa.load_bundle(self.releases.policy)
 
+    async def visible(self, principal: Principal, release: dict[str, Any], *, exposure: str) -> bool:
+        """tools/list 与目录的可见性：同一套策略，但不检查入参数据范围（此时还没有参数），不写审计。"""
+        try:
+            input_ = build_input(
+                principal=principal, release=release, args={}, iam=self.iam.data, env=self.env, exposure=exposure
+            )
+            input_["facts"]["scope_check"] = {}
+            if self.opa.revision != self.releases.policy["revision"]:
+                await self.sync_policy()
+            return (await self.opa.evaluate(input_)).result != "deny"
+        except (PlatformError, httpx.HTTPError, KeyError, ValueError, TypeError):
+            return False
+
     async def decide(
         self,
         principal: Principal | None,
@@ -98,7 +111,7 @@ class PolicyService:
         except (httpx.HTTPError, KeyError, ValueError, TypeError) as e:
             log.error("pdp failure, fail closed: %s", type(e).__name__)
             decision = Decision("deny", ["POLICY_UNAVAILABLE"], policy_revision=self.opa.revision)
-        self.audit.append(
+        await self.audit.append_async(
             "pdp.decision",
             company_id=principal.consumer_company_id if principal else None,
             record={

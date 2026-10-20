@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, Header, Request
@@ -32,6 +32,11 @@ class AuthContext:
     resolver: PrincipalResolver
     key: SigningKey
     replay: ReplayStore
+    verify_keys: list[SigningKey] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.verify_keys:
+            self.verify_keys = [self.key]
 
     @property
     def audiences(self) -> list[str]:
@@ -85,7 +90,7 @@ class AuthContext:
         claims = None
         for aud in self.audiences:
             try:
-                claims = platform_token.verify(token, keys=[self.key], issuer=self.settings.issuer, audience=aud)
+                claims = platform_token.verify(token, keys=self.verify_keys, issuer=self.settings.issuer, audience=aud)
                 break
             except PlatformError as e:
                 if e.code == ErrorCode.TOKEN_EXPIRED:
@@ -120,7 +125,7 @@ def router(ctx: AuthContext) -> APIRouter:
 
     @r.get("/.well-known/jwks.json", operation_id="jwks")
     async def jwks() -> dict[str, Any]:
-        return {"keys": [ctx.key.public_jwk()]}
+        return {"keys": [k.public_jwk() for k in ctx.verify_keys]}
 
     @r.post("/oauth/token", operation_id="token")
     async def token(

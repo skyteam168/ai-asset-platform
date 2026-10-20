@@ -14,7 +14,7 @@ from aip.libs.tokens.keys import SigningKey, canonical_json
 
 
 def sign_bytes(body: bytes, key: SigningKey) -> str:
-    return base64.b64encode(key.private.sign(body, ec.ECDSA(hashes.SHA256()))).decode()
+    return base64.b64encode(key.sign(body)).decode()
 
 
 def verify_bytes(body: bytes, signature: str, keys: list[SigningKey]) -> bool:
@@ -24,7 +24,7 @@ def verify_bytes(body: bytes, signature: str, keys: list[SigningKey]) -> bool:
         return False
     for k in keys:
         try:
-            k.private.public_key().verify(sig, body, ec.ECDSA(hashes.SHA256()))
+            k.public_key.verify(sig, body, ec.ECDSA(hashes.SHA256()))
             return True
         except InvalidSignature:
             continue

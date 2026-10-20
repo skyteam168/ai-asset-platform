@@ -1,0 +1,17 @@
+# 非机密配置；机密（数据库口令、OpenBao 令牌、服务令牌）放在 Secret aip-secrets，由 OpenBao 注入或运维创建。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aip-config
+data:
+  AIP_ENV: "staging"
+  AIP_ISSUER: "https://api.aip.internal"
+  AIP_MCP_RESOURCE: "https://mcp.aip.internal/mcp"
+  AIP_TOKEN_ENDPOINT_AUD: "https://api.aip.internal/oauth/token"
+  AIP_OPA_URL: "http://127.0.0.1:8181"
+  AIP_OPENBAO_ADDR: "https://openbao.aip.internal:8200"
+  AIP_VALKEY_URL: "redis://valkey.aip.svc:6379/0"
+  AIP_CONTROL_PLANE_URL: "http://control-plane.aip.svc:8080"
+  AIP_SIGNING_BACKEND: "transit"
+  AIP_SECRET_BACKEND: "transit"
+  AIP_RUNTIME_MODE: "live_read"

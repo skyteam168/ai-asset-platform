@@ -40,8 +40,18 @@ def _box() -> Fernet:
 
 
 def seal(plain: str) -> str:
+    """加密平台机密（TOTP 种子等）。transit 密文以 vault: 开头，可与旧的本地密文共存、逐步迁移。"""
+    s = get_settings()
+    if s.secret_backend == "transit":
+        from aip.libs.tokens.keys import transit_client
+
+        return transit_client().encrypt(s.transit_secret_key, plain.encode())
     return _box().encrypt(plain.encode()).decode()
 
 
 def unseal(sealed: str) -> str:
+    if sealed.startswith("vault:"):
+        from aip.libs.tokens.keys import transit_client
+
+        return transit_client().decrypt(get_settings().transit_secret_key, sealed).decode()
     return _box().decrypt(sealed.encode()).decode()

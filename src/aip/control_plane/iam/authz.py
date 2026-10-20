@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from aip.control_plane.db import DbScope
 from aip.libs.common.errors import ErrorCode, PlatformError
 
-GLOBAL_ROLES = frozenset({"platform_admin", "data_owner", "auditor"})
+# 总部角色：跨公司生效。资产开发者为所有公司维护资产与 Connector（architecture.md 2.5）
+GLOBAL_ROLES = frozenset({"platform_admin", "asset_developer", "data_owner", "auditor"})
 
 
 @dataclass(frozen=True)

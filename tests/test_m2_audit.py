@@ -212,3 +212,23 @@ async def test_data_plane_background_shipper(
         config.get_settings.cache_clear()
     assert n >= 1
     assert await problems(db) == []
+
+
+async def test_group_commit_keeps_chain_intact_under_concurrency(tmp_path: pathlib.Path) -> None:
+    """并发 append_async：一次 fsync 覆盖多条记录，链仍连续可校验，且每条返回时都已落盘。"""
+    spool = AuditSpool(tmp_path, "dp-gc")
+    drains = 0
+    original = spool._drain
+
+    def counting_drain() -> dict[str, int]:
+        nonlocal drains
+        drains += 1
+        return original()
+
+    spool._drain = counting_drain  # type: ignore[method-assign]
+    lines = await asyncio.gather(*[spool.append_async("pdp.decision", record={"i": i}, now=DAY2) for i in range(200)])
+    assert sorted(x["seq"] for x in lines) == list(range(1, 201))
+    path = tmp_path / "dp-gc-20261019.jsonl"
+    assert len(path.read_text(encoding="utf-8").splitlines()) == 200
+    assert verify_spool_file(path) == []
+    assert drains < 200, f"组提交应合并 fsync，实际 {drains} 次"

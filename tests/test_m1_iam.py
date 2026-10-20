@@ -300,3 +300,33 @@ async def test_import_dry_run_then_apply(db: Database, seeded: Seed) -> None:
         row = (await conn.execute(select(t.iam_user).where(t.iam_user.c.employee_no == "E-VN-100"))).mappings().one()
     assert row["import_batch_id"] == real.batch_id
     assert row["company_id"] == seeded.vn
+
+
+async def test_import_rollback_deletes_unused_and_disables_used(db: Database, seeded: Seed) -> None:
+    from aip.control_plane.iam import consumers
+
+    csv_text = "display_name,employee_no,home_org_code,email\n甲,E-RB-1,VN01-MFG,\n乙,E-RB-2,VN01-MFG,\n"
+    vn = await actor_for(db, seeded, "vn_admin")
+    async with db.tx(vn.db_scope()) as conn:
+        res = await users.import_users_csv(conn, vn, csv_text, dry_run=False)
+        used = (await conn.execute(select(t.iam_user.c.id).where(t.iam_user.c.employee_no == "E-RB-2"))).scalar_one()
+    async with db.tx(DbScope.system()) as conn:
+        await consumers.create_binding(conn, Actor.system_actor(), seeded.consumers["vn-ai"], "rb2", used)
+    async with db.tx(vn.db_scope()) as conn:
+        assert await users.rollback_import(conn, vn, res.batch_id) == {"deleted": 1, "disabled": 1}
+        left = {
+            r.employee_no: r.status
+            for r in (
+                await conn.execute(
+                    select(t.iam_user.c.employee_no, t.iam_user.c.status).where(
+                        t.iam_user.c.import_batch_id == res.batch_id
+                    )
+                )
+            )
+        }
+    assert left == {"E-RB-2": "disabled"}
+    kh = await actor_for(db, seeded, "kh_admin")
+    async with db.tx(kh.db_scope()) as conn:
+        with pytest.raises(PlatformError) as e:
+            await users.rollback_import(conn, kh, res.batch_id)
+    assert e.value.code == ErrorCode.NOT_FOUND

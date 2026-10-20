@@ -158,6 +158,8 @@ class World:
         store: ExecutionStore | None = None,
         clearance: int = 2,
         resolver: Any = None,
+        consumer_jwk: dict[str, str] | None = None,
+        exposure: list[str] | None = None,
     ) -> None:
         self.store = store or MemoryExecutionStore()
         self.app = create_app(
@@ -169,6 +171,8 @@ class World:
             resolver=resolver,
         )
         iam = iam_payload(clearance)
+        if consumer_jwk:
+            iam["consumers"][CONSUMER]["jwks"] = {consumer_jwk["kid"]: consumer_jwk}
         releases = []
         for i, spec in enumerate(tools):
             asset = f"asset-{i}"
@@ -196,7 +200,7 @@ class World:
                     "env": "test",
                     "channel": "stable",
                     "scope": {"group": True, "company_ids": [], "consumer_ids": []},
-                    "exposure": ["rest", "mcp"],
+                    "exposure": exposure or ["rest", "mcp"],
                     "status": "active",
                     "classification": spec["data_classification"],
                     "spec": spec,
