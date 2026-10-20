@@ -5,6 +5,7 @@ import {
   AuditOutlined,
   BellOutlined,
   BgColorsOutlined,
+  BookOutlined,
   CheckSquareOutlined,
   ClusterOutlined,
   CloseOutlined,
@@ -45,6 +46,7 @@ function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, n
 const ApprovalsPage = page(() => import("./pages/Approvals"), "ApprovalsPage");
 const AssetsPage = page(() => import("./pages/Assets"), "AssetsPage");
 const AuditPage = page(() => import("./pages/Audit"), "AuditPage");
+const CatalogPage = page(() => import("./pages/Catalog"), "CatalogPage");
 const ConnectionsPage = page(() => import("./pages/Connections"), "ConnectionsPage");
 const ConsumersPage = page(() => import("./pages/Consumers"), "ConsumersPage");
 const GrantsPage = page(() => import("./pages/Grants"), "GrantsPage");
@@ -74,6 +76,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/assets", label: t("资产与门禁"), icon: <ApiOutlined />, element: <AssetsPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
+  { path: "/catalog", label: t("资产目录"), icon: <BookOutlined />, element: <CatalogPage />,
+    roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
   { path: "/grants", label: t("授权"), icon: <SafetyCertificateOutlined />, element: <GrantsPage />,
     roles: ["platform_admin", "company_admin"] },
   { path: "/consumers", label: t("消费方与绑定"), icon: <KeyOutlined />, element: <ConsumersPage />,

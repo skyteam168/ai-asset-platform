@@ -855,6 +855,62 @@ def control_plane() -> dict[str, Any]:
                 params=["Id"],
             )
         },
+        f"{A}/consumers/{{id}}/webhooks": {
+            "get": op("listWebhooks", "webhook", "消费方的 webhook 端点", res={"type": "object"}, params=["Id"]),
+            "post": op(
+                "createWebhook",
+                "webhook",
+                "登记 webhook 订阅（返回一次性明文密钥）",
+                req=o({"events": {"type": "array", "items": S}, "url": S}, ["events", "url"]),
+                res={"type": "object"},
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/webhooks/{{id}}/rotate-secret": {
+            "post": op(
+                "rotateWebhookSecret",
+                "webhook",
+                "轮换 webhook 密钥（旧密钥立即失效，新密钥只返回一次）",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/webhooks/{{id}}/status": {
+            "put": op(
+                "setWebhookStatus",
+                "webhook",
+                "启用或停用 webhook 端点",
+                req=o({"status": {"enum": ["active", "disabled"]}}, ["status"]),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/webhooks/{{id}}/deliveries": {
+            "get": op(
+                "listWebhookDeliveries",
+                "webhook",
+                "webhook 投递记录",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/webhooks/process": {
+            "post": op(
+                "processWebhooks",
+                "webhook",
+                "手动触发到期 webhook 投递",
+                res={"type": "object"},
+            )
+        },
+        f"{A}/console/catalog": {
+            "get": op(
+                "consoleCatalog",
+                "catalog",
+                "控制台资产目录（最新发布快照中的 Tool 与套件）",
+                res={"type": "object"},
+            )
+        },
         f"{A}/grant-ceilings/{{id}}/quota": {
             "put": op(
                 "setCeilingQuota",
@@ -993,6 +1049,7 @@ def data_plane() -> dict[str, Any]:
                     "risk_level": S,
                     "input_schema": {"type": "object"},
                     "output_schema": {"type": "object"},
+                    "bundles": {"type": "array", "items": S, "description": "所属套件 name 列表"},
                 },
                 ["capability_id", "version"],
             ),

@@ -109,6 +109,15 @@ async def publish(conn: AsyncConnection, key: SigningKey) -> dict[str, Any] | No
             seq=seq, event_seq=event_seq, sha256=digest, signature=signature, policy_version=bundle_rev, payload=payload
         )
     )
+    # 目录变更通知：订阅了 catalog.changed 的 webhook 入队（architecture.md 10.5）
+    from aip.control_plane.webhook import service as wh
+
+    await wh.enqueue(
+        conn,
+        event_kind="catalog.changed",
+        body={"event": "catalog.changed", "payload": {"seq": seq, "sha256": digest}},
+        event_id=f"release:{seq}",
+    )
     return {"kind": "release", "seq": seq, "full": True, "sha256": digest, "signature": signature, "payload": payload}
 
 

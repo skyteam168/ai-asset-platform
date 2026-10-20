@@ -11,6 +11,7 @@ tags:
 - name: approval
 - name: audit
 - name: auth
+- name: catalog
 - name: connection
 - name: grant
 - name: iam
@@ -19,6 +20,7 @@ tags:
 - name: release
 - name: risk
 - name: snapshot
+- name: webhook
 paths:
   /healthz:
     get:
@@ -1486,6 +1488,149 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Quota'
+  /api/v1/consumers/{id}/webhooks:
+    get:
+      operationId: listWebhooks
+      tags:
+      - webhook
+      summary: 消费方的 webhook 端点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      operationId: createWebhook
+      tags:
+      - webhook
+      summary: 登记 webhook 订阅（返回一次性明文密钥）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                events:
+                  type: array
+                  items:
+                    type: string
+                url:
+                  type: string
+              required:
+              - events
+              - url
+  /api/v1/webhooks/{id}/rotate-secret:
+    post:
+      operationId: rotateWebhookSecret
+      tags:
+      - webhook
+      summary: 轮换 webhook 密钥（旧密钥立即失效，新密钥只返回一次）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/webhooks/{id}/status:
+    put:
+      operationId: setWebhookStatus
+      tags:
+      - webhook
+      summary: 启用或停用 webhook 端点
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  enum:
+                  - active
+                  - disabled
+              required:
+              - status
+  /api/v1/webhooks/{id}/deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags:
+      - webhook
+      summary: webhook 投递记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/webhooks/process:
+    post:
+      operationId: processWebhooks
+      tags:
+      - webhook
+      summary: 手动触发到期 webhook 投递
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/console/catalog:
+    get:
+      operationId: consoleCatalog
+      tags:
+      - catalog
+      summary: 控制台资产目录（最新发布快照中的 Tool 与套件）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota

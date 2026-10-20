@@ -165,4 +165,61 @@ def router() -> APIRouter:
             shards = (await conn.execute(text("SELECT count(DISTINCT shard_id), count(*) FROM audit.audit_log"))).one()
         return {"ok": not problems, "problems": [str(p) for p in problems], "shards": shards[0], "records": shards[1]}
 
+    @r.get(f"{V}/console/catalog", tags=["catalog"], operation_id="consoleCatalog")
+    async def console_catalog(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """控制台资产目录：最新发布快照中的 Tool 与套件（运维视角；消费方可见性以数据面 GET /catalog 为准）。"""
+        actor.require(
+            actor.has("platform_admin")
+            or actor.has("asset_developer")
+            or actor.has("data_owner")
+            or actor.has("company_admin"),
+            "需要平台角色",
+        )
+        async with db.tx(DbScope.system()) as conn:
+            row = (
+                await conn.execute(
+                    select(t.release_snapshot.c.payload).order_by(t.release_snapshot.c.seq.desc()).limit(1)
+                )
+            ).first()
+        releases = list((row[0] if row else {}).get("releases") or [])
+        membership: dict[str, list[str]] = {}
+        bundles: list[dict[str, Any]] = []
+        for rel in releases:
+            if rel.get("asset_type") != "bundle" or rel.get("status") != "active":
+                continue
+            bname = (rel.get("spec") or {}).get("name") or rel.get("name")
+            tools = list((rel.get("spec") or {}).get("tools") or [])
+            bundles.append(
+                {
+                    "name": bname,
+                    "capability_id": rel.get("capability_id"),
+                    "version": rel.get("version"),
+                    "description": (rel.get("spec") or {}).get("description", ""),
+                    "tools": tools,
+                }
+            )
+            for ref in tools:
+                cap, _, _ = str(ref).partition("@")
+                if cap:
+                    membership.setdefault(cap, []).append(bname)
+        items = []
+        for rel in releases:
+            if rel.get("asset_type") != "tool" or rel.get("status") != "active":
+                continue
+            spec = rel.get("spec") or {}
+            items.append(
+                {
+                    "capability_id": rel.get("capability_id"),
+                    "version": rel.get("version"),
+                    "title": spec.get("title") or spec.get("name") or rel.get("name"),
+                    "description": spec.get("description", ""),
+                    "risk_level": spec.get("risk_level", "danger"),
+                    "egress_class": spec.get("egress_class", "none"),
+                    "data_classification": spec.get("data_classification") or rel.get("classification"),
+                    "bundles": sorted(set(membership.get(rel.get("capability_id", ""), []))),
+                }
+            )
+        items.sort(key=lambda x: x["capability_id"] or "")
+        return {"items": items, "bundles": bundles, "next_cursor": None, "has_more": False}
+
     return r

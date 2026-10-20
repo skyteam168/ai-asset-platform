@@ -1,6 +1,6 @@
 import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
-import { get, post, type Page } from "../api";
+import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
@@ -71,6 +71,7 @@ function ConsumerDrawer({ consumer, onClose }: { consumer: Consumer | null; onCl
           <Tabs style={{ marginTop: 12 }} items={[
             { key: "bindings", label: t("用户绑定"), children: <Bindings consumer={consumer} /> },
             { key: "creds", label: t("凭据与公钥"), children: <Credentials consumer={consumer} /> },
+            { key: "webhooks", label: t("Webhook"), children: <Webhooks consumer={consumer} /> },
             { key: "debug", label: t("断言调试器"), children: <AssertionDebugger consumer={consumer} /> },
           ]} />
         </>
@@ -132,6 +133,95 @@ function Credentials({ consumer }: { consumer: Consumer }) {
         </Form.Item>
         <Button htmlType="submit">{t("登记公钥")}</Button>
       </Form>
+    </Space>
+  );
+}
+
+interface WebhookEndpoint {
+  id: string;
+  url: string;
+  status: string;
+  events: string[];
+  created_at: string;
+}
+interface WebhookDelivery {
+  id: string;
+  event_kind: string;
+  status: string;
+  attempts: number;
+  last_status_code: number | null;
+  last_error: string | null;
+  created_at: string;
+}
+
+function Webhooks({ consumer }: { consumer: Consumer }) {
+  const list = useLoad(() => get<Page<WebhookEndpoint>>(`/consumers/${consumer.id}/webhooks`), [consumer.id]);
+  const [form] = Form.useForm();
+  const act = useAction();
+  const [secret, setSecret] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<WebhookDelivery[] | null>(null);
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Form form={form} layout="vertical"
+        onFinish={async (v) => {
+          const r = await act(() => post<{ secret: string }>(`/consumers/${consumer.id}/webhooks`, {
+            events: v.events, url: v.url,
+          }), t("已登记"));
+          if (r) { setSecret(r.secret); form.resetFields(); list.reload(); }
+        }}>
+        <Form.Item name="url" label={t("回调地址")} rules={[{ required: true }]}>
+          <Input placeholder="https://example.com/hooks/aip" />
+        </Form.Item>
+        <Form.Item name="events" label={t("事件")} rules={[{ required: true }]}
+          initialValue={["catalog.changed", "risk.triggered"]}>
+          <Select mode="multiple" options={[
+            { value: "catalog.changed", label: "catalog.changed" },
+            { value: "run.finished", label: "run.finished" },
+            { value: "risk.triggered", label: "risk.triggered" },
+          ]} />
+        </Form.Item>
+        <Button htmlType="submit" type="primary">{t("登记 Webhook")}</Button>
+      </Form>
+      {secret && (
+        <Alert type="warning" showIcon message={t("密钥只显示这一次，请交给接收方保存")}
+          description={<Typography.Paragraph copyable code style={{ margin: 0 }}>{secret}</Typography.Paragraph>} />
+      )}
+      <Table<WebhookEndpoint> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
+        columns={[
+          { title: "URL", dataIndex: "url", ellipsis: true },
+          { title: t("事件"), dataIndex: "events", render: (v: string[]) => v?.join(", ") },
+          { title: t("状态"), dataIndex: "status", render: (v) => <Tag color={v === "active" ? "green" : "default"}>{v}</Tag> },
+          {
+            title: t("操作"), width: 220,
+            render: (_, r) => (
+              <Space size="small">
+                <Button size="small" onClick={async () => {
+                  const res = await act(() => post<{ secret: string }>(`/webhooks/${r.id}/rotate-secret`, {}));
+                  if (res) setSecret(res.secret);
+                }}>{t("轮换密钥")}</Button>
+                <Button size="small" onClick={async () => {
+                  await act(() => put(`/webhooks/${r.id}/status`, { status: r.status === "active" ? "disabled" : "active" }));
+                  list.reload();
+                }}>{r.status === "active" ? t("停用") : t("启用")}</Button>
+                <Button size="small" onClick={async () => {
+                  const d = await get<Page<WebhookDelivery>>(`/webhooks/${r.id}/deliveries`);
+                  setDeliveries(d.items);
+                }}>{t("投递记录")}</Button>
+              </Space>
+            ),
+          },
+        ]} />
+      {deliveries && (
+        <Table<WebhookDelivery> rowKey="id" size="small" dataSource={deliveries} pagination={false}
+          columns={[
+            { title: t("事件"), dataIndex: "event_kind" },
+            { title: t("状态"), dataIndex: "status" },
+            { title: t("次数"), dataIndex: "attempts", width: 60 },
+            { title: "HTTP", dataIndex: "last_status_code", width: 70 },
+            { title: t("错误"), dataIndex: "last_error", ellipsis: true },
+            { title: t("时间"), dataIndex: "created_at", render: (v: string) => v.slice(0, 19).replace("T", " ") },
+          ]} />
+      )}
     </Space>
   );
 }

@@ -81,18 +81,56 @@ class McpGateway:
     def __init__(self, auth: AuthContext, runtime: ToolRuntime) -> None:
         self.auth, self.runtime = auth, runtime
 
-    async def visible_tools(self, principal: Principal) -> list[dict[str, Any]]:
+    def find_bundle(self, name: str) -> dict[str, Any] | None:
+        """按套件 name（spec.name）查找当前环境 stable 渠道的 active 套件发布。"""
+        env = self.runtime.policy.env
+        for rel in self.runtime.releases.releases(env):
+            if (
+                rel["asset_type"] == "bundle"
+                and rel["channel"] == "stable"
+                and rel["status"] == "active"
+                and (rel["spec"].get("name") == name or rel["capability_id"] == name or rel["name"] == name)
+            ):
+                return rel
+        return None
+
+    def _bundle_member_caps(self, bundle: dict[str, Any]) -> set[str]:
+        """套件成员 capability_id 集合（忽略版本后缀，按当前发布解析）。"""
+        out: set[str] = set()
+        for ref in bundle["spec"].get("tools") or []:
+            cap, _, _ = ref.partition("@")
+            if cap:
+                out.add(cap)
+        return out
+
+    async def visible_tools(
+        self, principal: Principal, *, bundle_name: str | None = None
+    ) -> list[dict[str, Any]]:
         policy = self.runtime.policy
+        allowed: set[str] | None = None
+        if bundle_name is not None:
+            bundle = self.find_bundle(bundle_name)
+            if bundle is None:
+                return []
+            allowed = self._bundle_member_caps(bundle)
         out = []
         for rel in self.runtime.releases.releases(policy.env):
             if rel["channel"] != "stable" or "mcp" not in rel["exposure"] or rel["asset_type"] != "tool":
+                continue
+            if allowed is not None and rel["capability_id"] not in allowed:
                 continue
             if await policy.visible(principal, rel, exposure="mcp"):
                 out.append(tool_definition(rel))
         return sorted(out, key=lambda t: t["name"])
 
-    async def is_visible(self, principal: Principal, name: str) -> bool:
+    async def is_visible(
+        self, principal: Principal, name: str, *, bundle_name: str | None = None
+    ) -> bool:
         """单个工具的可见性，与 tools/list 规则一致（只评估这一个工具，一次策略调用）。"""
+        if bundle_name is not None:
+            bundle = self.find_bundle(bundle_name)
+            if bundle is None or name not in self._bundle_member_caps(bundle):
+                return False
         policy = self.runtime.policy
         try:
             rel = self.runtime.releases.resolve(name, policy.env)
@@ -102,7 +140,7 @@ class McpGateway:
             return False
         return await policy.visible(principal, rel, exposure="mcp")
 
-    async def handle(self, request: Request) -> Response:
+    async def handle(self, request: Request, *, bundle_name: str | None = None) -> Response:
         try:
             body = json.loads(await request.body() or b"null")
         except ValueError:
@@ -120,7 +158,7 @@ class McpGateway:
             principal = await self.auth.principal_from_request(
                 request.headers.get("authorization"), request.headers.get("x-user-assertion")
             )
-            result = await self._dispatch(method, params, principal, modern, request)
+            result = await self._dispatch(method, params, principal, modern, request, bundle_name=bundle_name)
         except PlatformError as e:
             if e.status == 401:
                 meta = f"{get_settings().issuer}/.well-known/oauth-protected-resource"
@@ -171,7 +209,14 @@ class McpGateway:
         return True
 
     async def _dispatch(
-        self, method: str, params: dict[str, Any], principal: Principal, modern: bool, request: Request
+        self,
+        method: str,
+        params: dict[str, Any],
+        principal: Principal,
+        modern: bool,
+        request: Request,
+        *,
+        bundle_name: str | None = None,
     ) -> dict[str, Any]:
         if method == "initialize":
             requested = params.get("protocolVersion")
@@ -192,19 +237,29 @@ class McpGateway:
         if method == "ping":
             return {}
         if method == "tools/list":
-            result: dict[str, Any] = {"tools": await self.visible_tools(principal)}
+            result: dict[str, Any] = {
+                "tools": await self.visible_tools(principal, bundle_name=bundle_name)
+            }
             if modern:
                 result.update(ttlMs=TOOLS_TTL_MS, cacheScope="private")
             return result
         if method == "tools/call":
-            return await self._call(params, principal, request)
+            return await self._call(params, principal, request, bundle_name=bundle_name)
         raise RpcError(METHOD_NOT_FOUND, f"Method not found: {method}")
 
-    async def _call(self, params: dict[str, Any], principal: Principal, request: Request) -> dict[str, Any]:
+    async def _call(
+        self,
+        params: dict[str, Any],
+        principal: Principal,
+        request: Request,
+        *,
+        bundle_name: str | None = None,
+    ) -> dict[str, Any]:
         name, args = params.get("name"), params.get("arguments") or {}
         if not isinstance(name, str) or not isinstance(args, dict):
             raise RpcError(INVALID_PARAMS, "name 与 arguments 必填")
-        if not await self.is_visible(principal, name):  # 未授权与不存在返回同一错误，不泄露能力是否存在
+        # 未授权与不存在返回同一错误，不泄露能力是否存在；套件端点额外限制成员集
+        if not await self.is_visible(principal, name, bundle_name=bundle_name):
             raise RpcError(INVALID_PARAMS, f"Unknown tool: {name}")
         meta = params.get("_meta") or {}
         key = request.headers.get("idempotency-key") or (
@@ -251,5 +306,10 @@ def router(gateway: McpGateway) -> APIRouter:
     @r.post("/mcp", operation_id="mcp")
     async def mcp(request: Request) -> Response:
         return await gateway.handle(request)
+
+    @r.post("/mcp/bundles/{name}", operation_id="mcpBundle")
+    async def mcp_bundle(name: str, request: Request) -> Response:
+        """按套件暴露的 MCP 端点：tools/list 只返回套件内且 Principal 可见的工具。"""
+        return await gateway.handle(request, bundle_name=name)
 
     return r

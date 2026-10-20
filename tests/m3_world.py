@@ -161,10 +161,12 @@ class World:
         consumer_jwk: dict[str, str] | None = None,
         exposure: list[str] | None = None,
         workflows: list[dict[str, Any]] | None = None,
+        bundles: list[dict[str, Any]] | None = None,
         runtime_engine: Any = None,
         llm: Any = None,
         static_token: str | None = None,
         extra_users: dict[str, dict[str, Any]] | None = None,
+        grant_caps: set[str] | None = None,
     ) -> None:
         # 有运行库时用 PostgreSQL 存储（确认、Workflow 需要），否则进程内存储
         self.store = store or (None if runtime_engine is not None else MemoryExecutionStore())
@@ -194,18 +196,20 @@ class World:
         releases = []
         for i, spec in enumerate(tools):
             asset = f"asset-{i}"
-            iam["grants"].append(
-                {
-                    "id": f"g{i}",
-                    "asset_id": asset,
-                    "grantee_type": "consumer",
-                    "grantee_id": CONSUMER,
-                    "env": "test",
-                    "company_id": VN,
-                    "within_ceiling": True,
-                    "expires_at": "2099-01-01T00:00:00+00:00",
-                }
-            )
+            # grant_caps 为 None 时全部授权；否则只授予指定 capability（测目录 / 套件过滤）
+            if grant_caps is None or spec["capability_id"] in grant_caps:
+                iam["grants"].append(
+                    {
+                        "id": f"g{i}",
+                        "asset_id": asset,
+                        "grantee_type": "consumer",
+                        "grantee_id": CONSUMER,
+                        "env": "test",
+                        "company_id": VN,
+                        "within_ceiling": True,
+                        "expires_at": "2099-01-01T00:00:00+00:00",
+                    }
+                )
             releases.append(
                 {
                     "release_id": f"r{i}",
@@ -222,6 +226,39 @@ class World:
                     "status": "active",
                     "classification": spec["data_classification"],
                     "spec": spec,
+                }
+            )
+        for bi, bspec in enumerate(bundles or []):
+            asset = f"bundle-asset-{bi}"
+            # 套件 MCP 端点按成员 Tool 的 PDP 可见性过滤；套件资产本身也挂一条授权便于快照一致
+            iam["grants"].append(
+                {
+                    "id": f"bg{bi}",
+                    "asset_id": asset,
+                    "grantee_type": "consumer",
+                    "grantee_id": CONSUMER,
+                    "env": "test",
+                    "company_id": VN,
+                    "within_ceiling": True,
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                }
+            )
+            releases.append(
+                {
+                    "release_id": f"br{bi}",
+                    "asset_id": asset,
+                    "asset_type": "bundle",
+                    "name": bspec["name"],
+                    "capability_id": bspec.get("capability_id", bspec["name"]),
+                    "version": "1.0.0",
+                    "content_hash": "x",
+                    "env": "test",
+                    "channel": "stable",
+                    "scope": {"group": True, "company_ids": [], "consumer_ids": []},
+                    "exposure": exposure or ["rest", "mcp"],
+                    "status": "active",
+                    "classification": 2,
+                    "spec": bspec,
                 }
             )
         for j, dsl in enumerate(workflows or []):

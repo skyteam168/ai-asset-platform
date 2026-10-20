@@ -266,9 +266,44 @@ def create_app(
         authorization: Annotated[str | None, Header()] = None,
         x_user_assertion: Annotated[str | None, Header()] = None,
     ) -> dict[str, Any]:
-        """M1：只做认证与 Principal 解析；目录内容在 M4 按发布快照与 PDP 过滤。"""
-        await ctx.principal_from_request(authorization, x_user_assertion)
-        return {"items": [], "next_cursor": None, "has_more": False}
+        """按 Principal 过滤的能力目录（architecture.md 10.5）：能力、版本、描述、风险、所属套件。"""
+        principal = await ctx.principal_from_request(authorization, x_user_assertion)
+        policy = runtime.policy
+        # 套件名 → 成员 capability_id；目录条目反查所属套件
+        membership: dict[str, list[str]] = {}
+        for rel in runtime.releases.releases(policy.env):
+            if rel["asset_type"] != "bundle" or rel["channel"] != "stable" or rel["status"] != "active":
+                continue
+            bname = rel["spec"].get("name") or rel["name"]
+            for ref in rel["spec"].get("tools") or []:
+                cap, _, _ = ref.partition("@")
+                if cap:
+                    membership.setdefault(cap, []).append(bname)
+        items: list[dict[str, Any]] = []
+        for rel in runtime.releases.releases(policy.env):
+            if rel["asset_type"] != "tool" or rel["channel"] != "stable" or rel["status"] != "active":
+                continue
+            # 目录对 rest / mcp 任一出口可见即可（消费方用 REST 拉目录）
+            if not (
+                await policy.visible(principal, rel, exposure="rest")
+                or await policy.visible(principal, rel, exposure="mcp")
+            ):
+                continue
+            spec = rel["spec"]
+            items.append(
+                {
+                    "capability_id": rel["capability_id"],
+                    "version": rel["version"],
+                    "title": spec.get("title") or spec.get("name") or rel["name"],
+                    "description": spec.get("description", ""),
+                    "risk_level": spec.get("risk_level", "danger"),
+                    "input_schema": spec.get("input_schema") or {},
+                    "output_schema": spec.get("output_schema") or {},
+                    "bundles": sorted(set(membership.get(rel["capability_id"], []))),
+                }
+            )
+        items.sort(key=lambda x: x["capability_id"])
+        return {"items": items, "next_cursor": None, "has_more": False}
 
     @app.post("/api/v1/invoke/{capability_id}", tags=["invoke"], operation_id="invoke")
     async def invoke(

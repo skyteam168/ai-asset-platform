@@ -173,6 +173,13 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         # DSL 静态校验：无环、可达、表达式、引用的 Tool 版本可解析、写节点有补偿或前置人工确认（6.3）
         tools = await _tool_versions(conn, _workflow_refs(spec))
         problems += validate_dsl(spec, lambda cap, ver: (tools.get((cap, ver)) or {}).get("spec"))
+    if a["type"] == "bundle" and not problems:
+        # 套件成员须可解析；组合约束（L3+ 读 ∩ external）在 G6 显式批准，G0 只记录不阻断
+        refs = list(spec.get("tools") or [])
+        tools = await _tool_versions(conn, refs)
+        for ref in refs:
+            if split_ref(ref) not in tools:
+                problems.append(f"依赖不可解析：Tool {ref}")
     ref = spec.get("connector_ref", {}).get("connector")
     if (
         ref
@@ -185,7 +192,7 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
     ):
         problems.append(f"依赖不可解析：Connector 实例 {ref} 不存在")
     kinds = {r[0] for r in await conn.execute(select(test_case.c.kind).where(test_case.c.version_id == version_id))}
-    if a["type"] != "workflow" and kinds != {"functional", "permission"}:
+    if a["type"] not in ("workflow", "bundle") and kinds != {"functional", "permission"}:
         problems.append("至少需要一个功能用例和一个权限用例")
     if (
         await conn.execute(select(acceptance_sheet.c.version_id).where(acceptance_sheet.c.version_id == version_id))
@@ -214,8 +221,8 @@ async def run_lab(
     cases = [
         dict(r) for r in (await conn.execute(select(test_case).where(test_case.c.version_id == version_id))).mappings()
     ]
-    if a["type"] == "workflow":
-        return await _workflow_lab(conn, actor, v, a)
+    if a["type"] in ("workflow", "bundle"):
+        return await _composition_lab(conn, actor, v, a)
     iam = await iam_snapshot.build_payload(conn)
     conns = await conn_service.snapshot_part(conn)
     report = await run_cases(
@@ -252,7 +259,13 @@ async def _open_reviews(conn: AsyncConnection, v: dict[str, Any], a: dict[str, A
         approver_role="business_owner",
         sla_business_days=3,
     )
-    required = 1 if _fast_track(v["spec"], a["classification"]) else 2
+    # 套件没有自身的 risk_level；组合风险时强制双人 + 显式批准（architecture.md 8.7）
+    risk = await _bundle_composition_risk(conn, a["type"], v["spec"])
+    required = 1 if not risk and _fast_track(v["spec"], a["classification"]) else 2
+    g6_payload: dict[str, Any] = {"fast_track": required == 1}
+    if risk:
+        g6_payload["composition_risk"] = True
+        g6_payload["composition_detail"] = risk
     g6 = await approval.create(
         conn,
         kind="G6",
@@ -262,7 +275,7 @@ async def _open_reviews(conn: AsyncConnection, v: dict[str, Any], a: dict[str, A
         approver_role="data_owner",
         required=required,
         sla_business_days=2,
-        payload={"fast_track": required == 1},
+        payload=g6_payload,
     )
     return {"g5_approval": str(g5), "g6_approval": str(g6)}
 
@@ -271,6 +284,32 @@ def _workflow_refs(spec: dict[str, Any]) -> list[str]:
     return [
         n[k] for n in spec.get("nodes", []) for k in ("ref", "compensation") if n.get("type") == "tool" and n.get(k)
     ]
+
+
+def _bundle_refs(spec: dict[str, Any]) -> list[str]:
+    return list(spec.get("tools") or [])
+
+
+def composition_risk_of(tool_specs: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """同一集合同时含 L3+ 读 Tool 与 egress_class=external → 需 G6 显式批准（8.7）。"""
+    l3_read = [
+        s.get("capability_id", "")
+        for s in tool_specs
+        if s.get("risk_level") == "read" and int(s.get("data_classification") or 0) >= 3
+    ]
+    external = [s.get("capability_id", "") for s in tool_specs if s.get("egress_class") == "external"]
+    if l3_read and external:
+        return {"l3_read": l3_read, "external_egress": external}
+    return None
+
+
+async def _bundle_composition_risk(
+    conn: AsyncConnection, asset_type: str, spec: dict[str, Any]
+) -> dict[str, Any] | None:
+    if asset_type != "bundle":
+        return None
+    tools = await _tool_versions(conn, _bundle_refs(spec))
+    return composition_risk_of([t["spec"] for t in tools.values()])
 
 
 async def _tool_versions(conn: AsyncConnection, refs: list[str]) -> dict[tuple[str, str], dict[str, Any]]:
@@ -292,14 +331,19 @@ async def _tool_versions(conn: AsyncConnection, refs: list[str]) -> dict[tuple[s
     return out
 
 
-async def _workflow_lab(conn: AsyncConnection, actor: Actor, v: dict[str, Any], a: dict[str, Any]) -> dict[str, Any]:
-    """Workflow 的 G1–G3（M5）：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
-    Workflow 在沙箱中的整体回放需要隔离的运行表，推迟到 M6（见 docs/ops/milestones.md）。"""
-    refs = _workflow_refs(v["spec"])
+async def _composition_lab(
+    conn: AsyncConnection, actor: Actor, v: dict[str, Any], a: dict[str, Any]
+) -> dict[str, Any]:
+    """Workflow / 套件的 G1–G3：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
+    Workflow 在沙箱中的整体回放需要隔离的运行表，推迟到 M6e。"""
+    refs = _workflow_refs(v["spec"]) if a["type"] == "workflow" else _bundle_refs(v["spec"])
     tools = await _tool_versions(conn, refs)
     states = {r: (tools.get(split_ref(r)) or {}).get("state", "missing") for r in refs}
     ok = all(s in registry.RELEASABLE for s in states.values())
-    evidence = {"mode": "composition", "tool_versions": states}
+    risk = composition_risk_of([t["spec"] for t in tools.values()]) if a["type"] == "bundle" else None
+    evidence: dict[str, Any] = {"mode": "composition", "tool_versions": states}
+    if risk:
+        evidence["composition_risk"] = risk
     for gate in ("G1", "G2", "G3"):
         await _record(conn, actor, v, gate, ok, evidence)
     if not ok:
@@ -344,6 +388,20 @@ async def decide(
     who = on_behalf_of or actor.user_id
     if sibling is not None and who in await approval.approvers_of(conn, sibling["id"]):
         raise PlatformError(ErrorCode.PERMISSION_DENIED, "同一人不能既做业务验收又做安全审核")
+    # 套件组合约束：含 L3+ 读与对外发送时，G6 批准必须显式带 composition_override 与理由（8.7）
+    if req["kind"] == "G6" and approve and (req.get("payload") or {}).get("composition_risk"):
+        override = (results or {}).get("composition_override") is True
+        reason = str((results or {}).get("reason") or comment or "").strip()
+        if not override or not reason:
+            raise PlatformError(
+                ErrorCode.INVALID_ARGUMENT,
+                "该套件同时含 L3+ 读与对外发送 Tool，G6 须显式批准（composition_override=true）并写明理由",
+            )
+        # 把理由写入审批 payload，供审计追溯
+        merged = {**(req.get("payload") or {}), "composition_override": True, "composition_reason": reason}
+        await conn.execute(
+            update(approval.approval_request).where(approval.approval_request.c.id == request_id).values(payload=merged)
+        )
     status = await approval.decide(conn, actor, request_id, approve, comment, on_behalf_of)
     v = await registry.version_row(conn, req["subject_id"])
     if req["kind"] == "G5" and status == "approved":

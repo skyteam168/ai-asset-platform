@@ -290,6 +290,29 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 
 本切片发现并修复：Windows 与精简镜像没有系统时区库 → 运行时依赖加入 `tzdata`。
 
+### M6b 套件、目录与 webhook — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 未授权工具不出现在套件与目录 | 通过 | `test_m6_catalog.py::test_catalog_and_bundle_hide_unauthorized`：只授权 L2 工具时，`GET /catalog` 与 `/mcp/bundles/{name}` 的 tools/list 均不含未授权能力 |
+| 组合约束未经 G6 显式批准时拒绝发布 | 通过 | `test_bundle_composition_requires_g6_override`：套件同时含 L3+ 读与 `egress_class=external` 时，G6 无 `composition_override`+理由报错；双人显式批准后版本进入 approved |
+| 签名可验证；篡改或过期时间戳被拒；轮换后旧密钥失效；失败重试 | 通过 | `test_m6_webhook.py`：HMAC 校验、过期/篡改拒绝；首次 500 后重试成功；`rotate_secret` 后旧密钥验签失败 |
+
+| 部分 | 内容 |
+| --- | --- |
+| bundle 资产 | `bundle-spec` Schema（name / description / tools≤30）；`_SPEC_SCHEMAS` 登记；G0 解析成员引用；G1–G3 组合门禁（成员须可发布） |
+| 组合约束（8.7） | 同一套件含 L3+ 读与 external 外发时，G6 payload 带 `composition_risk`，批准须 `composition_override=true` 并写明理由 |
+| MCP 套件端点 | `POST /mcp/bundles/{name}`：tools/list 与 tools/call 仅套件成员 ∩ Principal 可见 |
+| Catalog | 数据面 `GET /catalog` 按 PDP 过滤，条目含所属套件；控制面 `GET /console/catalog` 供控制台运维查看 |
+| webhook | 迁移 0010（`notify.subscription/webhook_endpoint/webhook_delivery`）；HMAC-SHA256(timestamp.nonce.body)、时间戳+nonce 头；出站经 `build_client`；密钥轮换立即失效；指数退避重试；风险事件经 `register_notifier` 入队 |
+| 控制台 | 资产目录页；消费方抽屉 Webhook 页签（登记、轮换、投递记录） |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 5 通过 | `test_m6_catalog.py` 2 + `test_m6_webhook.py` 3 |
+
+仍未完成（M6 后续切片）：M6c Skill Registry 与 corp-skill；M6d 合成探针；M6e loop/parallel/子流程、沙箱回放、通知、人工任务升级。
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

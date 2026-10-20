@@ -400,9 +400,37 @@ CONN = obj(
     ],
 )
 
+# 套件（architecture.md 8.7、10.1）：按场景打包 Tool；≤ 30 个；走门禁与组合约束
+BUNDLE = obj(
+    {
+        "name": {
+            "type": "string",
+            "pattern": r"^[a-z][a-z0-9_]{1,63}$",
+            "description": "套件名，对应 MCP 路径 /mcp/bundles/{name}",
+        },
+        "capability_id": {
+            "type": "string",
+            "pattern": r"^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$",
+            "description": "可选；缺省用资产 name 作为发布快照 capability_id",
+        },
+        "description": {"type": "string", "minLength": 10, "maxLength": 2000},
+        "tools": {
+            "type": "array",
+            "items": REF_AT,
+            "minItems": 1,
+            "maxItems": 30,
+            "uniqueItems": True,
+            "description": "成员 Tool 引用，格式 capability_id@semver",
+        },
+    },
+    ["name", "description", "tools"],
+    extra=False,
+)
+
 SPECS = {
     "tool-spec": ("Tool Spec（architecture.md 6.1）", TOOL),
     "workflow-dsl": ("Workflow DSL（architecture.md 6.3）", WORKFLOW),
+    "bundle-spec": ("套件 Spec（architecture.md 8.7、10.1）", BUNDLE),
     "policy-input": ("PDP 输入（architecture.md 4.4）", POLICY),
     "declarative-connector": ("声明式 REST Connector 映射（architecture.md 9.1）", DECL),
     "system-connection": ("system_connection（architecture.md 9.6、11.3）", CONN),

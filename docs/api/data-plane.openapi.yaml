@@ -621,6 +621,11 @@ components:
           type: object
         output_schema:
           type: object
+        bundles:
+          type: array
+          items:
+            type: string
+          description: 所属套件 name 列表
       required:
       - capability_id
       - version
