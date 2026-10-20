@@ -1,9 +1,9 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Typography } from "antd";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { get, post, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, OrgName, StateTag, useOrgs } from "../components";
+import { Clearance, OrgName, PageCard, PAGINATION, StateTag, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, Ceiling, Consumer, Grant } from "../types";
 import { t } from "../i18n";
@@ -20,15 +20,14 @@ export function GrantsPage() {
   const consumerName = (id: string) => consumers.data?.items.find((c) => c.id === id)?.client_id ?? id.slice(0, 8);
   const lookups = { assets: assets.data?.items ?? [], consumers: consumers.data?.items ?? [], assetName, consumerName };
   return (
-    <>
-      <Typography.Title level={4}>{t("授权")}</Typography.Title>
+    <PageCard>
       <Tabs items={[
         { key: "ceilings", label: t("授权上限（集团 → 分公司）"), children: <Ceilings {...lookups} admin={has("platform_admin")} /> },
         { key: "grants", label: t("授权"), children: <Grants {...lookups} /> },
         { key: "usage", label: t("使用申请"), children: <Usage {...lookups} /> },
         { key: "review", label: t("访问复核"), children: <Review /> },
       ]} />
-    </>
+    </PageCard>
   );
 }
 
@@ -51,14 +50,14 @@ function Ceilings(p: Lookups & { admin: boolean }) {
             <Select placeholder={t("分公司")} style={{ width: 160 }} options={companies.map((c) => ({ value: c.id, label: c.code }))} />
           </Form.Item>
           <Form.Item name="asset_ids" rules={[{ required: true, message: t("必选") }]}>
-            <Select mode="multiple" placeholder={t("资产集合")} style={{ width: 320 }} options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
+            <Select mode="multiple" optionFilterProp="label" placeholder={t("资产集合")} style={{ width: 320 }} options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
           </Form.Item>
           <Form.Item name="max_classification" label={t("密级上限")}><InputNumber min={1} max={4} /></Form.Item>
           <Button htmlType="submit" type="primary">{t("下发上限")}</Button>
         </Form>
       )}
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<Ceiling> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
+      <Table<Ceiling> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("分公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("资产"), dataIndex: "asset_ids", render: (ids: string[]) => ids.map(p.assetName).join("，") },
@@ -82,7 +81,7 @@ function Grants(p: Lookups) {
     <>
       {has("platform_admin", "company_admin") && <Button type="primary" style={{ marginBottom: 12 }} onClick={() => setOpen(true)}>{t("新建授权")}</Button>}
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<Grant> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
+      <Table<Grant> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("资产"), dataIndex: "asset_id", render: p.assetName },
           { title: t("被授权方"), key: "grantee", render: (_, g) => `${g.grantee_type}：${g.grantee_type === "consumer" ? p.consumerName(g.grantee_id) : g.grantee_id.slice(0, 8)}` },
@@ -98,7 +97,7 @@ function Grants(p: Lookups) {
             if (await act(() => post("/grants", body), t("已授权"))) { setOpen(false); list.reload(); }
           }}>
           <Form.Item name="asset_id" label={t("资产")} rules={[{ required: true }]}>
-            <Select options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
+            <Select showSearch optionFilterProp="label" options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
           </Form.Item>
           <Form.Item name="ceiling_id" label={t("依据的授权上限")} rules={[{ required: true }]}
             extra={t("分公司授权不能超出集团下发的上限；没有可选项时请先由平台管理员下发上限。")}>
@@ -144,14 +143,14 @@ function Usage(p: Lookups) {
           <Select placeholder={t("消费方")} style={{ width: 180 }} options={p.consumers.map((c) => ({ value: c.id, label: c.client_id }))} />
         </Form.Item>
         <Form.Item name="asset_id" rules={[{ required: true, message: t("必选") }]}>
-          <Select placeholder={t("资产")} style={{ width: 220 }} options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
+          <Select showSearch optionFilterProp="label" placeholder={t("资产")} style={{ width: 220 }} options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
         </Form.Item>
         <Form.Item name="env"><Select style={{ width: 100 }} options={ENVS} /></Form.Item>
         <Form.Item name="reason" rules={[{ required: true, min: 4, message: t("至少 4 个字") }]}><Input placeholder={t("用途说明")} /></Form.Item>
         <Button htmlType="submit" type="primary">{t("提交申请")}</Button>
       </Form>
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<UsageRequest> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
+      <Table<UsageRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("消费方"), dataIndex: "consumer_id", render: p.consumerName },
           { title: t("资产"), dataIndex: "asset_id", render: p.assetName },

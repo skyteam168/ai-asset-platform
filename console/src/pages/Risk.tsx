@@ -2,7 +2,7 @@ import { Alert, Button, Form, Input, InputNumber, Modal, Segmented, Space, Switc
 import { useState } from "react";
 import { get, post, put, query, type Page } from "../api";
 import { useAuth } from "../auth";
-import { JsonView, OrgName } from "../components";
+import { JsonView, OrgName, PageCard, PAGINATION } from "../components";
 import { useAction, useLoad } from "../hooks";
 import { t } from "../i18n";
 
@@ -56,8 +56,7 @@ const time = (v: string) => v.slice(0, 19).replace("T", " ");
 
 export function RiskPage() {
   return (
-    <>
-      <Typography.Title level={4}>{t("风控与计量")}</Typography.Title>
+    <PageCard>
       <Tabs
         items={[
           { key: "events", label: t("风险事件"), children: <Events /> },
@@ -65,7 +64,7 @@ export function RiskPage() {
           { key: "usage", label: t("计量"), children: <Usage /> },
         ]}
       />
-    </>
+    </PageCard>
   );
 }
 
@@ -101,7 +100,7 @@ function Events() {
       <Alert type="info" showIcon style={{ marginBottom: 12 }}
         message={t("自动熔断的能力在恢复前一直拒绝调用；恢复需写明修复情况，并由另一位数据 Owner 在审批待办中复核。")} />
       {events.error && <Alert type="error" message={events.error} />}
-      <Table<RiskEvent> rowKey="id" size="small" loading={events.loading} dataSource={events.data?.items ?? []}
+      <Table<RiskEvent> pagination={PAGINATION} rowKey="id" loading={events.loading} dataSource={events.data?.items ?? []}
         locale={{ emptyText: t("没有风险事件") }}
         expandable={{ expandedRowRender: (e) => <JsonView value={{ group_key: e.group_key, action_result: e.action_result, note: e.note }} /> }}
         columns={[
@@ -206,7 +205,7 @@ function Usage() {
         <Segmented value={days} onChange={(v) => setDays(Number(v))} options={[1, 7, 30].map((d) => ({ value: d, label: String(d) }))} />
       </Space>
       {usage.error && <Alert type="error" message={usage.error} />}
-      <Table<UsageRow> rowKey={(r) => `${r.day}-${r.company_id}-${r.consumer_id}-${r.capability_id}`} size="small"
+      <Table<UsageRow> pagination={PAGINATION} rowKey={(r) => `${r.day}-${r.company_id}-${r.consumer_id}-${r.capability_id}`}
         loading={usage.loading} dataSource={usage.data?.items ?? []} locale={{ emptyText: t("这段时间没有调用") }}
         columns={[
           { title: t("日期"), dataIndex: "day" },

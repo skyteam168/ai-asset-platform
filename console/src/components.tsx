@@ -1,6 +1,7 @@
-import { Input, Tag, Typography } from "antd";
+import { Button, Input, Tag, Typography } from "antd";
 import type { Rule } from "antd/es/form";
-import { createContext, useContext, useMemo, type ReactNode } from "react";
+import type { TablePaginationConfig } from "antd/es/table";
+import React, { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { get, type Page } from "./api";
 import { useLoad } from "./hooks";
 import type { OrgUnit } from "./types";
@@ -55,12 +56,52 @@ export function Clearance({ level }: { level: number | null | undefined }) {
 const STATE_COLOR: Record<string, string> = {
   draft: "default", testing: "processing", in_review: "gold", approved: "cyan", canary: "purple", active: "green",
   deprecated: "default", retired: "default", suspended: "red", pending_approval: "gold", disabled: "red",
-  passed: "green", failed: "red", pending: "gold",
+  passed: "green", failed: "red", pending: "gold", running: "processing", waiting: "gold",
+  succeeded: "green", compensated: "orange", rejected: "red", cancelled: "default", started: "processing",
+  done: "green",
 };
 
+const STATE_LABEL: Record<string, string> = {
+  draft: t("草稿"),
+  testing: t("测试中"),
+  in_review: t("评审中"),
+  approved: t("已批准"),
+  canary: t("灰度中"),
+  active: t("已生效"),
+  deprecated: t("已弃用"),
+  retired: t("已退役"),
+  suspended: t("已熔断"),
+  pending_approval: t("待审批"),
+  disabled: t("已停用"),
+  passed: t("通过"),
+  failed: t("失败"),
+  pending: t("待处理"),
+  running: t("运行中"),
+  waiting: t("等待中"),
+  succeeded: t("成功"),
+  compensated: t("已补偿"),
+  rejected: t("已驳回"),
+  cancelled: t("已取消"),
+  started: t("执行中"),
+  done: t("完成"),
+};
+
+/** 状态标签：显示译名，原始状态码放在提示里便于排查 */
 export function StateTag({ state }: { state: string }) {
-  return <Tag color={STATE_COLOR[state] ?? "default"}>{state}</Tag>;
+  return (
+    <Tag color={STATE_COLOR[state] ?? "default"} title={state}>
+      {STATE_LABEL[state] ?? state}
+    </Tag>
+  );
 }
+
+/** 页面级表格的统一分页：显示总数、可切换每页条数 */
+export const PAGINATION: TablePaginationConfig = {
+  showTotal: (n: number) => t("共 {0} 条", [n]),
+  showSizeChanger: true,
+  defaultPageSize: 20,
+  pageSizeOptions: [10, 20, 50, 100],
+};
 
 // ---------- JSON 输入：表单里填写 JSON，提交时解析 ----------
 
@@ -90,3 +131,47 @@ export function JsonInput(props: { id?: string; value?: string; onChange?: (v: s
 }
 
 export const parseJson = (v: string | undefined, fallback: unknown = {}) => (v ? JSON.parse(v) : fallback);
+
+/** 页面卡片：与集团其他中台一致的白色（深色模式下深灰）圆角容器 */
+export function PageCard({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+  return (
+    <div className="aip-card" style={style}>
+      {children}
+    </div>
+  );
+}
+
+/** 列表页工具栏：关键字筛选 + 查询 + 右侧动作（新建等） */
+export function Toolbar(p: {
+  placeholder?: string;
+  onSearch?: (keyword: string) => void;
+  actions?: React.ReactNode;
+  extra?: React.ReactNode;
+}) {
+  const [kw, setKw] = useState("");
+  return (
+    <div className="aip-toolbar">
+      {p.onSearch && (
+        <>
+          <Input className="aip-toolbar-search" allowClear placeholder={p.placeholder} value={kw}
+            onChange={(e) => {
+              setKw(e.target.value);
+              if (!e.target.value) p.onSearch?.("");
+            }}
+            onPressEnter={() => p.onSearch?.(kw.trim())} />
+          <Button type="primary" onClick={() => p.onSearch?.(kw.trim())}>{t("查询")}</Button>
+        </>
+      )}
+      {p.actions}
+      <span className="aip-toolbar-spacer" />
+      {p.extra}
+    </div>
+  );
+}
+
+/** 按关键字过滤（任一字段包含即命中，不区分大小写） */
+export function matches<T>(row: T, keyword: string, fields: (keyof T)[]): boolean {
+  if (!keyword) return true;
+  const k = keyword.toLowerCase();
+  return fields.some((f) => String(row[f] ?? "").toLowerCase().includes(k));
+}

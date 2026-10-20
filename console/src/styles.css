@@ -1,0 +1,276 @@
+/* 全局样式：补足 Ant Design token 覆盖不到的细节（侧栏结构、页签条、卡片、滚动条）。颜色来自 theme.tsx 写入的 CSS 变量。 */
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--aip-layout, #f5f6f8);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, currentColor 22%, transparent) transparent;
+}
+
+/* ---------- 侧栏 ---------- */
+.aip-sider {
+  border-inline-end: 1px solid var(--aip-border);
+}
+.aip-sider .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+}
+.aip-brand {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  flex: none;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.aip-brand-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--aip-border);
+  flex: none;
+}
+.aip-brand-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+.aip-sider-menu {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 4px;
+  border-inline-end: none !important;
+}
+.aip-sider-menu .ant-menu-item-selected {
+  font-weight: 600;
+}
+/* 分组标题在子项被选中时保持中性色（与集团其他中台一致） */
+.aip-sider-menu .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: inherit;
+}
+.aip-sider-foot {
+  flex: none;
+  border-top: 1px solid var(--aip-border);
+  padding: 8px 10px;
+}
+.aip-sider-foot .ant-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding-inline: 14px;
+}
+
+/* ---------- 顶栏 ---------- */
+.aip-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--aip-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.aip-page-title {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.aip-search {
+  width: 250px;
+  border-radius: 18px !important;
+  background: var(--aip-subtle) !important;
+  border-color: transparent !important;
+}
+.aip-kbd {
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--aip-border);
+  opacity: 0.75;
+  white-space: nowrap;
+}
+.aip-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.aip-status.ok {
+  color: #1ca035;
+  background: color-mix(in srgb, #1ca035 12%, transparent);
+}
+.aip-status.down {
+  color: #e5484d;
+  background: color-mix(in srgb, #e5484d 12%, transparent);
+}
+.aip-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.aip-icon-btn.ant-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  font-size: 16px;
+}
+.aip-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.aip-user:hover {
+  background: var(--aip-hover);
+}
+
+/* ---------- 页签条 ---------- */
+.aip-tabs {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--aip-border);
+  background: var(--aip-container);
+}
+.aip-tabs-scroll {
+  flex: 1;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.aip-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+.aip-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 8px 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--aip-border);
+  background: transparent;
+  color: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex: none;
+}
+.aip-tab::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.35;
+}
+.aip-tab:hover {
+  background: var(--aip-hover);
+}
+.aip-tab.active {
+  color: var(--aip-primary);
+  border-color: color-mix(in srgb, var(--aip-primary) 35%, transparent);
+  background: var(--aip-selected);
+}
+.aip-tab.active::before {
+  opacity: 1;
+}
+.aip-tab-close {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  font-size: 10px;
+  opacity: 0.6;
+}
+.aip-tab-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+/* ---------- 内容卡片 ---------- */
+.aip-content {
+  padding: 16px 20px 24px;
+}
+.aip-card {
+  background: var(--aip-container-card, var(--aip-container));
+  border-radius: 10px;
+  padding: 20px;
+}
+[data-theme="dark"] .aip-card {
+  background: #232428;
+}
+.aip-card + .aip-card {
+  margin-top: 16px;
+}
+.aip-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px dashed var(--aip-border);
+}
+.aip-toolbar-search {
+  width: 240px;
+}
+.aip-toolbar-spacer {
+  flex: 1;
+}
+.aip-card .ant-table-wrapper .ant-table {
+  background: transparent;
+}
+.aip-card .ant-tabs-nav {
+  margin-bottom: 16px;
+}
+
+/* 主题面板色块 */
+.aip-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid var(--aip-container);
+  outline: 2px solid transparent;
+  outline-offset: 0;
+  padding: 0;
+}
+
+/* 登录页 */
+@media (max-width: 760px) {
+  .login-brand {
+    display: none !important;
+  }
+}
+/* 宽屏时左侧品牌区已有标志，表单上方的标志只在窄屏显示 */
+@media (min-width: 761px) {
+  .login-mobile-logo {
+    display: none;
+  }
+}

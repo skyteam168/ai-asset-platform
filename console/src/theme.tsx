@@ -1,6 +1,17 @@
-// 主题：明 / 暗、品牌主色、紧凑模式；偏好存 localStorage，切换即时生效（Ant Design 5 的 algorithm 与 token）。
+// 主题：浅色 / 深色、主色、紧凑模式；偏好存 localStorage，切换即时生效（Ant Design 5 的 algorithm 与 token）。
+// 配色与集团其他中台（知识库）保持一致：浅底 #f5f6f8 + 白卡片，深底 #121315 + #232428 卡片，主色 #3d6dfa。
 import { MoonOutlined, SunOutlined } from "@ant-design/icons";
-import { App as AntApp, ConfigProvider, Segmented, Space, Switch, Tooltip, Typography, theme as antdTheme } from "antd";
+import {
+  App as AntApp,
+  ConfigProvider,
+  Segmented,
+  Space,
+  Switch,
+  Tooltip,
+  Typography,
+  theme as antdTheme,
+  type ThemeConfig,
+} from "antd";
 import type { Locale } from "antd/es/locale";
 import enUS from "antd/locale/en_US";
 import viVN from "antd/locale/vi_VN";
@@ -15,13 +26,36 @@ export interface ThemePrefs {
   compact: boolean;
 }
 
-// 申洲蓝取自集团标志；其余为可选强调色
 export const PRESETS: { color: string; label: string }[] = [
-  { color: "#1f5fa8", label: t("申洲蓝") },
-  { color: "#0e7c86", label: t("青绿") },
-  { color: "#5b3fbf", label: t("紫") },
-  { color: "#c2410c", label: t("橙") },
+  { color: "#3d6dfa", label: t("经典蓝") },
+  { color: "#e5484d", label: t("申洲红") },
+  { color: "#12a389", label: t("青绿") },
+  { color: "#7c5cfc", label: t("紫") },
 ];
+
+// 两种模式下的表面色（采样自集团知识库中台）
+export const SURFACE: Record<Mode, { layout: string; container: string; sider: string; border: string; tableHead: string; selected: string; hover: string; subtle: string }> = {
+  light: {
+    layout: "#f5f6f8",
+    container: "#ffffff",
+    sider: "#fbfcfd",
+    border: "#eceef2",
+    tableHead: "#f7f8fa",
+    selected: "#eef3fe",
+    hover: "#f2f3f5",
+    subtle: "#f2f3f5",
+  },
+  dark: {
+    layout: "#121315",
+    container: "#1c1d20",
+    sider: "#18191c",
+    border: "#2c2d31",
+    tableHead: "#26272b",
+    selected: "#1c2a4c",
+    hover: "#26272b",
+    subtle: "#25262a",
+  },
+};
 
 const KEY = "aip.theme";
 const DEFAULTS: ThemePrefs = { mode: "light", primary: PRESETS[0].color, compact: false };
@@ -40,6 +74,60 @@ function load(): ThemePrefs {
   return DEFAULTS;
 }
 
+export function themeConfig(prefs: ThemePrefs): ThemeConfig {
+  const s = SURFACE[prefs.mode];
+  const dark = prefs.mode === "dark";
+  return {
+    algorithm: [dark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm, ...(prefs.compact ? [antdTheme.compactAlgorithm] : [])],
+    token: {
+      colorPrimary: prefs.primary,
+      colorInfo: prefs.primary,
+      colorLink: prefs.primary,
+      colorBgLayout: s.layout,
+      colorBgContainer: dark ? "#232428" : s.container,
+      colorBgElevated: dark ? "#2a2b30" : "#ffffff",
+      colorBorderSecondary: s.border,
+      colorBorder: dark ? "#3a3b40" : "#dcdfe6",
+      colorText: dark ? "#e5e6eb" : "#1f2329",
+      colorTextSecondary: dark ? "#a9aeb8" : "#646a73",
+      borderRadius: 6,
+      borderRadiusLG: 10,
+      controlHeight: 32,
+      fontFamily:
+        '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
+      wireframe: false,
+    },
+    components: {
+      Layout: { siderBg: s.sider, headerBg: s.container, bodyBg: s.layout, headerHeight: 56, headerPadding: "0 20px" },
+      Menu: {
+        itemBg: "transparent",
+        subMenuItemBg: "transparent",
+        itemSelectedBg: s.selected,
+        itemSelectedColor: prefs.primary,
+        itemHoverBg: s.hover,
+        itemBorderRadius: 8,
+        itemHeight: 40,
+        itemMarginInline: 10,
+        iconSize: 16,
+        activeBarBorderWidth: 0,
+      },
+      Table: {
+        headerBg: s.tableHead,
+        headerColor: dark ? "#e5e6eb" : "#1f2329",
+        headerSplitColor: "transparent",
+        rowHoverBg: s.hover,
+        borderColor: s.border,
+        cellPaddingBlock: 13,
+      },
+      Card: { paddingLG: 20 },
+      Tabs: { horizontalItemGutter: 28 },
+      Button: { primaryShadow: "none", defaultShadow: "none" },
+      Input: { activeShadow: "none" },
+      Tag: { defaultBg: s.subtle },
+    },
+  };
+}
+
 interface ThemeState extends ThemePrefs {
   update: (patch: Partial<ThemePrefs>) => void;
 }
@@ -54,20 +142,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } catch {
       // 不可写时只对本次页面生效
     }
-    document.documentElement.dataset.theme = prefs.mode;
-    document.documentElement.style.colorScheme = prefs.mode;
+    const root = document.documentElement;
+    root.dataset.theme = prefs.mode;
+    root.style.colorScheme = prefs.mode;
+    root.style.setProperty("--aip-primary", prefs.primary);
+    for (const [k, v] of Object.entries(SURFACE[prefs.mode])) root.style.setProperty(`--aip-${k}`, v);
   }, [prefs]);
-  const value = useMemo<ThemeState>(
-    () => ({ ...prefs, update: (patch) => setPrefs((p) => ({ ...p, ...patch })) }),
-    [prefs],
-  );
-  const algorithm = [
-    prefs.mode === "dark" ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-    ...(prefs.compact ? [antdTheme.compactAlgorithm] : []),
-  ];
+  const value = useMemo<ThemeState>(() => ({ ...prefs, update: (patch) => setPrefs((p) => ({ ...p, ...patch })) }), [prefs]);
+  const config = useMemo(() => themeConfig(prefs), [prefs]);
   return (
     <Ctx.Provider value={value}>
-      <ConfigProvider locale={ANTD_LOCALE[lang()]} theme={{ algorithm, token: { colorPrimary: prefs.primary, borderRadius: 6 } }}>
+      <ConfigProvider locale={ANTD_LOCALE[lang()]} theme={config} button={{ autoInsertSpace: false }}>
         <AntApp>{children}</AntApp>
       </ConfigProvider>
     </Ctx.Provider>
@@ -80,7 +165,7 @@ export function useThemePrefs(): ThemeState {
   return ctx;
 }
 
-/** 主题面板：明 / 暗、品牌主色、紧凑模式（即时生效并记住选择） */
+/** 主题面板：浅色 / 深色、主色、紧凑模式（即时生效并记住选择） */
 export function ThemePanel() {
   const prefs = useThemePrefs();
   return (
@@ -88,7 +173,7 @@ export function ThemePanel() {
       <Segmented
         block
         value={prefs.mode}
-        onChange={(v) => prefs.update({ mode: v as "light" | "dark" })}
+        onChange={(v) => prefs.update({ mode: v as Mode })}
         options={[
           { value: "light", label: t("浅色"), icon: <SunOutlined /> },
           { value: "dark", label: t("深色"), icon: <MoonOutlined /> },
@@ -104,11 +189,8 @@ export function ThemePanel() {
                 aria-label={p.label}
                 aria-pressed={prefs.primary === p.color}
                 onClick={() => prefs.update({ primary: p.color })}
-                style={{
-                  width: 24, height: 24, borderRadius: "50%", background: p.color, cursor: "pointer",
-                  border: prefs.primary === p.color ? "2px solid currentColor" : "2px solid transparent",
-                  outline: prefs.primary === p.color ? `2px solid ${p.color}` : "none", outlineOffset: 1,
-                }}
+                className="aip-swatch"
+                style={{ background: p.color, outlineColor: prefs.primary === p.color ? p.color : "transparent" }}
               />
             </Tooltip>
           ))}

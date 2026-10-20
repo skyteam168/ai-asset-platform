@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import { useState } from "react";
 import { get, post, type Page } from "../api";
 import { useAuth } from "../auth";
-import { OrgName, StateTag, useOrgs } from "../components";
+import { matches, OrgName, PageCard, PAGINATION, StateTag, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Connection, ConnectionTest } from "../types";
 import { t } from "../i18n";
@@ -22,17 +22,16 @@ export function ConnectionsPage() {
   const conns = useLoad(() => get<Page<Connection>>("/connections"), []);
   const [open, setOpen] = useState(false);
   const [testing, setTesting] = useState<Connection | null>(null);
+  const [kw, setKw] = useState("");
   const act = useAction();
   return (
-    <>
-      <Space style={{ marginBottom: 12 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>{t("系统连接")}</Typography.Title>
-        {has("platform_admin", "asset_developer") && <Button type="primary" onClick={() => setOpen(true)}>{t("登记连接")}</Button>}
-      </Space>
+    <PageCard>
+      <Toolbar placeholder={t("系统 / 地址 / 环境")} onSearch={setKw}
+        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("登记连接")}</Button>} />
       {conns.error && <Alert type="error" message={conns.error} />}
-      <Table<Connection> rowKey="id" size="small" loading={conns.loading} dataSource={conns.data?.items ?? []}
+      <Table<Connection> pagination={PAGINATION} rowKey="id" loading={conns.loading} dataSource={(conns.data?.items ?? []).filter((c) => matches(c, kw, ["system_key", "base_url", "env"]))}
         columns={[
-          { title: t("系统"), dataIndex: "system_key" },
+          { title: t("系统"), dataIndex: "system_key", render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
           { title: t("环境"), dataIndex: "env" },
           { title: t("公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("地址"), dataIndex: "base_url", render: (v) => <Typography.Text code>{v}</Typography.Text> },
@@ -55,7 +54,7 @@ export function ConnectionsPage() {
         ]} />
       <NewConnection open={open} onClose={() => setOpen(false)} onDone={conns.reload} />
       <TestDrawer conn={testing} onClose={() => setTesting(null)} />
-    </>
+    </PageCard>
   );
 }
 

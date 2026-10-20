@@ -2,7 +2,7 @@ import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, S
 import { useState } from "react";
 import { get, post, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, JsonInput, JsonView, OrgName, jsonRule, parseJson, useOrgs } from "../components";
+import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Binding, Consumer, User } from "../types";
 import { t } from "../i18n";
@@ -14,17 +14,16 @@ export function ConsumersPage() {
   const consumers = useLoad(() => get<Page<Consumer>>("/consumers"), []);
   const [open, setOpen] = useState(false);
   const [detail, setDetail] = useState<Consumer | null>(null);
+  const [kw, setKw] = useState("");
   return (
-    <>
-      <Space style={{ marginBottom: 12 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>{t("消费方")}</Typography.Title>
-        {has("platform_admin") && <Button type="primary" onClick={() => setOpen(true)}>{t("注册消费方")}</Button>}
-      </Space>
+    <PageCard>
+      <Toolbar placeholder={t("client_id / 联系人")} onSearch={setKw}
+        actions={has("platform_admin") && <Button onClick={() => setOpen(true)}>{t("注册消费方")}</Button>} />
       {consumers.error && <Alert type="error" message={consumers.error} />}
-      <Table<Consumer> rowKey="id" size="small" loading={consumers.loading} dataSource={consumers.data?.items ?? []}
+      <Table<Consumer> pagination={PAGINATION} rowKey="id" loading={consumers.loading} dataSource={(consumers.data?.items ?? []).filter((c) => matches(c, kw, ["client_id"]))}
         onRow={(r) => ({ onClick: () => setDetail(r), style: { cursor: "pointer" } })}
         columns={[
-          { title: "client_id", dataIndex: "client_id" },
+          { title: "client_id", dataIndex: "client_id", render: (v: string) => <Typography.Link>{v}</Typography.Link> },
           { title: t("所属公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("密级上限"), dataIndex: "clearance_cap", render: (v) => <Clearance level={v} /> },
           { title: t("绑定策略"), dataIndex: "bind_policy", render: (v: Consumer["bind_policy"]) => POLICY_LABEL[v] },
@@ -32,7 +31,7 @@ export function ConsumersPage() {
         ]} />
       <NewConsumer open={open} onClose={() => setOpen(false)} onDone={consumers.reload} />
       <ConsumerDrawer consumer={detail} onClose={() => setDetail(null)} />
-    </>
+    </PageCard>
   );
 }
 

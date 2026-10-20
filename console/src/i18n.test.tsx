@@ -58,6 +58,6 @@ describe("主题", () => {
     await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
     expect(JSON.parse(localStorage.getItem("aip.theme") ?? "{}").mode).toBe("dark");
     fireEvent.click(screen.getByRole("button", { name: "紫" }));
-    await waitFor(() => expect(JSON.parse(localStorage.getItem("aip.theme") ?? "{}").primary).toBe("#5b3fbf"));
+    await waitFor(() => expect(JSON.parse(localStorage.getItem("aip.theme") ?? "{}").primary).toBe("#7c5cfc"));
   });
 });

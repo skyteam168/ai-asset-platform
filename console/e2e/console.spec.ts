@@ -50,7 +50,7 @@ test("口令 + TOTP 登录，菜单完整", async () => {
 
   await page.getByLabel("动态码").fill(await freshCode(c.secret));
   await page.getByRole("button", { name: /登\s*录/ }).click();
-  await expect(page.getByRole("menuitem")).toHaveCount(8);
+  await expect(page.getByRole("menuitem")).toHaveCount(11);
   await expect(page.getByText("平台管理员").first()).toBeVisible();
 });
 
@@ -78,7 +78,7 @@ test("登记明文 HTTP 连接（传输例外）并执行连接测试", async ()
 
   const row = page.getByRole("row").filter({ hasText: `dp${RUN}` });
   await expect(row.getByText("明文 HTTP")).toBeVisible();
-  await expect(row.getByText("pending_approval")).toBeVisible();
+  await expect(row.getByText("待审批")).toBeVisible();
   await row.getByRole("button", { name: "连接测试" }).click();
   await page.getByRole("button", { name: /执行测试/ }).click();
   await expect(page.locator(".ant-drawer .ant-alert")).toContainText(/通过|失败/);
@@ -118,18 +118,20 @@ test("下发授权上限，审计页可校验哈希链", async () => {
   await page.locator(".ant-select").filter({ hasText: "分公司" }).first().click();
   await page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter({ hasText: "HQ" }).click();
   await page.locator(".ant-select").filter({ hasText: "资产集合" }).click();
+  await page.keyboard.type(`e2e.asset_${RUN}`); // 资产多时下拉是虚拟列表，按名称筛选
   await page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter({ hasText: `e2e.asset_${RUN}` }).click();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "下发上限" }).click();
   await expect(page.getByText("已下发")).toBeVisible();
   await expect(page.getByRole("cell", { name: `e2e.asset_${RUN}` })).toBeVisible();
 
-  await page.getByRole("menuitem", { name: "审计" }).click();
+  await page.getByRole("menuitem", { name: /(^| )审计$/ }).click();
   await page.getByRole("button", { name: "校验哈希链与锚点" }).click();
   await expect(page.getByText(/哈希链与签名锚点全部校验通过/)).toBeVisible();
 });
 
 test("退出后回到登录页", async () => {
-  await page.getByRole("button", { name: /退\s*出/ }).click();
+  await page.getByRole("button", { name: "账号菜单" }).click();
+  await page.getByRole("menuitem", { name: /退\s*出/ }).click();
   await expect(page.getByRole("button", { name: /登\s*录/ })).toBeVisible();
 });

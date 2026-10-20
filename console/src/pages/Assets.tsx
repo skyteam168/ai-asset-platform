@@ -2,7 +2,7 @@ import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, S
 import { useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, JsonInput, JsonView, OrgName, StateTag, jsonRule, parseJson, useOrgs } from "../components";
+import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, GateRecord, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
@@ -14,24 +14,23 @@ export function AssetsPage() {
   const assets = useLoad(() => get<Page<Asset>>("/assets"), []);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
+  const [kw, setKw] = useState("");
   return (
-    <>
-      <Space style={{ marginBottom: 12 }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>{t("资产")}</Typography.Title>
-        {has("platform_admin", "asset_developer") && <Button type="primary" onClick={() => setOpen(true)}>{t("新建资产")}</Button>}
-      </Space>
+    <PageCard>
+      <Toolbar placeholder={t("资产名称 / 类型")} onSearch={setKw}
+        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("新建资产")}</Button>} />
       {assets.error && <Alert type="error" message={assets.error} />}
-      <Table<Asset> rowKey="id" size="small" loading={assets.loading} dataSource={assets.data?.items ?? []}
+      <Table<Asset> pagination={PAGINATION} rowKey="id" loading={assets.loading} dataSource={(assets.data?.items ?? []).filter((a) => matches(a, kw, ["name", "type"]))}
         onRow={(r) => ({ onClick: () => setSelected(r), style: { cursor: "pointer" } })}
         columns={[
-          { title: t("名称"), dataIndex: "name" },
+          { title: t("名称"), dataIndex: "name", render: (v: string) => <Typography.Link>{v}</Typography.Link> },
           { title: t("类型"), dataIndex: "type", render: (v) => <Tag>{v}</Tag> },
           { title: t("归属"), dataIndex: "owner_org_id", render: (v) => <OrgName id={v} /> },
           { title: t("密级"), dataIndex: "classification", render: (v) => <Clearance level={v} /> },
         ]} />
       <NewAsset open={open} onClose={() => setOpen(false)} onDone={assets.reload} />
       <AssetDrawer asset={selected} onClose={() => setSelected(null)} />
-    </>
+    </PageCard>
   );
 }
 

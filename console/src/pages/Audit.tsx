@@ -3,7 +3,7 @@ import type { Dayjs } from "dayjs";
 import { useState } from "react";
 import { get, post, query, type Page } from "../api";
 import { useAuth } from "../auth";
-import { JsonView, OrgName } from "../components";
+import { JsonView, OrgName, PageCard, PAGINATION } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { AuditRecord } from "../types";
 import { t } from "../i18n";
@@ -28,8 +28,7 @@ export function AuditPage() {
   const [verify, setVerify] = useState<VerifyResult | null>(null);
   const act = useAction();
   return (
-    <>
-      <Typography.Title level={4}>{t("审计")}</Typography.Title>
+    <PageCard>
       <Form layout="inline" style={{ marginBottom: 12 }} initialValues={filters} onFinish={(v: Filters) => setFilters({ ...v })}>
         <Form.Item name="kind"><Input placeholder={t("事件类型，如 tool.invoke")} allowClear /></Form.Item>
         <Form.Item name="trace_id"><Input placeholder="trace_id" allowClear style={{ width: 280 }} /></Form.Item>
@@ -50,8 +49,8 @@ export function AuditPage() {
           description={verify.problems.map((x) => <div key={x}>{x}</div>)} />
       )}
       {logs.error && <Alert type="error" message={logs.error} />}
-      <Table<AuditRecord> rowKey={(r) => `${r.shard_id}-${r.seq}`} size="small" loading={logs.loading}
-        dataSource={logs.data?.items ?? []} pagination={{ pageSize: 20 }}
+      <Table<AuditRecord> rowKey={(r) => `${r.shard_id}-${r.seq}`} loading={logs.loading}
+        dataSource={logs.data?.items ?? []} pagination={{ ...PAGINATION, defaultPageSize: 20 }}
         expandable={{ expandedRowRender: (r) => <JsonView value={r.record} /> }}
         footer={() => (logs.data?.has_more ? t("结果已截断，请缩小时间范围或提高条数上限") : null)}
         columns={[
@@ -62,6 +61,6 @@ export function AuditPage() {
           { title: t("分片 / 序号"), key: "pos", render: (_, r) => `${r.shard_id} / ${r.seq}` },
           { title: t("哈希"), dataIndex: "hash", render: (v: string) => <Typography.Text code>{v.slice(0, 12)}…</Typography.Text> },
         ]} />
-    </>
+    </PageCard>
   );
 }

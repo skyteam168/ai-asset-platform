@@ -2,7 +2,7 @@ import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select,
 import { useMemo, useState } from "react";
 import { get, post, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, OrgName, StateTag, useOrgs } from "../components";
+import { Clearance, OrgName, PAGINATION, StateTag, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { OrgUnit, User } from "../types";
 import { t } from "../i18n";
@@ -58,7 +58,7 @@ export function OrgsPage() {
   return (
     <Row gutter={16}>
       <Col span={8}>
-        <Card title={t("组织树")} size="small" extra={canManage && sel && sel.type !== "team" && (
+        <Card title={t("组织树")} bordered={false} style={{ borderRadius: 10 }} extra={canManage && sel && sel.type !== "team" && (
           <Button size="small" onClick={() => setOrgOpen(true)}>{t("新建下级")}</Button>)}>
           {/* defaultExpandAll 只在挂载时生效，等组织数据到了再挂载 */}
           {tree.length > 0 && <Tree treeData={tree} defaultExpandAll selectedKeys={selected ? [selected] : []}
@@ -72,13 +72,13 @@ export function OrgsPage() {
         </Card>
       </Col>
       <Col span={16}>
-        <Card title={sel ? t("用户（{0} 子树）", [sel.code]) : t("用户（全部可见）")} size="small" extra={canManage && (
+        <Card title={sel ? t("用户（{0} 子树）", [sel.code]) : t("用户（全部可见）")} bordered={false} style={{ borderRadius: 10 }} extra={canManage && (
           <Space>
             <Button size="small" onClick={() => setImportOpen(true)}>{t("批量导入")}</Button>
             <Button size="small" type="primary" onClick={() => setUserOpen(true)}>{t("新建用户")}</Button>
           </Space>)}>
           {users.error && <Alert type="error" message={users.error} />}
-          <Table<User> rowKey="id" size="small" loading={users.loading} dataSource={shown} pagination={{ pageSize: 15 }}
+          <Table<User> rowKey="id" loading={users.loading} dataSource={shown} pagination={{ ...PAGINATION, defaultPageSize: 15 }}
             columns={[
               { title: t("姓名"), dataIndex: "display_name" },
               { title: t("登录名"), dataIndex: "login_name", render: (v) => v ?? "-" },

@@ -6,6 +6,7 @@ import { AuthProvider } from "./auth";
 import { PLATFORM_NAME } from "./brand";
 import { lang } from "./i18n";
 import { ThemeProvider } from "./theme";
+import "./styles.css";
 
 document.title = PLATFORM_NAME;
 document.documentElement.lang = lang();
