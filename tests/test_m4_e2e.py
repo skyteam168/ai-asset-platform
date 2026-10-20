@@ -302,7 +302,7 @@ async def test_end_to_end_publish_and_call_over_mcp(stack: Stack, seeded: Seed, 
             while CAP not in names and time.monotonic() < deadline:  # 等发布快照到达
                 names = [t.name for t in (await client.list_tools()).tools]
                 await asyncio.sleep(0.3)
-            assert names == [CAP]
+            assert set(names) == {CAP, "aip.get_run_status"}
             own = await client.call_tool(CAP, {"factory_id": "F001"})
             other = await client.call_tool(CAP, {"factory_id": "F900"})
         assert own.is_error is False and own.structured_content == {"items": ROWS}

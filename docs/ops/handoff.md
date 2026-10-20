@@ -20,9 +20,10 @@
 | **M6c** Skill Registry 与 corp-skill | 完成 | 04063f7 |
 | **M6d** 合成探针与契约漂移 | 完成 | 412ef8b |
 | **M6e** M5 延后项与控制台 | 完成 | 3184785 |
-| **M7** | **待做**（见第 7 节） | — |
+| **M7a** MCP tasks + get_run_status | 完成（本切片提交后填 SHA） | — |
+| **M7** 其余 | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M6e 用例；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M7a 用例；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -115,9 +116,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步**）
+## 7. 之后：M7 与横向事项（**当前下一步 = M7b**）
 
-- **M7（P11、P13、P12 演练部分）**：MCP tasks 扩展、MRTR / elicitation 确认通道、`get_run_status` 工具、工具注解自动生成；发现模式（三个元工具，中文与越南语全文检索，danger 不进入）；上游 MCP 连接器；Python / TypeScript SDK（含 LangGraph / LangChain 适配器）；A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）。
+- **M7a（已完成）**：MCP `io.modelcontextprotocol/tasks`、`aip.get_run_status`、Workflow 作 MCP 异步 Tool、`tasks/get`（task_id=run_id）。
+- **M7 其余（P11、P13、P12 演练部分）**：MRTR / elicitation 确认通道；工具注解自动生成；发现模式（三个元工具，中文与越南语全文检索，danger 不进入）；上游 MCP 连接器；Python / TypeScript SDK（含 LangGraph / LangChain 适配器）；A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）。
 - **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

@@ -370,7 +370,27 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 6 通过 | `test_m6_workflow_nodes.py`（5）+ `test_m6_notify.py`（1） |
 
-仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、MCP tasks / elicitation。
+仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、MCP elicitation / MRTR、发现模式、SDK、A2A、故障演练。
+
+### M7a MCP tasks 与 get_run_status — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| tools/list 始终含 aip.get_run_status | 通过 | `test_m7_mcp_tasks.py::test_capabilities_and_builtin_tool` |
+| initialize / discover 声明 tasks 扩展 | 通过 | 同上 |
+| 未声明 tasks 时异步返回 run_id | 通过 | `test_async_call_without_tasks_returns_run_id` |
+| 声明 tasks 时返回 task（id=run_id）+ tasks/get | 通过 | `test_async_call_with_tasks_and_tasks_get` |
+| 未知 Run 不泄露 | 通过 | `test_get_run_status_unknown_run` |
+
+| 部分 | 内容 |
+| --- | --- |
+| Gateway | `capabilities.extensions[io.modelcontextprotocol/tasks]`；内置 `aip.get_run_status`；`tasks/get`（task_id=run_id）；Workflow 以 MCP 异步 Tool 暴露 |
+| 异步形态 | 客户端 `_meta` 含 tasks 扩展 → `resultType: task`；否则 structuredContent 带 run_id 并提示兜底工具 |
+| 既有用例 | `test_m4_mcp` / `test_m4_e2e` / `test_m6_catalog` 的 tools/list 断言已含 get_run_status |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 4 通过 | `test_m7_mcp_tasks.py` |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 

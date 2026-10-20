@@ -145,7 +145,7 @@ async def test_catalog_and_bundle_hide_unauthorized(tmp_path: pathlib.Path) -> N
         )
         assert mcp.status_code == 200, mcp.text
         names = {t["name"] for t in mcp.json()["result"]["tools"]}
-        assert names == {READ_L2}
+        assert names == {READ_L2, "aip.get_run_status"}
 
         # 全量 /mcp 同样看不到未授权工具
         all_mcp = await c.post(
@@ -153,4 +153,4 @@ async def test_catalog_and_bundle_hide_unauthorized(tmp_path: pathlib.Path) -> N
             headers={"Authorization": f"Bearer {tok}"},
             json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
         )
-        assert {t["name"] for t in all_mcp.json()["result"]["tools"]} == {READ_L2}
+        assert {t["name"] for t in all_mcp.json()["result"]["tools"]} == {READ_L2, "aip.get_run_status"}

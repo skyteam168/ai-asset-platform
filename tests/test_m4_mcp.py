@@ -152,7 +152,9 @@ async def test_sdk_client_both_protocol_versions(live: Live, mode: str, expected
         assert client.protocol_version == expected_version
         listed = await client.list_tools()
         names = [t.name for t in listed.tools]
-        assert names == sorted([CAP, WRITE]), "未授权（L4）与只开放 REST 的工具不得出现在 tools/list"
+        assert names == sorted([CAP, WRITE, "aip.get_run_status"]), (
+            "未授权（L4）与只开放 REST 的工具不得出现在 tools/list；须始终含 get_run_status"
+        )
         q = next(t for t in listed.tools if t.name == CAP)
         assert q.annotations is not None and q.annotations.read_only_hint is True
         assert next(t for t in listed.tools if t.name == WRITE).annotations.destructive_hint is True
@@ -202,7 +204,7 @@ async def test_protocol_edge_cases(live: Live) -> None:
         r = await c.post(live.url, json=rpc("tools/list"), headers={**h, "Mcp-Method": "tools/list"})
         body = r.json()["result"]
         assert body["cacheScope"] == "private" and body["ttlMs"] > 0 and body["resultType"] == "complete"
-        assert [t["name"] for t in body["tools"]] == sorted([CAP, WRITE])
+        assert [t["name"] for t in body["tools"]] == sorted([CAP, WRITE, "aip.get_run_status"])
         assert body["tools"][0]["outputSchema"]["type"] == "object"
 
         r = await c.post(live.url, json=rpc("server/discover"), headers=headers())

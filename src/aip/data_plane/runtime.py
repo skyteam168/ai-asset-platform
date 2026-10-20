@@ -370,7 +370,9 @@ def run_result(view: dict[str, Any]) -> dict[str, Any]:
     if mapped == "running":
         nxt: dict[str, Any] | None = {
             "type": "ask_human" if pending else "wait",
-            "message": pending[0]["summary"] if pending else "Workflow 运行中，用 GET /api/v1/runs/{id} 查询",
+            "message": pending[0]["summary"]
+            if pending
+            else "Workflow 运行中，用 aip.get_run_status、tasks/get 或 GET /api/v1/runs/{id} 查询",
             "retry_after_s": 2,
         }
     else:
