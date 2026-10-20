@@ -50,7 +50,7 @@ test("口令 + TOTP 登录，菜单完整", async () => {
 
   await page.getByLabel("动态码").fill(await freshCode(c.secret));
   await page.getByRole("button", { name: /登\s*录/ }).click();
-  await expect(page.getByRole("menuitem")).toHaveCount(7);
+  await expect(page.getByRole("menuitem")).toHaveCount(8);
   await expect(page.getByText("平台管理员").first()).toBeVisible();
 });
 

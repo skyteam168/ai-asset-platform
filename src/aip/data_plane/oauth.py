@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import datetime as dt
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Annotated, Any
 
@@ -17,7 +18,7 @@ from aip.data_plane.principal import Principal, PrincipalResolver
 from aip.libs.common.config import Settings
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.tokens import platform_token
-from aip.libs.tokens.assertion import verify_assertion
+from aip.libs.tokens.assertion import VerifiedAssertion, verify_assertion
 from aip.libs.tokens.keys import SigningKey
 from aip.libs.tokens.replay import ReplayStore
 from aip.libs.tokens.secrets_util import token_hash
@@ -34,9 +35,29 @@ class AuthContext:
     replay: ReplayStore
     verify_keys: list[SigningKey] = field(default_factory=list)
 
+    # 用户断言验签失败时回调（client_id, 错误码），用于“断言验签失败激增”风险规则（12.4）
+    on_assertion_failure: Callable[[str, str], None] | None = None
+
     def __post_init__(self) -> None:
         if not self.verify_keys:
             self.verify_keys = [self.key]
+
+    async def verify_user_assertion(
+        self, token: str, client_id: str, consumer: dict[str, Any], audiences: list[str]
+    ) -> VerifiedAssertion:
+        try:
+            return await verify_assertion(
+                token,
+                client_id=client_id,
+                jwks=consumer["jwks"],
+                audiences=audiences,
+                replay=self.replay,
+                max_ttl_s=self.settings.assertion_max_ttl_s,
+            )
+        except PlatformError as e:
+            if self.on_assertion_failure is not None:
+                self.on_assertion_failure(client_id, str(e.code))
+            raise
 
     @property
     def audiences(self) -> list[str]:
@@ -78,14 +99,7 @@ class AuthContext:
             if not user_assertion:
                 return self.resolver.for_app(client_id, auth_mode="app_token")
             _, c = self.resolver.consumer(client_id)
-            v = await verify_assertion(
-                user_assertion,
-                client_id=client_id,
-                jwks=c["jwks"],
-                audiences=self.audiences,
-                replay=self.replay,
-                max_ttl_s=self.settings.assertion_max_ttl_s,
-            )
+            v = await self.verify_user_assertion(user_assertion, client_id, c, self.audiences)
             return self.resolver.for_assertion(v, "header_assertion")
         claims = None
         for aud in self.audiences:
@@ -158,14 +172,7 @@ def router(ctx: AuthContext) -> APIRouter:
             if not assertion:
                 raise PlatformError(ErrorCode.INVALID_ARGUMENT, "缺少 assertion")
             _, c = ctx.resolver.consumer(cid)
-            v = await verify_assertion(
-                assertion,
-                client_id=cid,
-                jwks=c["jwks"],
-                audiences=[s.token_endpoint_aud, *ctx.audiences],
-                replay=ctx.replay,
-                max_ttl_s=s.assertion_max_ttl_s,
-            )
+            v = await ctx.verify_user_assertion(assertion, cid, c, [s.token_endpoint_aud, *ctx.audiences])
             p = ctx.resolver.for_assertion(v, "token_exchange")
             tok, ttl = platform_token.issue(
                 ctx.key,

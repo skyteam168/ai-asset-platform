@@ -43,15 +43,15 @@ describe("控制台外壳", () => {
     expect(session.get()).toBe("s-1");
     expect(calls.find((c) => c.path === "/auth/login" && (c.body as { totp: string }).totp === "123456")?.body)
       .toEqual({ login_name: "alice", password: "correct-horse-battery", totp: "123456" });
-    expect(screen.getAllByRole("menuitem")).toHaveLength(7);
+    expect(screen.getAllByRole("menuitem")).toHaveLength(8);
   });
 
-  it("菜单按角色裁剪：审计员只看到组织与审计", async () => {
+  it("菜单按角色裁剪：审计员只看到组织、风控与审计", async () => {
     session.set("s-2");
     mockApi(common(me("auditor")));
     render(wrap(<AppShell />));
-    await waitFor(() => expect(screen.getAllByRole("menuitem")).toHaveLength(2));
-    expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual(["组织与用户", "审计"]);
+    await waitFor(() => expect(screen.getAllByRole("menuitem")).toHaveLength(3));
+    expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual(["组织与用户", "风控与计量", "审计"]);
   });
 
   it("没有任何角色时提示联系管理员", async () => {

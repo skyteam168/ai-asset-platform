@@ -17,6 +17,7 @@ tags:
 - name: ops
 - name: registry
 - name: release
+- name: risk
 - name: snapshot
 paths:
   /healthz:
@@ -1279,6 +1280,235 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Decision'
+  /api/v1/risk-rules:
+    get:
+      operationId: listRiskRules
+      tags:
+      - risk
+      summary: 风险规则
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RiskRule'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/risk-rules/{code}:
+    put:
+      operationId: updateRiskRule
+      tags:
+      - risk
+      summary: 调整风险规则（平台管理员）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskRule'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskRulePatch'
+      parameters:
+      - name: code
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/risk-events:
+    get:
+      operationId: listRiskEvents
+      tags:
+      - risk
+      summary: 风险事件（按公司隔离）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RiskEvent'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: status
+        in: query
+        schema:
+          enum:
+          - open
+          - acknowledged
+          - resume_requested
+          - resolved
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+  /api/v1/risk-events/{id}/acknowledge:
+    post:
+      operationId: acknowledgeRiskEvent
+      tags:
+      - risk
+      summary: 确认风险事件（告警类关闭，熔断类只标记已确认）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RiskEvent'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Note'
+  /api/v1/risk-events/{id}/request-resume:
+    post:
+      operationId: requestRiskResume
+      tags:
+      - risk
+      summary: 熔断恢复：写明修复情况，由另一位数据 Owner 复核（审批 kind=resume）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Note'
+  /api/v1/risk-scan:
+    post:
+      operationId: runRiskScan
+      tags:
+      - risk
+      summary: 手动触发一次风险扫描（平台管理员）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/usage:
+    get:
+      operationId: usageReport
+      tags:
+      - audit
+      summary: 计量：按日、公司、消费方、能力汇总调用、失败与写操作
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: days
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 90
+  /api/v1/consumers/{id}/quota:
+    put:
+      operationId: setConsumerQuota
+      tags:
+      - iam
+      summary: 消费方每日配额（daily_calls、daily_writes；空对象表示不限）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Quota'
+  /api/v1/grant-ceilings/{id}/quota:
+    put:
+      operationId: setCeilingQuota
+      tags:
+      - grant
+      summary: 授权上限内全公司共享的每日调用额度（daily_calls）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Quota'
   /api/v1/todo:
     get:
       operationId: listTodo
@@ -1889,6 +2119,102 @@ components:
           type: string
       required:
       - decision
+    Note:
+      type: object
+      properties:
+        note:
+          type: string
+          maxLength: 1000
+    Quota:
+      type: object
+      properties:
+        daily_calls:
+          type: integer
+          minimum: 1
+        daily_writes:
+          type: integer
+          minimum: 1
+    RiskRule:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        source:
+          enum:
+          - audit
+          - domain
+        params:
+          type: object
+        action:
+          enum:
+          - alert
+          - suspend_asset
+        severity:
+          enum:
+          - low
+          - medium
+          - high
+        enabled:
+          type: boolean
+      required:
+      - code
+      - params
+      - action
+    RiskRulePatch:
+      type: object
+      properties:
+        params:
+          type: object
+        enabled:
+          type: boolean
+        action:
+          enum:
+          - alert
+          - suspend_asset
+        severity:
+          enum:
+          - low
+          - medium
+          - high
+    RiskEvent:
+      type: object
+      properties:
+        id:
+          type: string
+        rule_code:
+          type: string
+        rule_name:
+          type: string
+        company_id:
+          type:
+          - string
+          - 'null'
+        group_key:
+          type: object
+        observed:
+          type: number
+        threshold:
+          type: number
+        severity:
+          type: string
+        action:
+          type: string
+        action_result:
+          type: object
+        status:
+          enum:
+          - open
+          - acknowledged
+          - resume_requested
+          - resolved
+      required:
+      - id
+      - rule_code
+      - status
     TodoDecision:
       type: object
       properties:

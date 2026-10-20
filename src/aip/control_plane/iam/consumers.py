@@ -68,6 +68,33 @@ async def create_consumer(
     return cid
 
 
+QUOTA_KEYS = {"daily_calls", "daily_writes"}
+
+
+def validate_quota(quota: dict[str, Any], allowed: set[str]) -> dict[str, int]:
+    """配额：键必须是已知项、值为正整数；空对象表示不限。"""
+    bad = set(quota) - allowed
+    if bad:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"未知的配额项：{', '.join(sorted(bad))}")
+    out: dict[str, int] = {}
+    for k, v in quota.items():
+        if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"配额 {k} 必须是正整数")
+        out[k] = v
+    return out
+
+
+async def set_quota(
+    conn: AsyncConnection, actor: Actor, consumer_id: uuid.UUID, quota: dict[str, Any]
+) -> dict[str, int]:
+    actor.require(actor.has("platform_admin"), "消费方配额由平台管理员设定")
+    c = await consumer_row(conn, consumer_id)
+    clean = validate_quota(quota, QUOTA_KEYS)
+    await conn.execute(update(t.consumer).where(t.consumer.c.id == consumer_id).values(quota=clean))
+    await emit(conn, "consumer.quota_set", c["company_id"], consumer_id, actor.user_id, clean)
+    return clean
+
+
 async def issue_static_token(
     conn: AsyncConnection,
     actor: Actor,

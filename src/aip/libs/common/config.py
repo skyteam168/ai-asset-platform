@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     workflow_sync_wait_s: float = Field(default=2.0, ge=0, le=30)
     workflow_lease_s: float = Field(default=30.0, ge=1)
     workflow_stale_s: float = Field(default=30.0, ge=1)
+    # 风险规则扫描间隔（秒）；0 表示不在本进程扫描
+    risk_scan_interval_s: float = Field(default=30.0, ge=0)
     # G3 稳定性：同一用例重复执行次数（architecture.md 7.1，≥ 20）
     g3_repeats: int = Field(default=20, ge=2)
     # 数据面本地状态：快照落盘目录与审计 spool（architecture.md 4.4、12.4）

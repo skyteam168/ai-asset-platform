@@ -27,6 +27,7 @@ from aip.data_plane.oauth import AuthContext
 from aip.data_plane.oauth import router as oauth_router
 from aip.data_plane.pdp import OpaClient, PolicyService
 from aip.data_plane.principal import PrincipalResolver
+from aip.data_plane.quota import MemoryQuotaStore, PgQuotaStore
 from aip.data_plane.release_cache import ReleaseCache
 from aip.data_plane.runtime import (
     ConnectorRegistry,
@@ -167,6 +168,16 @@ def create_app(
         exec_store = PgExecutionStore(runtime_engine) if runtime_engine else MemoryExecutionStore()
     forwarder = EventForwarder(control_plane_url, settings.internal_service_token, settings.instance_id)
     ctx.resolver.on_employee_match = forwarder
+
+    def assertion_failed(client_id: str, code: str) -> None:
+        found = iam.consumer_by_client_id(client_id)
+        audit.append(
+            "auth.assertion_failed",
+            company_id=found[1]["company_id"] if found else None,
+            record={"client_id": client_id, "code": code},
+        )
+
+    ctx.on_assertion_failure = assertion_failed
     registry = ConnectorRegistry(
         releases, secrets or OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token), resolver, forwarder
     )
@@ -179,6 +190,7 @@ def create_app(
         audit=audit,
         mode=settings.runtime_mode,
         confirmations=PgConfirmationStore(runtime_engine) if runtime_engine else MemoryConfirmationStore(),
+        quota=PgQuotaStore(runtime_engine) if runtime_engine else MemoryQuotaStore(),
     )
     runtime.workflow_sync_wait_s = settings.workflow_sync_wait_s
     # Workflow 需要持久化运行表；没有运行库（纯内存开发模式）时不启用

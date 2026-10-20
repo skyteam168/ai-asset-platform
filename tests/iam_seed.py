@@ -75,6 +75,8 @@ async def truncate() -> None:
             "exec.wf_step",
             "exec.wf_run",
             "exec.confirmation",
+            "risk.event",
+            "exec.usage_counter",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:

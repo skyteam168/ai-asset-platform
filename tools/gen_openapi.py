@@ -254,6 +254,47 @@ def control_plane() -> dict[str, Any]:
                 ["user_id", "requested_level", "reason", "expires_at"],
             ),
             "Decision": o({"decision": {"enum": ["approve", "reject"]}, "comment": S}, ["decision"]),
+            "Note": o({"note": {"type": "string", "maxLength": 1000}}),
+            "Quota": o(
+                {"daily_calls": {"type": "integer", "minimum": 1}, "daily_writes": {"type": "integer", "minimum": 1}}
+            ),
+            "RiskRule": o(
+                {
+                    "code": S,
+                    "name": S,
+                    "description": S,
+                    "source": {"enum": ["audit", "domain"]},
+                    "params": {"type": "object"},
+                    "action": {"enum": ["alert", "suspend_asset"]},
+                    "severity": {"enum": ["low", "medium", "high"]},
+                    "enabled": B,
+                },
+                ["code", "params", "action"],
+            ),
+            "RiskRulePatch": o(
+                {
+                    "params": {"type": "object"},
+                    "enabled": B,
+                    "action": {"enum": ["alert", "suspend_asset"]},
+                    "severity": {"enum": ["low", "medium", "high"]},
+                }
+            ),
+            "RiskEvent": o(
+                {
+                    "id": S,
+                    "rule_code": S,
+                    "rule_name": S,
+                    "company_id": SN,
+                    "group_key": {"type": "object"},
+                    "observed": {"type": "number"},
+                    "threshold": {"type": "number"},
+                    "severity": S,
+                    "action": S,
+                    "action_result": {"type": "object"},
+                    "status": {"enum": ["open", "acknowledged", "resume_requested", "resolved"]},
+                },
+                ["id", "rule_code", "status"],
+            ),
             "TodoDecision": o(
                 {"decision": {"enum": ["approve", "reject"]}, "comment": S, "data": {"type": "object"}}, ["decision"]
             ),
@@ -741,6 +782,88 @@ def control_plane() -> dict[str, Any]:
         f"{A}/approvals": {"get": op("listApprovals", "approval", "我的审批待办", res=page("Approval"), params=LIST)},
         f"{A}/approvals/{{id}}/decide": {
             "post": op("decideApproval", "approval", "审批", req=ref("Decision"), res=ref("Approval"), params=["Id"])
+        },
+        f"{A}/risk-rules": {"get": op("listRiskRules", "risk", "风险规则", res=page("RiskRule"))},
+        f"{A}/risk-rules/{{code}}": {
+            "put": {
+                **op(
+                    "updateRiskRule",
+                    "risk",
+                    "调整风险规则（平台管理员）",
+                    req=ref("RiskRulePatch"),
+                    res=ref("RiskRule"),
+                ),
+                "parameters": [{"name": "code", "in": "path", "required": True, "schema": S}],
+            }
+        },
+        f"{A}/risk-events": {
+            "get": {
+                **op("listRiskEvents", "risk", "风险事件（按公司隔离）", res=page("RiskEvent")),
+                "parameters": [
+                    {
+                        "name": "status",
+                        "in": "query",
+                        "schema": {"enum": ["open", "acknowledged", "resume_requested", "resolved"]},
+                    },
+                    {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 500}},
+                ],
+            }
+        },
+        f"{A}/risk-events/{{id}}/acknowledge": {
+            "post": op(
+                "acknowledgeRiskEvent",
+                "risk",
+                "确认风险事件（告警类关闭，熔断类只标记已确认）",
+                req=ref("Note"),
+                res=ref("RiskEvent"),
+                params=["Id"],
+            )
+        },
+        f"{A}/risk-events/{{id}}/request-resume": {
+            "post": op(
+                "requestRiskResume",
+                "risk",
+                "熔断恢复：写明修复情况，由另一位数据 Owner 复核（审批 kind=resume）",
+                req=ref("Note"),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/risk-scan": {
+            "post": op("runRiskScan", "risk", "手动触发一次风险扫描（平台管理员）", res={"type": "object"})
+        },
+        f"{A}/usage": {
+            "get": {
+                **op(
+                    "usageReport",
+                    "audit",
+                    "计量：按日、公司、消费方、能力汇总调用、失败与写操作",
+                    res={"type": "object"},
+                ),
+                "parameters": [
+                    {"name": "days", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 90}}
+                ],
+            }
+        },
+        f"{A}/consumers/{{id}}/quota": {
+            "put": op(
+                "setConsumerQuota",
+                "iam",
+                "消费方每日配额（daily_calls、daily_writes；空对象表示不限）",
+                req=ref("Quota"),
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/grant-ceilings/{{id}}/quota": {
+            "put": op(
+                "setCeilingQuota",
+                "grant",
+                "授权上限内全公司共享的每日调用额度（daily_calls）",
+                req=ref("Quota"),
+                res={"type": "object"},
+                params=["Id"],
+            )
         },
         f"{A}/todo": {
             "get": op(

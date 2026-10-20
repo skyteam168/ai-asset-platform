@@ -100,6 +100,7 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
             "company_id": str(c["company_id"]),
             "clearance_cap": int(c["clearance_cap"]),
             "bind_policy": c["bind_policy"],
+            "quota": c["quota"] or {},
             "status": c["status"] if c["company_id"] in active else "disabled",
             "jwks": {},
             "static_tokens": {},

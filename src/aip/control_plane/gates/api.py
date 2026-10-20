@@ -88,6 +88,10 @@ async def _subject(conn: AsyncConnection, row: dict[str, Any]) -> str:
             )
         ).first()
         return f"{r.name}@{r.semver}" if r else str(row["subject_id"])
+    if row["kind"] == "resume":
+        rule = row["payload"].get("rule_code", "")
+        caps = {s.get("semver", "") for s in row["payload"].get("suspended", [])}
+        return f"风险熔断恢复：{rule}（{len(caps)} 个版本）"
     if row["kind"] == "usage":
         asset_id = row["payload"].get("asset_id")
         name = (
@@ -176,7 +180,13 @@ def router() -> APIRouter:
     async def decide(id: uuid.UUID, body: DecisionIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
             req = await approval.request_row(conn, id)
-            if req["kind"] == "usage":
+            if req["kind"] == "resume":
+                from aip.control_plane.risk import service as risk
+
+                status = await risk.decide_resume(
+                    conn, actor, id, body.decision == "approve", body.comment, body.on_behalf_of
+                )
+            elif req["kind"] == "usage":
                 status = await flows.decide_usage(
                     conn, actor, req["subject_id"], body.decision == "approve", body.comment
                 )

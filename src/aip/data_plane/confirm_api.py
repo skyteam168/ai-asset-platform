@@ -18,7 +18,6 @@ from aip.data_plane.confirmation import public_view
 from aip.data_plane.oauth import AuthContext
 from aip.data_plane.runtime import ToolRuntime
 from aip.libs.common.errors import ErrorCode, PlatformError
-from aip.libs.tokens.assertion import verify_assertion
 
 V = "/api/v1"
 
@@ -72,14 +71,7 @@ def router(ctx: AuthContext, runtime: ToolRuntime, workflows: Any = None) -> API
         if not body.assertion:
             raise PlatformError(ErrorCode.ASSERTION_INVALID, "需要被代表用户的新断言")
         _, consumer = ctx.resolver.consumer(caller.client_id)
-        v = await verify_assertion(
-            body.assertion,
-            client_id=caller.client_id,
-            jwks=consumer["jwks"],
-            audiences=ctx.audiences,
-            replay=ctx.replay,
-            max_ttl_s=ctx.settings.assertion_max_ttl_s,
-        )
+        v = await ctx.verify_user_assertion(body.assertion, caller.client_id, consumer, ctx.audiences)
         # iat 是整秒：允许与创建时间同一秒，但不接受确认对象创建之前签发的断言
         if v.issued_at < _created(row).replace(microsecond=0):
             raise PlatformError(ErrorCode.ASSERTION_INVALID, "断言签发时间早于确认对象创建时间")

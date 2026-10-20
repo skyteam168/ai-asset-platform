@@ -1,4 +1,5 @@
 import {
+  AlertOutlined,
   ApartmentOutlined,
   ApiOutlined,
   AuditOutlined,
@@ -34,6 +35,7 @@ const ConnectionsPage = page(() => import("./pages/Connections"), "ConnectionsPa
 const ConsumersPage = page(() => import("./pages/Consumers"), "ConsumersPage");
 const GrantsPage = page(() => import("./pages/Grants"), "GrantsPage");
 const OrgsPage = page(() => import("./pages/Orgs"), "OrgsPage");
+const RiskPage = page(() => import("./pages/Risk"), "RiskPage");
 
 interface Section {
   path: string;
@@ -57,6 +59,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/grants", label: t("授权"), icon: <SafetyCertificateOutlined />, element: <GrantsPage />,
     roles: ["platform_admin", "company_admin"] },
+  { path: "/risk", label: t("风控与计量"), icon: <AlertOutlined />, element: <RiskPage />,
+    roles: ["platform_admin", "data_owner", "auditor", "company_admin"] },
   { path: "/audit", label: t("审计"), icon: <AuditOutlined />, element: <AuditPage />,
     roles: ["platform_admin", "auditor", "company_admin"] },
 ];

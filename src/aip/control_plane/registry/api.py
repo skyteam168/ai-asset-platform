@@ -49,6 +49,7 @@ class CeilingIn(BaseModel):
     company_id: uuid.UUID
     asset_set: dict[str, list[uuid.UUID]]
     max_classification: int = Field(ge=1, le=4)
+    quota: dict[str, int] = Field(default_factory=dict)
 
 
 class GrantIn(BaseModel):
@@ -123,8 +124,15 @@ def router() -> APIRouter:
                 company_id=body.company_id,
                 asset_ids=body.asset_set.get("asset_ids", []),
                 max_classification=body.max_classification,
+                quota=body.quota,
             )
         return {"id": str(cid), **body.model_dump(mode="json")}
+
+    @r.put(f"{V}/grant-ceilings/{{id}}/quota", tags=["grant"], operation_id="setCeilingQuota")
+    async def set_ceiling_quota(id: uuid.UUID, body: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """上限内全公司共享的每日调用额度：{"daily_calls": N}。"""
+        async with db.tx(actor.db_scope()) as conn:
+            return {"ceiling_id": str(id), "quota": await grants.set_ceiling_quota(conn, actor, id, body)}
 
     @r.get(f"{V}/grants", tags=["grant"], operation_id="listGrants")
     async def list_grants(actor: ActorDep, db: DbDep) -> dict[str, Any]:

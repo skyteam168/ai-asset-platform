@@ -159,6 +159,7 @@ consumer = Table(
     Column("bind_policy", Text),
     Column("status", Text),
     Column("contact", Text),
+    Column("quota", JSONB),
 )
 consumer_credential = Table(
     "consumer_credential",

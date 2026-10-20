@@ -15,6 +15,7 @@ from aip.control_plane.iam.api import ActorDep, DbDep
 from aip.control_plane.registry import tables as t
 from aip.libs.audit.store import verify
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.common.ids import utcnow
 from aip.libs.tokens.keys import platform_keys
 
 V = "/api/v1"
@@ -132,6 +133,29 @@ def router() -> APIRouter:
         async with db.tx(DbScope.system()) as conn:
             rows = (await conn.execute(text(sql), params)).mappings().all()
         return {"items": [_out(x) for x in rows], "next_cursor": None, "has_more": len(rows) == params["limit"]}
+
+    @r.get(f"{V}/usage", tags=["audit"], operation_id="usageReport")
+    async def usage(actor: ActorDep, db: DbDep, days: int = 7) -> dict[str, Any]:
+        """计量（12.4）：按日、公司、消费方、能力汇总调用、失败与写操作次数，来源是审计库的 tool.execution。"""
+        global_view = actor.is_global
+        companies = {g.scope_company_id for g in actor.roles if g.role == "company_admin"}
+        actor.require(global_view or bool(companies), "需要平台角色或分公司管理员")
+        params: dict[str, Any] = {"since": utcnow() - dt.timedelta(days=min(max(days, 1), 90))}
+        scope = ""
+        if not global_view:
+            scope = "AND company_id = ANY(CAST(:companies AS uuid[]))"
+            params["companies"] = [str(c) for c in companies]
+        sql = (
+            "SELECT date_trunc('day', occurred_at)::date AS day, company_id, record->>'consumer_id' AS consumer_id, "  # noqa: S608
+            "record->>'capability_id' AS capability_id, count(*) AS calls, "
+            "count(*) FILTER (WHERE record->>'status' IN ('failed','unknown')) AS failed, "
+            "count(*) FILTER (WHERE record->>'write' = 'true') AS writes "
+            "FROM audit.audit_log WHERE kind = 'tool.execution' AND occurred_at >= :since "
+            f"{scope} GROUP BY 1, 2, 3, 4 ORDER BY 1 DESC, calls DESC LIMIT 2000"
+        )
+        async with db.tx(DbScope.system()) as conn:
+            rows = (await conn.execute(text(sql), params)).mappings().all()
+        return {"items": [_out(x) for x in rows]}
 
     @r.post(f"{V}/audit-logs/verify", tags=["audit"], operation_id="verifyAudit")
     async def verify_audit(actor: ActorDep, db: DbDep) -> dict[str, Any]:

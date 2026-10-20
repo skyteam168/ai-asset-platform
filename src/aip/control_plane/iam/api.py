@@ -287,6 +287,12 @@ def router() -> APIRouter:
         items = [{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()} for row in rows]
         return {"items": items, "next_cursor": None, "has_more": False}
 
+    @r.put(f"{V}/consumers/{{id}}/quota", tags=["iam"], operation_id="setConsumerQuota")
+    async def set_consumer_quota(id: uuid.UUID, body: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """消费方每日配额：{"daily_calls": N, "daily_writes": N}；空对象表示不限。"""
+        async with db.tx(actor.db_scope()) as conn:
+            return {"consumer_id": str(id), "quota": await consumers.set_quota(conn, actor, id, body)}
+
     @r.post(f"{V}/consumers", tags=["iam"], operation_id="createConsumer", status_code=201)
     async def create_consumer(body: ConsumerIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:

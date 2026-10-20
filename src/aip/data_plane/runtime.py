@@ -37,6 +37,7 @@ from aip.data_plane.confirmation import (
 from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.pdp import Decision, PolicyService
 from aip.data_plane.principal import Principal
+from aip.data_plane.quota import MemoryQuotaStore, QuotaItem, QuotaStore
 from aip.data_plane.release_cache import ReleaseCache
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.common.errors import ErrorCode, PlatformError
@@ -420,10 +421,12 @@ class ToolRuntime:
         audit: AuditSpool,
         mode: str = "sandbox",
         confirmations: ConfirmationStore | None = None,
+        quota: QuotaStore | None = None,
     ) -> None:
         self.iam, self.releases, self.policy, self.registry = iam, releases, policy, registry
         self.store, self.audit, self.mode = store, audit, mode
         self.confirmations: ConfirmationStore = confirmations or MemoryConfirmationStore()
+        self.quota: QuotaStore = quota or MemoryQuotaStore()
         # 确认被执行或拒绝后通知 Workflow 引擎唤醒对应 Run（由引擎注入）
         self.on_confirmation_done: Callable[[str], Awaitable[None]] | None = None
         # 启动 Workflow 类能力（由引擎注入；没有引擎时 Workflow 不可调用）
@@ -501,6 +504,7 @@ class ToolRuntime:
         except PlatformError as e:
             return await self._finish_without_record(rec, e)
         write = inst.connector.is_write(op)
+        rec["write"] = write
         if write and not idempotency_key:
             return await self._finish_without_record(
                 rec, PlatformError(ErrorCode.INVALID_ARGUMENT, "写操作必须带幂等键")
@@ -529,7 +533,42 @@ class ToolRuntime:
             return _result(
                 prev, next_action=_next_action(ErrorCode.OUTCOME_UNKNOWN) if prev["status"] == "unknown" else None
             )
+        if (denied := await self._take_quota(principal, release, write)) is not None:
+            return await self._reject_quota(rec, denied)
         return await self._execute(rec, release, inst, op, args, write, principal)
+
+    def _quota_items(self, principal: Principal, release: dict[str, Any], write: bool) -> list[QuotaItem]:
+        consumer = self.iam.data.get("consumers", {}).get(principal.consumer_id) or {}
+        company = principal.consumer_company_id
+        cq = consumer.get("quota") or {}
+        items: list[QuotaItem] = []
+        if cq.get("daily_calls"):
+            items.append((f"consumer:{principal.consumer_id}", company, int(cq["daily_calls"])))
+        if write and cq.get("daily_writes"):
+            items.append((f"consumer_write:{principal.consumer_id}", company, int(cq["daily_writes"])))
+        for g in self.iam.data.get("grants", []):
+            owner = g["grantee_type"] == "consumer" and g["grantee_id"] == principal.consumer_id
+            profile = g["grantee_type"] == "agent_profile" and g["grantee_id"] == principal.agent_profile_id
+            limit = (g.get("ceiling_quota") or {}).get("daily_calls")
+            if g["asset_id"] == release["asset_id"] and (owner or profile) and limit and g.get("ceiling_id"):
+                items.append((f"ceiling:{g['ceiling_id']}", g["company_id"], int(limit)))
+                break
+        return items
+
+    async def _take_quota(self, principal: Principal, release: dict[str, Any], write: bool) -> str | None:
+        items = self._quota_items(principal, release, write)
+        return await self.quota.take(_now().date(), items) if items else None
+
+    async def _reject_quota(self, rec: dict[str, Any], key: str) -> dict[str, Any]:
+        scope = {"consumer": "消费方每日调用", "consumer_write": "消费方每日写操作", "ceiling": "授权上限每日调用"}
+        rec.update(
+            status="failed",
+            error_code=str(ErrorCode.RATE_LIMITED),
+            error_message=f"配额已用尽：{scope.get(key.split(':')[0], key)}（UTC 次日重置）",
+        )
+        await self.store.update(rec)
+        await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
+        return _result(rec, next_action={"type": "wait", "message": rec["error_message"], "retry_after_s": None})
 
     async def _start_workflow(
         self,
@@ -697,7 +736,11 @@ class ToolRuntime:
         op = spec["connector_ref"]["operation"]
         # 幂等键 = confirmation_id：同一确认无论被触发几次，下游只执行一次
         rec["idempotency_key"] = str(row["id"])
-        return await self._execute(rec, release, inst, op, args, inst.connector.is_write(op), principal)
+        write = inst.connector.is_write(op)
+        rec["write"] = write
+        if (denied := await self._take_quota(principal, release, write)) is not None:
+            return await self._reject_quota(rec, denied)
+        return await self._execute(rec, release, inst, op, args, write, principal)
 
     async def reject_confirmation(self, cid: str, *, by: str, via: str, comment: str | None = None) -> dict[str, Any]:
         row = await self.confirmations.get(cid)
@@ -748,6 +791,7 @@ class ToolRuntime:
             "transport",
             "tls_verified",
             "trace_id",
+            "write",
         )
         return {k: rec.get(k) for k in keys}
 

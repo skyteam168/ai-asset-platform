@@ -10,6 +10,7 @@ from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.iam.authz import Actor
+from aip.control_plane.iam.consumers import validate_quota
 from aip.control_plane.iam.events import emit
 from aip.control_plane.iam.orgs import get_org
 from aip.control_plane.registry import tables as t
@@ -28,8 +29,10 @@ async def create_ceiling(
     asset_ids: list[uuid.UUID],
     max_classification: int,
     domains: list[str] | None = None,
+    quota: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     actor.require(actor.has("platform_admin"), "授权上限由总部设定")
+    clean_quota = validate_quota(quota or {}, {"daily_calls"})
     org = await get_org(conn, company_id)
     if org.type != "company":
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "授权上限按公司设定")
@@ -41,13 +44,27 @@ async def create_ceiling(
             asset_ids=asset_ids,
             domains=domains or [],
             max_classification=max_classification,
-            quota={},
+            quota=clean_quota,
             status="active",
             created_by=actor.user_id,
         )
     )
     await emit(conn, "ceiling.created", company_id, cid, actor.user_id)
     return cid
+
+
+async def set_ceiling_quota(
+    conn: AsyncConnection, actor: Actor, ceiling_id: uuid.UUID, quota: dict[str, Any]
+) -> dict[str, int]:
+    """上限内全公司共享的每日调用额度（architecture.md 4.1：上限 = 资产集合 + 最大密级 + 配额）。"""
+    actor.require(actor.has("platform_admin"), "授权上限由总部设定")
+    row = (await conn.execute(select(t.grant_ceiling).where(t.grant_ceiling.c.id == ceiling_id))).mappings().first()
+    if row is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, "授权上限不存在")
+    clean = validate_quota(quota, {"daily_calls"})
+    await conn.execute(update(t.grant_ceiling).where(t.grant_ceiling.c.id == ceiling_id).values(quota=clean))
+    await emit(conn, "ceiling.quota_set", row["company_id"], ceiling_id, actor.user_id, clean)
+    return clean
 
 
 async def revoke_ceiling(conn: AsyncConnection, actor: Actor, ceiling_id: uuid.UUID) -> None:
@@ -156,6 +173,8 @@ async def snapshot_part(conn: AsyncConnection) -> dict[str, Any]:
                 "env": g["env"],
                 "company_id": str(g["company_id"]),
                 "within_ceiling": within,
+                "ceiling_id": str(g["ceiling_id"]),
+                "ceiling_quota": (c["quota"] if c is not None else None) or {},
                 "expires_at": g["expires_at"].isoformat(),
             }
         )
