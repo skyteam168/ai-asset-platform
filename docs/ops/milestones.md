@@ -180,6 +180,8 @@ React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（�
 | 后端接口测试 | 4 通过 | `tests/test_m4_console_api.py`：版本列表与详情、上限与审批待办的 RLS 隔离与摘要、审计检索过滤与公司范围、校验权限、`/console/` 静态托管 |
 | 全量后端测试 | 256 通过，0 失败，0 跳过 | `python -m pytest -q`，约 4.6 分钟；ruff、mypy --strict（76 个文件）、TLS 约束、spectral、链接检查均通过 |
 | 浏览器端到端 | 6 通过 | `console/e2e/console.spec.ts`（Playwright + Chromium，对 `tools/dev.py serve` 的真实控制面）：TOTP 登录（先错后对）、组织树、登记明文 HTTP 连接并执行连接测试、新建资产与版本并由 G0 列出缺失项、下发授权上限、审计链校验、退出 |
+| 镜像内置控制台 | 通过 | `deploy/Dockerfile` 增加 Node 22 构建阶段，产物放在 `/app/console/dist`（`AIP_CONSOLE_DIST`）；以 `--read-only`、uid 10001 运行控制面容器，`GET /console/` 与入口脚本均返回 200 |
+| 按路由分包 | 通过 | 除登录页外各页面 `React.lazy` 按需加载；入口 749 KB（gzip 243 KB），原单包 1.27 MB（gzip 398 KB） |
 
 本次发现并修复的问题：
 
@@ -190,6 +192,4 @@ React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（�
 
 | 项 | 现状 | 计划 |
 | --- | --- | --- |
-| 镜像内置控制台 | Dockerfile 未构建 console/dist，镜像里的控制面不托管控制台 | 加 Node 构建阶段 |
-| 单包体积 | 1.27 MB（gzip 398 KB），未分包 | 按路由懒加载 |
 | 控制面响应体 Pydantic 模型 | 前端类型按契约手写 | 引入响应模型后由 OpenAPI 生成前端类型 |

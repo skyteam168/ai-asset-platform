@@ -43,8 +43,9 @@ def create_app(db: Database | None = None) -> FastAPI:
     app.include_router(internal_router())
     app.include_router(console_router())
     # 控制台静态文件（console/dist，构建后存在时才挂载）；同源访问，无需 CORS
-    if CONSOLE_DIST.is_dir():
-        app.mount("/console", StaticFiles(directory=CONSOLE_DIST, html=True), name="console")
+    console_dist = pathlib.Path(settings.console_dist) if settings.console_dist else CONSOLE_DIST
+    if console_dist.is_dir():
+        app.mount("/console", StaticFiles(directory=console_dist, html=True), name="console")
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="cpHealth")
     async def healthz() -> web.Health:

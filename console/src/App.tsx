@@ -8,19 +8,24 @@ import {
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { Button, Layout, Menu, Space, Spin, Tag, Typography } from "antd";
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "./auth";
 import { OrgProvider } from "./components";
-import { ApprovalsPage } from "./pages/Approvals";
-import { AssetsPage } from "./pages/Assets";
-import { AuditPage } from "./pages/Audit";
-import { ConnectionsPage } from "./pages/Connections";
-import { ConsumersPage } from "./pages/Consumers";
-import { GrantsPage } from "./pages/Grants";
 import { LoginPage } from "./pages/Login";
-import { OrgsPage } from "./pages/Orgs";
 import type { Role } from "./types";
+
+// 各页面按需加载，首屏只下载框架与当前页面的代码；登录页很小且是未登录时的首屏，保持直接引入
+function page<K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) {
+  return lazy(() => load().then((m) => ({ default: m[name] })));
+}
+const ApprovalsPage = page(() => import("./pages/Approvals"), "ApprovalsPage");
+const AssetsPage = page(() => import("./pages/Assets"), "AssetsPage");
+const AuditPage = page(() => import("./pages/Audit"), "AuditPage");
+const ConnectionsPage = page(() => import("./pages/Connections"), "ConnectionsPage");
+const ConsumersPage = page(() => import("./pages/Consumers"), "ConsumersPage");
+const GrantsPage = page(() => import("./pages/Grants"), "GrantsPage");
+const OrgsPage = page(() => import("./pages/Orgs"), "OrgsPage");
 
 interface Section {
   path: string;
@@ -93,12 +98,14 @@ export function AppShell() {
         </Layout.Header>
         <Layout.Content style={{ padding: 24 }}>
           <OrgProvider>
+          <Suspense fallback={<Spin style={{ display: "block", marginTop: 48 }} />}>
           <Routes>
             {visible.map((s) => (
               <Route key={s.path} path={`${s.path}/*`} element={s.element} />
             ))}
             <Route path="*" element={visible.length ? <Navigate to={visible[0].path} replace /> : <NoAccess />} />
           </Routes>
+          </Suspense>
           </OrgProvider>
         </Layout.Content>
       </Layout>

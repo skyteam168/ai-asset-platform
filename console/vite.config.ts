@@ -6,6 +6,6 @@ export default defineConfig({
   base: "/console/",
   plugins: [react()],
   server: { port: 5173, proxy: { "/api": "http://127.0.0.1:18081" } },
-  build: { outDir: "dist", sourcemap: false, chunkSizeWarningLimit: 1600 },
+  build: { outDir: "dist", sourcemap: false, chunkSizeWarningLimit: 800 },
   test: { environment: "jsdom", setupFiles: ["./src/test/setup.ts"], css: false, testTimeout: 20000, exclude: ["e2e/**", "node_modules/**"] },
 });

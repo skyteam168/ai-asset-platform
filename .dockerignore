@@ -6,4 +6,7 @@
 .pytest_cache
 .mypy_cache
 .ruff_cache
-node_modules
+**/node_modules
+console/dist
+console/test-results
+console/playwright-report

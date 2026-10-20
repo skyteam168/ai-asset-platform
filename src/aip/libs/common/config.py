@@ -42,6 +42,8 @@ class Settings(BaseSettings):
     control_plane_url: str = ""
     # 数据面本地状态：快照落盘目录与审计 spool（architecture.md 4.4、12.4）
     data_dir: str = ".aip-data"
+    # 控制台静态文件目录；为空时用仓库内 console/dist（镜像里显式设为 /app/console/dist）
+    console_dist: str = ""
     instance_id: str = "dp-local"
     audit_spool_max_bytes: int = 512 * 1024 * 1024
     # 审计库（应用角色只有 INSERT / SELECT）；为空则只写本地 spool、不入库
