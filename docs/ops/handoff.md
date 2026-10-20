@@ -21,9 +21,10 @@
 | **M6d** 合成探针与契约漂移 | 完成 | 412ef8b |
 | **M6e** M5 延后项与控制台 | 完成 | 3184785 |
 | **M7a** MCP tasks + get_run_status | 完成 | 05269d9 |
+| **M7b** MCP MRTR / elicitation 确认 | 完成（本切片提交后填 SHA） | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M7a 用例；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M7b 用例；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -63,7 +64,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b）、`skill/`（M6c 包与目录）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`oauth.py`、`pdp.py` / `facts.py` |
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
-| `migrations/versions/` | Alembic，当前到 0013（parent_run_id / exec_sandbox / channel_outbox；此前 0012 probe） |
+| `migrations/versions/` | Alembic，当前到 0014（confirmation.decided_via 含 mcp；此前 0013 parent_run_id / sandbox / outbox） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
@@ -116,10 +117,11 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = M7b**）
+## 7. 之后：M7 与横向事项（**当前下一步 = M7c 发现模式等**）
 
 - **M7a（已完成）**：MCP `io.modelcontextprotocol/tasks`、`aip.get_run_status`、Workflow 作 MCP 异步 Tool、`tasks/get`（task_id=run_id）。
-- **M7 其余（P11、P13、P12 演练部分）**：MRTR / elicitation 确认通道；工具注解自动生成；发现模式（三个元工具，中文与越南语全文检索，danger 不进入）；上游 MCP 连接器；Python / TypeScript SDK（含 LangGraph / LangChain 适配器）；A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）。
+- **M7b（已完成）**：MCP elicitation / MRTR `input_required` 确认通道（`via=mcp`）；迁移 0014。
+- **M7 其余（P11、P13、P12 演练部分）**：工具注解自动生成；发现模式（三个元工具，中文与越南语全文检索，danger 不进入）；上游 MCP 连接器；Python / TypeScript SDK（含 LangGraph / LangChain 适配器）；A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）。
 - **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

@@ -370,7 +370,7 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 6 通过 | `test_m6_workflow_nodes.py`（5）+ `test_m6_notify.py`（1） |
 
-仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、MCP elicitation / MRTR、发现模式、SDK、A2A、故障演练。
+仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、发现模式、SDK、A2A、故障演练。
 
 ### M7a MCP tasks 与 get_run_status — 2026-10-20
 
@@ -391,6 +391,28 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 其他验收 | 结果 | 证据 |
 | --- | --- | --- |
 | 本切片测试 | 4 通过 | `test_m7_mcp_tasks.py` |
+
+### M7b MCP MRTR / elicitation 确认通道 — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| initialize / discover 声明 elicitation | 通过 | `test_m7_mcp_confirm.py::test_capabilities_advertise_elicitation` |
+| 声明能力时 user_confirm → input_required | 通过 | `test_elicitation_input_required_then_approve` |
+| 重试 approve 执行一次（via=mcp） | 通过 | 同上 |
+| 重试 reject 后不可再 approve | 通过 | `test_elicitation_reject_then_cannot_approve` |
+| 参数篡改拒绝 | 通过 | `test_elicitation_tampered_args_rejected` |
+| 未声明能力仍为 isError + next_action | 通过 | `test_without_elicitation_returns_error_next_action` |
+| approval 不走 MCP 交互 | 通过 | `test_approval_never_input_required` |
+
+| 部分 | 内容 |
+| --- | --- |
+| Gateway | `capabilities.elicitation`；客户端 `_meta` 声明 elicitation / preferInputRequired → `resultType: input_required`；重试带 `confirmationId` + `confirmationDecision` |
+| 身份 | Principal.user_id 须等于 confirmation.end_user_id；`decided_via=mcp` |
+| 迁移 0014 | `exec.confirmation.decided_via` 检查约束增加 `mcp` |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 6 通过 | `test_m7_mcp_confirm.py` |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
