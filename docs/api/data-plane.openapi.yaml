@@ -436,6 +436,27 @@ paths:
           application/json:
             schema:
               type: object
+  /mcp/discovery:
+    post:
+      operationId: mcpDiscovery
+      tags:
+      - mcp
+      summary: 发现模式 MCP：仅 search/get/invoke_capability（danger 不进入）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
 components:
   responses:
     Problem:

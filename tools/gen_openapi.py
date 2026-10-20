@@ -1341,6 +1341,17 @@ def data_plane() -> dict[str, Any]:
                 "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object"}}}},
             }
         },
+        "/mcp/discovery": {
+            "post": {
+                **op(
+                    "mcpDiscovery",
+                    "mcp",
+                    "发现模式 MCP：仅 search/get/invoke_capability（danger 不进入）",
+                    res={"type": "object"},
+                ),
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object"}}}},
+            }
+        },
     }
     return doc("AIP Data Plane API", "数据面：OAuth 令牌、目录、统一调用、确认、MCP", paths, sch)
 

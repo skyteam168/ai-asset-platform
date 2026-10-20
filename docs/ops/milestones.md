@@ -370,7 +370,7 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 6 通过 | `test_m6_workflow_nodes.py`（5）+ `test_m6_notify.py`（1） |
 
-仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、发现模式、SDK、A2A、故障演练。
+仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、上游 MCP、SDK、A2A、故障演练。
 
 ### M7a MCP tasks 与 get_run_status — 2026-10-20
 
@@ -413,6 +413,25 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 其他验收 | 结果 | 证据 |
 | --- | --- | --- |
 | 本切片测试 | 6 通过 | `test_m7_mcp_confirm.py` |
+
+### M7c MCP 发现模式 — 2026-10-20
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| discovery tools/list 仅四元工具 | 通过 | `test_m7_discovery.py::test_discovery_tools_list_only_meta` |
+| 未授权与 danger 搜不到 | 通过 | `test_search_hides_unauthorized_and_danger` |
+| 越文去声调可命中 | 通过 | `test_vietnamese_accent_fold_search` |
+| get/invoke 与未知统一；可调用授权能力 | 通过 | `test_get_and_invoke_capability` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 端点 | `POST /mcp/discovery`：`search_capabilities` / `get_capability` / `invoke_capability` + `aip.get_run_status` |
+| 过滤 | 先 PDP `visible(mcp)`，再排除 `risk_level=danger`；不可见统一 Unknown |
+| 检索 | 发布快照规范化文本（NFD 去音标 + 子串/分词）；未装 zhparser（alpine PG），后续可物化索引 |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 4 通过 | `test_m7_discovery.py` |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
