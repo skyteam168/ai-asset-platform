@@ -15,7 +15,7 @@
 | 下游不可用 | Connector 熔断 / 明确错误码 | `test_m3_runtime.py`（超时、熔断） |
 | PostgreSQL 主库切换 | 切换窗口 spool 续写；恢复后 ship 零丢失、链完整 | `test_m7_pg_failover.py`；人工主从见 [pg-failover.md](pg-failover.md) |
 
-未纳入自动化（运维/容量）：多副本压测；可选 zhparser；生产 Patroni/CloudNativePG。
+未纳入本矩阵：可选 zhparser；生产 Patroni/CloudNativePG；k8s 真实多副本压测（多进程扩展见 [slo.md](slo.md) §8 / `test_m7_capacity.py`）。
 
 ## 2. 本地人工演练（可选）
 

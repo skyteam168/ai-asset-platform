@@ -47,7 +47,6 @@ architecture.md 第 1 章的初始目标：平台自身附加延迟 P95 ≤ 100m
 ## 6. 尚未覆盖
 
 - 真实下游（专线到分公司系统）的端到端延迟与熔断表现：在接入首个生产只读系统时测量。
-- 多进程 / 多副本下的线性扩展：随容量压测完成。
 
 ## 7. PostgreSQL 切换与审计（M7k）
 
@@ -56,3 +55,22 @@ architecture.md 第 1 章的初始目标：平台自身附加延迟 P95 ≤ 100m
 | 切换窗口审计零丢失 | spool 续写 + ship 幂等恢复；链可 verify | `tests/test_m7_pg_failover.py`；[pg-failover.md](pg-failover.md) |
 | 本地主从 | opt-in compose profile `pg-ha`；默认 `dev.py up` 仍为单节点 | `deploy/docker-compose.pg-ha.yml` |
 | 生产自动切换 / PITR | 未在本仓库落地 | architecture 12.1（Patroni / CloudNativePG）；横向 |
+
+## 8. 多进程线性扩展（M7l）
+
+工具：`python tools/loadtest.py --workers 1,2,4 --concurrency 20 --requests 2000`（每档独立 spawn 进程 + 客户端轮询；Mock 下游）。  
+口径：`scaling = rps_N / (rps_1 × N)`（1.0 = 理想线性）。
+
+环境：Windows 开发机、Python 3.12、共享 Docker OPA（与 §2 相同局限）。
+
+| workers | REST rps | REST P95 | MCP rps | MCP P95 | scaling REST | scaling MCP |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | 294 | 87 ms | 176 | 192 ms | 1.00 | 1.00 |
+| 2 | 500 | 57 ms | 383 | 83 ms | **0.85** | **1.09** |
+| 4 | 525 | 53 ms | 427 | 64 ms | 0.45 | 0.61 |
+
+结论：
+
+- **2 进程**接近线性（REST scaling ≈ 0.85；MCP ≥ 1 因单进程时 MCP 更吃事件循环）。
+- **4 进程**收益递减：客户端并发仍为 20，且 OPA / 本机 CPU 成为共享瓶颈；生产应按「每 Pod 多 worker + 多 Pod」扩展，并提高入口并发与 sidecar 本地 OPA。
+- CI：`tests/test_m7_capacity.py` 轻量冒烟（200 请求，`rps(2) ≥ rps(1)×1.15`）。

@@ -558,6 +558,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | CI | 进程内死连接模拟切换窗口（不启真实主从） |
 | 不在本片 | Patroni/CloudNativePG/PITR；多副本容量压测；zhparser |
 
+### M7l 多进程容量压测（线性扩展）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| loadtest 支持多 worker 进程 + 轮询 | 通过 | `tools/loadtest.py --workers` |
+| 2 进程 REST 吞吐明显高于单进程 | 通过 | [slo.md](slo.md) §8；`test_m7_capacity.py` |
+| scaling 口径入库 | 通过 | slo §8（2 进程 REST ≈ 0.85） |
+
+| 部分 | 内容 |
+| --- | --- |
+| 工具 | spawn 子进程数据面；`--workers 1,2,4` 输出 `scaling_vs_workers1` |
+| CI | `test_m7_capacity.py`（200 req 冒烟，不跑全量 2000） |
+| 不在本片 | zhparser；k8s 真实多副本集群压测；换 PG 镜像 |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |
