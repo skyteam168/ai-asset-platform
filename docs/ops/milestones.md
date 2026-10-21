@@ -514,6 +514,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 认证 | 模式 A 平台访问令牌（MCP 禁止复用同一 X-User-Assertion） |
 | 不在本片 | 故障演练（停控制面/Valkey/OpenBao/审计库）、zhparser、多副本压测 |
 
+### M7i 故障演练（12.2）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 控制面不可达仍可按快照调用 | 通过 | `test_m7_fault_drills.py::test_invoke_without_control_plane`（及 `test_m2_registry` 磁盘恢复） |
+| Valkey 不可用 → jti 退化 | 通过 | `test_m7_fault_drills.py::test_valkey_down_sets_degraded` + `test_m1_tokens` degraded TTL |
+| OpenBao 不可用 → 用缓存凭据 | 通过 | `test_m7_fault_drills.py::test_openbao_down_uses_cached_credential` |
+| 审计库不可用 / spool 背压 | 既有 | `test_m2_audit.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 文档 | [docs/ops/fault-drills.md](fault-drills.md) 对照表与人工演练步骤 |
+| 不在本片 | PostgreSQL 主从切换实测、多副本容量压测、zhparser |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

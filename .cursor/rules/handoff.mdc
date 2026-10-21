@@ -2,7 +2,7 @@
 description: 接手开发须知（进度、门禁命令、约定与坑），详见 docs/ops/handoff.md
 alwaysApply: true
 ---
-- 开始任何任务前先读 docs/ops/handoff.md（进度、待做顺序、约定）与 docs/ops/milestones.md 最后几节；当前下一步是 M7 剩余（故障演练）。
+- 开始任何任务前先读 docs/ops/handoff.md（进度、待做顺序、约定）与 docs/ops/milestones.md 最后几节；M7 主线已收口，下一步为横向事项 / 压测 / zhparser。
 - 每个切片：迁移 → 服务层 → 接口 → 测试 → tools/gen_openapi.py 登记接口（契约测试会检查每个路由）→ 更新 docs/ops/milestones.md → 单独提交。
 - 提交前必须通过：`.venv/Scripts/python tools/dev.py lint`、`.venv/Scripts/python tools/dev.py test`、控制台 `npm run typecheck && npm test && npm run build`、`cd sdk/typescript && npm ci && npm run typecheck && npm test && npm run build`；改了 OpenAPI / Schema 要重新生成并提交生成物，提交后跑 `tools/dev.py docs`。
 - 新表：带 company_id、开 RLS、给 aip_app 授权，并加入 tests/iam_seed.py 的 truncate 列表。
