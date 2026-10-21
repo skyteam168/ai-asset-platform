@@ -289,6 +289,10 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["user_id", "requested_level", "reason", "expires_at"],
             ),
+            "ClearanceDecision": o(
+                {"id": ID, "status": {"enum": ["pending", "approved", "rejected", "cancelled"]}},
+                ["id", "status"],
+            ),
             "Decision": o({"decision": {"enum": ["approve", "reject"]}, "comment": S}, ["decision"]),
             "Note": o({"note": {"type": "string", "maxLength": 1000}}),
             "Quota": o(
@@ -718,7 +722,7 @@ def control_plane() -> dict[str, Any]:
                 "iam",
                 "审批密级申请",
                 req=ref("Decision"),
-                res=ref("ClearanceRequest"),
+                res=ref("ClearanceDecision"),
                 params=["Id"],
             )
         },

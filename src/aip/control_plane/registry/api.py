@@ -14,11 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.grant import service as grants
 from aip.control_plane.iam.api import ActorDep, DbDep, _bearer
+from aip.control_plane.registry import schemas as out
 from aip.control_plane.registry import service as registry
 from aip.control_plane.registry import snapshot
 from aip.control_plane.registry import tables as t
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.common.paging import Page
 from aip.libs.tokens.keys import platform_key
 
 V = "/api/v1"
@@ -68,14 +70,20 @@ def _out(row: dict[str, Any]) -> dict[str, Any]:
 def router() -> APIRouter:
     r = APIRouter()
 
-    @r.get(f"{V}/assets", tags=["registry"], operation_id="listAssets")
-    async def list_assets(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/assets", tags=["registry"], operation_id="listAssets", response_model=Page[out.Asset])
+    async def list_assets(actor: ActorDep, db: DbDep) -> Page[out.Asset]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(t.asset).order_by(t.asset.c.name).limit(200))).mappings().all()
-        return {"items": [_out(dict(x)) for x in rows], "next_cursor": None, "has_more": False}
+        return Page(items=[out.Asset.model_validate(_out(dict(x))) for x in rows])
 
-    @r.post(f"{V}/assets", tags=["registry"], operation_id="createAsset", status_code=201)
-    async def create_asset(body: AssetIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/assets",
+        tags=["registry"],
+        operation_id="createAsset",
+        status_code=201,
+        response_model=out.Asset,
+    )
+    async def create_asset(body: AssetIn, actor: ActorDep, db: DbDep) -> out.Asset:
         async with db.tx(actor.db_scope()) as conn:
             aid = await registry.create_asset(
                 conn,
@@ -85,13 +93,19 @@ def router() -> APIRouter:
                 owner_org_id=body.owner_org_id,
                 classification=body.classification,
             )
-            return _out(await registry.asset_row(conn, aid))
+            return out.Asset.model_validate(_out(await registry.asset_row(conn, aid)))
 
-    @r.post(f"{V}/assets/{{id}}/versions", tags=["registry"], operation_id="createVersion", status_code=201)
-    async def create_version(id: uuid.UUID, body: VersionIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/assets/{{id}}/versions",
+        tags=["registry"],
+        operation_id="createVersion",
+        status_code=201,
+        response_model=out.AssetVersion,
+    )
+    async def create_version(id: uuid.UUID, body: VersionIn, actor: ActorDep, db: DbDep) -> out.AssetVersion:
         async with db.tx(actor.db_scope()) as conn:
             vid = await registry.create_version(conn, actor, id, body.semver, body.spec, body.dep_lock)
-            return _out(await registry.version_row(conn, vid))
+            return out.AssetVersion.model_validate(_out(await registry.version_row(conn, vid)))
 
     @r.post(f"{V}/releases", tags=["release"], operation_id="createRelease", status_code=201)
     async def create_release(body: ReleaseIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
@@ -115,8 +129,14 @@ def router() -> APIRouter:
             row = (await conn.execute(select(t.release).where(t.release.c.id == restored))).mappings().one()
         return _out(dict(row))
 
-    @r.post(f"{V}/grant-ceilings", tags=["grant"], operation_id="createCeiling", status_code=201)
-    async def create_ceiling(body: CeilingIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/grant-ceilings",
+        tags=["grant"],
+        operation_id="createCeiling",
+        status_code=201,
+        response_model=out.GrantCeiling,
+    )
+    async def create_ceiling(body: CeilingIn, actor: ActorDep, db: DbDep) -> out.GrantCeiling:
         async with db.tx(actor.db_scope()) as conn:
             cid = await grants.create_ceiling(
                 conn,
@@ -126,7 +146,7 @@ def router() -> APIRouter:
                 max_classification=body.max_classification,
                 quota=body.quota,
             )
-        return {"id": str(cid), **body.model_dump(mode="json")}
+        return out.GrantCeiling.model_validate({"id": str(cid), **body.model_dump(mode="json")})
 
     @r.put(f"{V}/grant-ceilings/{{id}}/quota", tags=["grant"], operation_id="setCeilingQuota")
     async def set_ceiling_quota(id: uuid.UUID, body: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
@@ -134,14 +154,20 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return {"ceiling_id": str(id), "quota": await grants.set_ceiling_quota(conn, actor, id, body)}
 
-    @r.get(f"{V}/grants", tags=["grant"], operation_id="listGrants")
-    async def list_grants(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/grants", tags=["grant"], operation_id="listGrants", response_model=Page[out.Grant])
+    async def list_grants(actor: ActorDep, db: DbDep) -> Page[out.Grant]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(t.grant).limit(200))).mappings().all()
-        return {"items": [_out(dict(x)) for x in rows], "next_cursor": None, "has_more": False}
+        return Page(items=[out.Grant.model_validate(_out(dict(x))) for x in rows])
 
-    @r.post(f"{V}/grants", tags=["grant"], operation_id="createGrant", status_code=201)
-    async def create_grant(body: GrantIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/grants",
+        tags=["grant"],
+        operation_id="createGrant",
+        status_code=201,
+        response_model=out.Grant,
+    )
+    async def create_grant(body: GrantIn, actor: ActorDep, db: DbDep) -> out.Grant:
         async with db.tx(actor.db_scope()) as conn:
             gid = await grants.create_grant(
                 conn,
@@ -153,7 +179,7 @@ def router() -> APIRouter:
                 expires_at=body.expires_at,
                 ceiling_id=body.ceiling_id,
             )
-        return {"id": str(gid), **body.model_dump(mode="json")}
+        return out.Grant.model_validate({"id": str(gid), **body.model_dump(mode="json")})
 
     @r.get(f"{V}/snapshots/release", tags=["snapshot"], operation_id="pullReleaseSnapshot", response_model=None)
     async def pull_release(

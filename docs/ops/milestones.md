@@ -684,6 +684,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H19 响应体 Pydantic（消费方 / 资产 / 授权）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 业务角色 / 消费方 / 绑定 / 凭据 / 密级 / 断言调试挂载模型 | 通过 | `test_h19_response_models.py` |
+| 资产 / 版本 / 授权 / 上限挂载模型 | 通过 | 同上 |
+| OpenAPI `ClearanceDecision` | 通过 | `gen_openapi.py`；与 decide 响应对齐 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | `iam/schemas.py` 扩；`registry/schemas.py` 新建 |
+| 契约 | decideClearance → `ClearanceDecision`（不再假称完整 ClearanceRequest） |
+| 不在本片 | gates / console / conn / risk / webhook / skill 等其余路由 |
+
 ### H18 wf_run.ctx / wf_step.output 信封 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

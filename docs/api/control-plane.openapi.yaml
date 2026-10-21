@@ -481,7 +481,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ClearanceRequest'
+                $ref: '#/components/schemas/ClearanceDecision'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -2857,6 +2857,21 @@ components:
       - requested_level
       - reason
       - expires_at
+    ClearanceDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        status:
+          enum:
+          - pending
+          - approved
+          - rejected
+          - cancelled
+      required:
+      - id
+      - status
     Decision:
       type: object
       properties:

@@ -51,6 +51,7 @@
 | **H16** K8s 清单校验与 CI | 完成 | 4a36b23 |
 | **H17** pg_trgm / CNPG 示例 | 完成 | 408b196 |
 | **H18** wf ctx/step 信封 | 完成 | 33f1fc2 |
+| **H19** 响应体 Pydantic（消费方/资产） | 完成 | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -159,10 +160,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = 其余 response_model 等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = console/gates response_model 等**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H18（已完成）**：至 wf ctx/step 信封、pg_trgm/CNPG、K8s CI、IAM response_model、WORM、OTel、业务角色、信封、LLM、G0 PII。
-- **横向（当前下一步）**：其余路由 response_model；zhparser 镜像（可选）；human_task.data 信封。
+- **H1–H19（已完成）**：至消费方/资产 response_model、wf 信封、pg_trgm/CNPG、K8s CI、IAM 核心模型、WORM、OTel、业务角色、LLM、G0 PII。
+- **横向（当前下一步）**：console/gates/conn 等 response_model；zhparser 镜像（可选）；human_task.data 信封。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

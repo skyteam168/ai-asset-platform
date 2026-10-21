@@ -295,23 +295,31 @@ def router() -> APIRouter:
             id=str(rid), user_id=str(id), role=body.role, scope_org_id=str(body.scope_org_id)
         )
 
-    @r.get(f"{V}/companies/{{id}}/business-roles", tags=["iam"], operation_id="listBusinessRoles")
-    async def list_business_roles(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/companies/{{id}}/business-roles",
+        tags=["iam"],
+        operation_id="listBusinessRoles",
+        response_model=Page[out.BusinessRole],
+    )
+    async def list_business_roles(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.BusinessRole]:
         async with db.tx(actor.db_scope()) as conn:
-            items = await business_roles.list_roles(conn, id)
-        return {"items": items, "next_cursor": None, "has_more": False}
+            items = [out.BusinessRole.model_validate(x) for x in await business_roles.list_roles(conn, id)]
+        return Page(items=items)
 
     @r.post(
         f"{V}/companies/{{id}}/business-roles",
         tags=["iam"],
         operation_id="createBusinessRole",
         status_code=201,
+        response_model=out.BusinessRole,
     )
     async def create_business_role(
         id: uuid.UUID, body: BusinessRoleIn, actor: ActorDep, db: DbDep
-    ) -> dict[str, Any]:
+    ) -> out.BusinessRole:
         async with db.tx(actor.db_scope()) as conn:
-            return await business_roles.create(conn, actor, id, body.code, body.name, body.description)
+            return out.BusinessRole.model_validate(
+                await business_roles.create(conn, actor, id, body.code, body.name, body.description)
+            )
 
     @r.delete(
         f"{V}/companies/{{id}}/business-roles/{{code}}",
@@ -326,26 +334,44 @@ def router() -> APIRouter:
             await business_roles.delete(conn, actor, id, code)
         response.status_code = 204
 
-    @r.post(f"{V}/clearance-requests", tags=["iam"], operation_id="requestClearance", status_code=201)
-    async def request_clearance(body: ClearanceIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/clearance-requests",
+        tags=["iam"],
+        operation_id="requestClearance",
+        status_code=201,
+        response_model=out.ClearanceRequest,
+    )
+    async def request_clearance(body: ClearanceIn, actor: ActorDep, db: DbDep) -> out.ClearanceRequest:
         async with db.tx(actor.db_scope()) as conn:
             rid = await users.request_clearance(
                 conn, actor, body.user_id, body.requested_level, body.reason, body.expires_at
             )
-        return {"id": str(rid), "status": "pending", **body.model_dump(mode="json")}
+        return out.ClearanceRequest.model_validate(
+            {"id": str(rid), "status": "pending", **body.model_dump(mode="json")}
+        )
 
-    @r.post(f"{V}/clearance-requests/{{id}}/decide", tags=["iam"], operation_id="decideClearance")
-    async def decide_clearance(id: uuid.UUID, body: DecisionIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/clearance-requests/{{id}}/decide",
+        tags=["iam"],
+        operation_id="decideClearance",
+        response_model=out.ClearanceDecision,
+    )
+    async def decide_clearance(
+        id: uuid.UUID, body: DecisionIn, actor: ActorDep, db: DbDep
+    ) -> out.ClearanceDecision:
         async with db.tx(actor.db_scope()) as conn:
             status = await users.decide_clearance(conn, actor, id, body.decision == "approve", body.comment)
-        return {"id": str(id), "status": status}
+        return out.ClearanceDecision(id=str(id), status=status)
 
-    @r.get(f"{V}/consumers", tags=["iam"], operation_id="listConsumers")
-    async def list_consumers(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/consumers", tags=["iam"], operation_id="listConsumers", response_model=Page[out.Consumer])
+    async def list_consumers(actor: ActorDep, db: DbDep) -> Page[out.Consumer]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(t.consumer).order_by(t.consumer.c.client_id))).mappings().all()
-        items = [{k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()} for row in rows]
-        return {"items": items, "next_cursor": None, "has_more": False}
+        items = [
+            out.Consumer.model_validate({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()})
+            for row in rows
+        ]
+        return Page(items=items)
 
     @r.put(f"{V}/consumers/{{id}}/quota", tags=["iam"], operation_id="setConsumerQuota")
     async def set_consumer_quota(id: uuid.UUID, body: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
@@ -353,8 +379,14 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return {"consumer_id": str(id), "quota": await consumers.set_quota(conn, actor, id, body)}
 
-    @r.post(f"{V}/consumers", tags=["iam"], operation_id="createConsumer", status_code=201)
-    async def create_consumer(body: ConsumerIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/consumers",
+        tags=["iam"],
+        operation_id="createConsumer",
+        status_code=201,
+        response_model=out.Consumer,
+    )
+    async def create_consumer(body: ConsumerIn, actor: ActorDep, db: DbDep) -> out.Consumer:
         async with db.tx(actor.db_scope()) as conn:
             cid = await consumers.create_consumer(
                 conn,
@@ -365,14 +397,25 @@ def router() -> APIRouter:
                 bind_policy=body.bind_policy,
                 contact=body.contact,
             )
-        return {"id": str(cid), **body.model_dump(mode="json"), "status": "active"}
+        return out.Consumer.model_validate(
+            {"id": str(cid), **body.model_dump(mode="json"), "status": "active"}
+        )
 
-    @r.post(f"{V}/consumers/{{id}}/credentials", tags=["iam"], operation_id="issueCredential", status_code=201)
-    async def issue_credential(id: uuid.UUID, body: CredentialIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/consumers/{{id}}/credentials",
+        tags=["iam"],
+        operation_id="issueCredential",
+        status_code=201,
+        response_model=out.CredentialIssued,
+    )
+    async def issue_credential(
+        id: uuid.UUID, body: CredentialIn, actor: ActorDep, db: DbDep
+    ) -> out.CredentialIssued:
         async with db.tx(actor.db_scope()) as conn:
             cred_id, token, expires = await consumers.issue_static_token(conn, actor, id, body.days, body.ip_binding)
-        return {"id": str(cred_id), "kind": body.kind, "token": token, "expires_at": expires.isoformat()}
-
+        return out.CredentialIssued(
+            id=str(cred_id), kind=body.kind, token=token, expires_at=expires.isoformat()
+        )
     @r.post(f"{V}/credentials/{{id}}/revoke", tags=["iam"], operation_id="revokeCredential", status_code=204)
     async def revoke_credential(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
         async with db.tx(actor.db_scope()) as conn:
@@ -385,25 +428,48 @@ def router() -> APIRouter:
             await consumers.add_jwk(conn, actor, id, jwk)
         return jwk
 
-    @r.get(f"{V}/consumers/{{id}}/bindings", tags=["iam"], operation_id="listBindings")
-    async def list_bindings(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/consumers/{{id}}/bindings",
+        tags=["iam"],
+        operation_id="listBindings",
+        response_model=Page[out.UserBinding],
+    )
+    async def list_bindings(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.UserBinding]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (
                 (await conn.execute(select(t.user_binding).where(t.user_binding.c.consumer_id == id).limit(200)))
                 .mappings()
                 .all()
             )
-        items = [{k: (str(v) if isinstance(v, uuid.UUID | dt.datetime) else v) for k, v in row.items()} for row in rows]
-        return {"items": items, "next_cursor": None, "has_more": False}
+        items = [
+            out.UserBinding.model_validate(
+                {k: (str(v) if isinstance(v, uuid.UUID | dt.datetime) else v) for k, v in row.items()}
+            )
+            for row in rows
+        ]
+        return Page(items=items)
 
-    @r.post(f"{V}/consumers/{{id}}/bindings", tags=["iam"], operation_id="createBinding", status_code=201)
-    async def create_binding(id: uuid.UUID, body: BindingIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/consumers/{{id}}/bindings",
+        tags=["iam"],
+        operation_id="createBinding",
+        status_code=201,
+        response_model=out.UserBinding,
+    )
+    async def create_binding(id: uuid.UUID, body: BindingIn, actor: ActorDep, db: DbDep) -> out.UserBinding:
         async with db.tx(actor.db_scope()) as conn:
             bid = await consumers.create_binding(conn, actor, id, body.external_subject, body.user_id)
-        return {"id": str(bid), "consumer_id": str(id), **body.model_dump(mode="json")}
+        return out.UserBinding.model_validate(
+            {"id": str(bid), "consumer_id": str(id), **body.model_dump(mode="json")}
+        )
 
-    @r.post(f"{V}/assertion-debug", tags=["iam"], operation_id="debugAssertion")
-    async def debug_assertion(body: DebugIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/assertion-debug",
+        tags=["iam"],
+        operation_id="debugAssertion",
+        response_model=out.AssertionDebugResult,
+    )
+    async def debug_assertion(body: DebugIn, actor: ActorDep, db: DbDep) -> out.AssertionDebugResult:
         """断言调试器：验签、校验声明、查绑定；不消耗 jti、不记录断言内容（architecture.md 3.1）。"""
         s = get_settings()
         async with db.tx(actor.db_scope()) as conn:
@@ -437,7 +503,7 @@ def router() -> APIRouter:
                 )
             except PlatformError as e:
                 result["errors"].append(f"{e.code}: {e.detail}")
-                return result
+                return out.AssertionDebugResult.model_validate(result)
             result.update(signature_valid=True, claims_valid=True)
             row = (
                 await conn.execute(
@@ -449,7 +515,7 @@ def router() -> APIRouter:
             ).first()
             if row is None:
                 result["errors"].append(f"USER_NOT_BOUND（bind_policy={c['bind_policy']}）")
-                return result
+                return out.AssertionDebugResult.model_validate(result)
             result["binding"] = str(row[0])
             u = await users.user_row(conn, row[0])
             result["principal"] = {
@@ -460,7 +526,7 @@ def router() -> APIRouter:
                 "client_id": c["client_id"],
                 "status": u["status"],
             }
-        return result
+        return out.AssertionDebugResult.model_validate(result)
 
     @r.get(f"{V}/snapshots/iam", tags=["snapshot"], operation_id="pullIamSnapshot", response_model=None)
     async def pull_iam(
