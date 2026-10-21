@@ -34,6 +34,13 @@ CONSOLE_DIST = pathlib.Path(__file__).resolve().parents[3] / "console" / "dist"
 
 def create_app(db: Database | None = None) -> FastAPI:
     settings = get_settings()
+    from aip.libs.otel import setup_tracing
+
+    setup_tracing(
+        service_name="aip-control-plane",
+        exporter=settings.otel_exporter,  # type: ignore[arg-type]
+        otlp_endpoint=settings.otel_endpoint,
+    )
 
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

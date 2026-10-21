@@ -247,9 +247,12 @@ def build_client(
             if target.scheme != base.scheme or target.host != base.host:
                 raise PlatformError(ErrorCode.REDIRECT_BLOCKED, "下游重定向到其他协议或主机，已拒绝")
 
-    headers: dict[str, str] = dict(extra_headers or {})
-    if len(trace_id) == 32:
-        headers.setdefault("traceparent", f"00-{trace_id}-{'0' * 15}1-01")
+    from aip.libs.otel import inject_headers
+
+    headers = inject_headers(dict(extra_headers or {}))
+    # 无活跃 span 时回退到调用方传入的 trace_id（兼容旧测试）
+    if not any(k.lower() == "traceparent" for k in headers) and len(trace_id) == 32:
+        headers["traceparent"] = f"00-{trace_id}-{'0' * 15}1-01"
     return httpx.AsyncClient(
         base_url=conn.base_url,
         transport=_Transport(pool),

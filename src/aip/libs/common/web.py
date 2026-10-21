@@ -1,4 +1,4 @@
-"""两个 FastAPI 应用共用的装配：Problem Details 错误、trace id、健康检查模型。"""
+"""两个 FastAPI 应用共用的装配：Problem Details 错误、OTel 上下文、健康检查模型。"""
 
 from __future__ import annotations
 
@@ -10,10 +10,13 @@ from typing import Literal
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from opentelemetry import context as otel_context
+from opentelemetry import trace
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.otel import current_trace_id_hex, extract_context, get_tracer
 
 log = logging.getLogger("aip")
 PROBLEM = "application/problem+json"
@@ -26,21 +29,34 @@ class Health(BaseModel):
     checks: dict[str, str] = {}
 
 
-def _trace_id(request: Request) -> str:
-    tp = request.headers.get("traceparent", "")
-    parts = tp.split("-")
-    if len(parts) == 4 and len(parts[1]) == 32:
-        return parts[1]
-    return secrets.token_hex(16)
-
-
 def install(app: FastAPI) -> None:
+    tracer = get_tracer("aip.http")
+
     @app.middleware("http")
-    async def trace(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
-        request.state.trace_id = _trace_id(request)
-        response = await call_next(request)
-        response.headers["X-Trace-Id"] = request.state.trace_id
-        return response
+    async def trace_mw(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        carrier = {k.lower(): v for k, v in request.headers.items()}
+        ctx = extract_context(carrier)
+        token = otel_context.attach(ctx)
+        try:
+            with tracer.start_as_current_span(
+                f"{request.method} {request.url.path}",
+                kind=trace.SpanKind.SERVER,
+                attributes={
+                    "http.method": request.method,
+                    "http.route": request.url.path,
+                },
+            ) as span:
+                tid = current_trace_id_hex() or secrets.token_hex(16)
+                request.state.trace_id = tid
+                if span.is_recording():
+                    span.set_attribute("aip.trace_id", tid)
+                response = await call_next(request)
+                response.headers["X-Trace-Id"] = tid
+                if span.is_recording():
+                    span.set_attribute("http.status_code", response.status_code)
+                return response
+        finally:
+            otel_context.detach(token)
 
     @app.exception_handler(PlatformError)
     async def platform_error(request: Request, exc: PlatformError) -> JSONResponse:

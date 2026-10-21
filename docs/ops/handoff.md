@@ -37,6 +37,7 @@
 | **H2** OpenAPI Importer（声明式草稿） | 完成 | 9414150 |
 | **H3** Postman Importer（声明式草稿） | 完成 | 30cbde4 |
 | **H4** Prism Mock 自动生成 | 完成 | 52bbb04 |
+| **H5** OpenTelemetry 贯通 | 完成 | （本片提交） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -142,13 +143,14 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = LLM Gateway / OTel 等横向**）
+## 7. 之后：M7 与横向事项（**当前下一步 = LLM Gateway / 看板等横向**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
 - **H1（已完成）**：G4 依赖影响分析（`GET /versions/{id}/impact`；`run-tests` 含 G4；上层钉住未发布版本则回 draft）。
 - **H2（已完成）**：OpenAPI → 声明式 Connector / Tool 草稿（`POST /api/v1/importer/openapi`；金标 mes-vn01；可选 persist）。
 - **H3（已完成）**：Postman Collection → 声明式草稿（`POST /api/v1/importer/postman`；金标 mes-vn01 collection）。
 - **H4（已完成）**：按 OpenAPI 自动拉起 Prism Mock（`POST/GET/DELETE /api/v1/prism-mocks`；Docker + 进程内会话）。
-- **横向（当前下一步）**：工具选择评测（依赖 LLM Gateway）；AI 描述（依赖 LLM Gateway）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行；生产 Patroni / 库内 FTS（zhparser）按需。
+- **H5（已完成）**：OpenTelemetry 追踪贯通（Gateway / MCP `_meta.traceparent` → Runtime → 出站 HTTP；可选 OTLP）。
+- **横向（当前下一步）**：工具选择评测（依赖 LLM Gateway）；AI 描述（依赖 LLM Gateway）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OTel Collector 与看板部署；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行；生产 Patroni / 库内 FTS（zhparser）按需。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

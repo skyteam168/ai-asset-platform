@@ -149,6 +149,13 @@ def create_app(
     llm: LlmClient | None = None,
 ) -> FastAPI:
     settings = get_settings()
+    from aip.libs.otel import setup_tracing
+
+    setup_tracing(
+        service_name="aip-data-plane",
+        exporter=settings.otel_exporter,  # type: ignore[arg-type]
+        otlp_endpoint=settings.otel_endpoint,
+    )
     # 签名用当前密钥；验签信任全部已发布版本（Transit 轮换期间旧令牌与旧快照仍有效）
     trusted = [key] if key is not None else list(platform_keys())
     key = trusted[0]

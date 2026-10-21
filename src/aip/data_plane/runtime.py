@@ -459,6 +459,47 @@ class ToolRuntime:
         trace_id: str = "",
         run_id: str | None = None,
     ) -> dict[str, Any]:
+        from opentelemetry import context as otel_context
+        from opentelemetry import trace as otel_trace
+
+        from aip.libs.otel import current_trace_id_hex, get_tracer
+
+        tracer = get_tracer("aip.runtime")
+        span = tracer.start_span(
+            "tool.invoke",
+            kind=otel_trace.SpanKind.INTERNAL,
+            attributes={"aip.capability_id": capability_id, "aip.exposure": exposure},
+        )
+        token = otel_context.attach(otel_trace.set_span_in_context(span))
+        try:
+            return await self._invoke_body(
+                principal,
+                capability_id,
+                args,
+                idempotency_key=idempotency_key,
+                exposure=exposure,
+                channel=channel,
+                version=version,
+                trace_id=trace_id or current_trace_id_hex(),
+                run_id=run_id,
+            )
+        finally:
+            span.end()
+            otel_context.detach(token)
+
+    async def _invoke_body(
+        self,
+        principal: Principal,
+        capability_id: str,
+        args: dict[str, Any],
+        *,
+        idempotency_key: str | None = None,
+        exposure: str = "rest",
+        channel: str = "stable",
+        version: str | None = None,
+        trace_id: str = "",
+        run_id: str | None = None,
+    ) -> dict[str, Any]:
         trace_id = trace_id or uuid.uuid4().hex
         rec: dict[str, Any] = {
             "id": str(uuid.uuid4()),

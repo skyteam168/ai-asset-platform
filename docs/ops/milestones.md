@@ -649,6 +649,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 金标 | `tests/contracts/mes-vn01.openapi.yaml` |
 | 不在本片 | 录制回放；run_cases 改写连接；多实例共享；控制台 UI |
 
+### H5 OpenTelemetry 贯通 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| HTTP 中间件产生 SERVER span + X-Trace-Id | 通过 | `test_h5_otel.py::test_http_middleware_creates_server_span` |
+| Runtime tool.invoke span | 通过 | `test_runtime_invoke_span` |
+| 出站 inject W3C traceparent | 通过 | `test_inject_headers_from_current_span` |
+| 父子 trace_id 一致 | 通过 | `test_traceparent_propagation_parent_child` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `libs/otel`；`web` / `httpclient` / `runtime` / `mcp_gateway` |
+| 配置 | `AIP_OTEL_EXPORTER`=`none|console|otlp|memory`；`AIP_OTEL_ENDPOINT` |
+| 不在本片 | 指标/日志流水线、Collector 部署、GenAI 语义、Langfuse |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     assertion_max_ttl_s: int = 300
     session_idle_s: int = 1800
     session_absolute_s: int = 43200
+    # OpenTelemetry：none | console | otlp | memory（测试）；OTLP 默认 http://127.0.0.1:4318/v1/traces
+    otel_exporter: str = Field(default="none", pattern="^(none|console|otlp|memory)$")
+    otel_endpoint: str = ""
 
     @model_validator(mode="after")
     def _no_dev_secrets_outside_dev(self) -> Settings:

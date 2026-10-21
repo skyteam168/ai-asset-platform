@@ -796,9 +796,23 @@ class McpGateway:
             return decided
 
         key = request.headers.get("idempotency-key") or meta.get(f"{NS}/idempotencyKey")
-        res = await self.runtime.invoke(
-            principal, name, args, idempotency_key=key, exposure="mcp", trace_id=request.state.trace_id
-        )
+        # MCP _meta.traceparent 优先于 HTTP 头，贯通 OTel（architecture.md 12.4）
+        from opentelemetry import context as otel_context
+
+        from aip.libs.otel import current_trace_id_hex, extract_context
+
+        meta_tp = meta.get("traceparent")
+        ctx_token = None
+        if isinstance(meta_tp, str) and meta_tp:
+            ctx_token = otel_context.attach(extract_context({"traceparent": meta_tp}))
+        try:
+            tid = current_trace_id_hex() or request.state.trace_id
+            res = await self.runtime.invoke(
+                principal, name, args, idempotency_key=key, exposure="mcp", trace_id=tid
+            )
+        finally:
+            if ctx_token is not None:
+                otel_context.detach(ctx_token)
         out_meta = self._runtime_meta(res)
         run_id = res.get("run_id")
 
