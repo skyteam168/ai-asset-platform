@@ -486,11 +486,33 @@ BUNDLE = obj(
     extra=False,
 )
 
+MODEL_PROFILE = obj(
+    {
+        "model": {"type": "string", "minLength": 1, "description": "上游模型名"},
+        "base_url": {"type": "string", "minLength": 1, "description": "OpenAI 兼容根 URL"},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2, "default": 0},
+        "max_tokens": {"type": "integer", "minimum": 1, "maximum": 128000, "default": 1024},
+        "deployment": {
+            "type": "string",
+            "description": "部署位置标识，如 cn-east / local-vllm",
+        },
+        "credential_ref": {"type": "string", "description": "可选：OpenBao 凭据引用"},
+        "api_path": {
+            "type": "string",
+            "default": "/v1/chat/completions",
+            "description": "相对 base_url 的 chat.completions 路径",
+        },
+    },
+    ["model", "base_url"],
+    extra=False,
+)
+
 SPECS = {
     "tool-spec": ("Tool Spec（architecture.md 6.1）", TOOL),
     "workflow-dsl": ("Workflow DSL（architecture.md 6.3）", WORKFLOW),
     "bundle-spec": ("套件 Spec（architecture.md 8.7、10.1）", BUNDLE),
     "skill-spec": ("Skill Spec（architecture.md 6.2、10.4）", SKILL),
+    "model-profile": ("model_profile（architecture.md 8.6）", MODEL_PROFILE),
     "policy-input": ("PDP 输入（architecture.md 4.4）", POLICY),
     "declarative-connector": ("声明式 REST Connector 映射（architecture.md 9.1）", DECL),
     "system-connection": ("system_connection（architecture.md 9.6、11.3）", CONN),

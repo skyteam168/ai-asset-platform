@@ -203,6 +203,23 @@ def create_app(
         quota=PgQuotaStore(runtime_engine) if runtime_engine else MemoryQuotaStore(),
     )
     runtime.workflow_sync_wait_s = settings.workflow_sync_wait_s
+    if llm is None and runtime_engine is not None:
+        from aip.data_plane.llm.allowlist import PgAllowlistStore
+        from aip.data_plane.llm.budget import PgBudgetStore
+        from aip.data_plane.llm.gateway import LlmGateway, profile_from_release_cache
+
+        env = settings.env if settings.env != "dev" else "test"
+
+        def _resolve(ref: str, _env: str) -> dict[str, Any]:
+            return profile_from_release_cache(releases, ref, env)
+
+        llm = LlmGateway(
+            allowlist=PgAllowlistStore(runtime_engine),
+            budget=PgBudgetStore(runtime_engine),
+            resolve_profile=_resolve,
+            env=env,
+            api_key=settings.llm_api_key or None,
+        )
     # Workflow 需要持久化运行表；没有运行库（纯内存开发模式）时不启用
     workflows = (
         WorkflowEngine(

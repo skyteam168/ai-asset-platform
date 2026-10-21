@@ -17,6 +17,7 @@ from aip.control_plane.gates.api import router as gates_router
 from aip.control_plane.iam.api import router as iam_router
 from aip.control_plane.importer.api import router as importer_router
 from aip.control_plane.internal_api import router as internal_router
+from aip.control_plane.llm.api import router as llm_router
 from aip.control_plane.registry.api import router as registry_router
 from aip.control_plane.risk.api import router as risk_router
 from aip.control_plane.risk.api import scan_forever
@@ -73,6 +74,7 @@ def create_app(db: Database | None = None) -> FastAPI:
     app.include_router(webhook_router())
     app.include_router(skill_router())
     app.include_router(importer_router())
+    app.include_router(llm_router())
     app.include_router(prism_mock_router())
     # 控制台静态文件（console/dist，构建后存在时才挂载）；同源访问，无需 CORS
     console_dist = pathlib.Path(settings.console_dist) if settings.console_dist else CONSOLE_DIST

@@ -50,6 +50,7 @@ _SPEC_SCHEMAS = {
     "workflow": "workflow-dsl",
     "bundle": "bundle-spec",
     "skill": "skill-spec",
+    "model_profile": "model-profile",
 }
 
 

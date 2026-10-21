@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     # OpenTelemetry：none | console | otlp | memory（测试）；OTLP 默认 http://127.0.0.1:4318/v1/traces
     otel_exporter: str = Field(default="none", pattern="^(none|console|otlp|memory)$")
     otel_endpoint: str = ""
+    # LLM Gateway：上游 API Key（可选；本地 / 内网模型可为空）
+    llm_api_key: str = ""
 
     @model_validator(mode="after")
     def _no_dev_secrets_outside_dev(self) -> Settings:

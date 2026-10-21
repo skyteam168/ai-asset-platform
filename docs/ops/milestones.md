@@ -664,6 +664,26 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 配置 | `AIP_OTEL_EXPORTER`=`none|console|otlp|memory`；`AIP_OTEL_ENDPOINT` |
 | 不在本片 | 指标/日志流水线、Collector 部署、GenAI 语义、Langfuse |
 
+### H6 LLM Gateway（白名单 / token 预算 / 脱敏）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 白名单外 profile → PERMISSION_DENIED | 通过 | `test_h6_llm_gateway.py::test_allowlist_denies` |
+| 超日预算 → RATE_LIMITED | 通过 | `test_budget_exceeded` |
+| 输入手机号脱敏；审计无明文 | 通过 | `test_redact_phone_in_request_and_audit` |
+| Mock 上游 JSON → structured data + tokens | 通过 | `test_mock_complete_structured` |
+| Workflow llm 节点经 Gateway | 通过 | `test_workflow_llm_via_gateway` |
+| 控制面白名单 / 预算 / 用量 API | 通过 | `test_control_plane_llm_config_http` |
+| OpenAPI 路由登记 | 通过 | `getLlmAllowlist` 等 + 契约测试 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `data_plane/llm/`（redact、allowlist、budget、openai_compat、gateway）；`control_plane/llm/api` |
+| 表 | `llm.company_model_allowlist` / `company_token_budget` / `company_token_usage`（RLS） |
+| Schema | `docs/specs/model-profile.schema.json` |
+| API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
+| 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

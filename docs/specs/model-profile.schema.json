@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/model-profile.schema.json",
+  "title": "model_profile（architecture.md 8.6）",
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "description": "上游模型名"
+    },
+    "base_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "OpenAI 兼容根 URL"
+    },
+    "temperature": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2,
+      "default": 0
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 128000,
+      "default": 1024
+    },
+    "deployment": {
+      "type": "string",
+      "description": "部署位置标识，如 cn-east / local-vllm"
+    },
+    "credential_ref": {
+      "type": "string",
+      "description": "可选：OpenBao 凭据引用"
+    },
+    "api_path": {
+      "type": "string",
+      "default": "/v1/chat/completions",
+      "description": "相对 base_url 的 chat.completions 路径"
+    }
+  },
+  "required": [
+    "model",
+    "base_url"
+  ],
+  "additionalProperties": false
+}

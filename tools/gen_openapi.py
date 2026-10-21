@@ -519,6 +519,25 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["id", "base_url", "container_name", "expires_at"],
             ),
+            "LlmAllowlist": o(
+                {"company_id": ID, "names": {"type": "array", "items": S}},
+                ["company_id", "names"],
+            ),
+            "LlmAllowlistPut": o({"names": {"type": "array", "items": S}}, ["names"]),
+            "LlmBudget": o(
+                {"company_id": ID, "daily_tokens": {"type": ["integer", "null"], "minimum": 0}},
+                ["company_id", "daily_tokens"],
+            ),
+            "LlmBudgetPut": o({"daily_tokens": {"type": "integer", "minimum": 0}}, ["daily_tokens"]),
+            "LlmUsage": o(
+                {
+                    "company_id": ID,
+                    "usage_date": {"type": "string", "format": "date"},
+                    "tokens_used": {"type": "integer", "minimum": 0},
+                    "daily_tokens": {"type": ["integer", "null"], "minimum": 0},
+                },
+                ["company_id", "usage_date", "tokens_used", "daily_tokens"],
+            ),
         }
     )
     A = "/api/v1"
@@ -1087,6 +1106,49 @@ def control_plane() -> dict[str, Any]:
                 code="204",
                 params=["Id"],
             ),
+        },
+        f"{A}/companies/{{id}}/llm-allowlist": {
+            "get": op(
+                "getLlmAllowlist",
+                "llm",
+                "公司可用 model_profile 名称白名单（platform_admin）",
+                res=ref("LlmAllowlist"),
+                params=["Id"],
+            ),
+            "put": op(
+                "putLlmAllowlist",
+                "llm",
+                "覆盖设置公司 model_profile 白名单（空列表=拒绝全部）",
+                req=ref("LlmAllowlistPut"),
+                res=ref("LlmAllowlist"),
+                params=["Id"],
+            ),
+        },
+        f"{A}/companies/{{id}}/llm-budget": {
+            "get": op(
+                "getLlmBudget",
+                "llm",
+                "公司日 token 预算（platform_admin）",
+                res=ref("LlmBudget"),
+                params=["Id"],
+            ),
+            "put": op(
+                "putLlmBudget",
+                "llm",
+                "设置公司日 token 预算",
+                req=ref("LlmBudgetPut"),
+                res=ref("LlmBudget"),
+                params=["Id"],
+            ),
+        },
+        f"{A}/companies/{{id}}/llm-usage": {
+            "get": op(
+                "getLlmUsage",
+                "llm",
+                "公司当日（UTC）已用 tokens",
+                res=ref("LlmUsage"),
+                params=["Id"],
+            )
         },
         f"{A}/grant-ceilings/{{id}}/quota": {
             "put": op(

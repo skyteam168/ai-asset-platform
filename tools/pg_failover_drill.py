@@ -90,7 +90,7 @@ async def _baseline_and_verify(*, verify_only: bool) -> None:
                 now=now + dt.timedelta(seconds=i),
                 record={"step": step, "i": i},
             )
-        for path in spool_dir.glob("*.jsonl"):
+        for path in list(spool_dir.glob("*.jsonl")):  # noqa: ASYNC240
             probs = verify_spool_file(path)
             if probs:
                 print("spool verify FAILED:", probs)

@@ -16,6 +16,7 @@ tags:
 - name: grant
 - name: iam
 - name: importer
+- name: llm
 - name: ops
 - name: registry
 - name: release
@@ -1907,6 +1908,101 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
+  /api/v1/companies/{id}/llm-allowlist:
+    get:
+      operationId: getLlmAllowlist
+      tags:
+      - llm
+      summary: 公司可用 model_profile 名称白名单（platform_admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmAllowlist'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      operationId: putLlmAllowlist
+      tags:
+      - llm
+      summary: 覆盖设置公司 model_profile 白名单（空列表=拒绝全部）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmAllowlist'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmAllowlistPut'
+  /api/v1/companies/{id}/llm-budget:
+    get:
+      operationId: getLlmBudget
+      tags:
+      - llm
+      summary: 公司日 token 预算（platform_admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmBudget'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      operationId: putLlmBudget
+      tags:
+      - llm
+      summary: 设置公司日 token 预算
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmBudget'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmBudgetPut'
+  /api/v1/companies/{id}/llm-usage:
+    get:
+      operationId: getLlmUsage
+      tags:
+      - llm
+      summary: 公司当日（UTC）已用 tokens
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmUsage'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota
@@ -3152,3 +3248,69 @@ components:
       - base_url
       - container_name
       - expires_at
+    LlmAllowlist:
+      type: object
+      properties:
+        company_id:
+          type: string
+          description: UUIDv7
+        names:
+          type: array
+          items:
+            type: string
+      required:
+      - company_id
+      - names
+    LlmAllowlistPut:
+      type: object
+      properties:
+        names:
+          type: array
+          items:
+            type: string
+      required:
+      - names
+    LlmBudget:
+      type: object
+      properties:
+        company_id:
+          type: string
+          description: UUIDv7
+        daily_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+      required:
+      - company_id
+      - daily_tokens
+    LlmBudgetPut:
+      type: object
+      properties:
+        daily_tokens:
+          type: integer
+          minimum: 0
+      required:
+      - daily_tokens
+    LlmUsage:
+      type: object
+      properties:
+        company_id:
+          type: string
+          description: UUIDv7
+        usage_date:
+          type: string
+          format: date
+        tokens_used:
+          type: integer
+          minimum: 0
+        daily_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+      required:
+      - company_id
+      - usage_date
+      - tokens_used
+      - daily_tokens
