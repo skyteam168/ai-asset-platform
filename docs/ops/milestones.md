@@ -485,6 +485,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | CI | `.github/workflows/ci.yml` 增加 sdk/typescript typecheck / test / build |
 | 不在本片 | A2A、MCP Inspector 兼容矩阵、故障演练、consumer-kit、LangChain.js |
 
+### M7g A2A 端点（最小面）— 2026-10-21
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| Agent Card 需认证；skills=已授权 a2a Workflow | 通过 | `test_m7_a2a.py::test_agent_card_requires_auth_and_lists_a2a_workflows` |
+| 无 a2a exposure 不出现在 Card | 通过 | `test_m7_a2a.py::test_agent_card_hides_workflow_without_a2a_exposure` |
+| SendMessage → task.id=run_id；GetTask 完成态 | 通过 | `test_m7_a2a.py::test_send_message_and_get_task` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 路由 | `GET /.well-known/agent-card.json`、`POST /a2a`（JSON-RPC `SendMessage` / `GetTask`） |
+| 范围 | 仅 `asset_type=workflow` 且 exposure 含 `a2a`；走 `invoke(..., exposure="a2a")`（与 ADR-0011 同链） |
+| Task | `id=run_id`；状态 `TASK_STATE_*`（working / completed / failed / input-required 等） |
+| 不在本片 | streaming、CancelTask、A2A 确认回传、Inspector、故障演练 |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

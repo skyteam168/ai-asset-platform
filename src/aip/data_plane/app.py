@@ -17,6 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
+from aip.data_plane.a2a_gateway import A2aGateway
+from aip.data_plane.a2a_gateway import router as a2a_router
 from aip.data_plane.confirm_api import router as confirm_router
 from aip.data_plane.confirmation import MemoryConfirmationStore, PgConfirmationStore
 from aip.data_plane.events import EventForwarder
@@ -249,6 +251,7 @@ def create_app(
     store = exec_store
     app.include_router(oauth_router(ctx))
     app.include_router(mcp_router(McpGateway(ctx, runtime)))
+    app.include_router(a2a_router(A2aGateway(ctx, runtime)))
     app.include_router(confirm_router(ctx, runtime, workflows))
 
     @app.get("/healthz", response_model=web.Health, tags=["ops"], operation_id="dpHealth")

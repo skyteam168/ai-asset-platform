@@ -2,12 +2,13 @@ openapi: 3.1.0
 info:
   title: AIP Data Plane API
   version: 0.1.0
-  description: 数据面：OAuth 令牌、目录、统一调用、确认、MCP。约定见 conventions.md，错误码见 error-codes.md。
+  description: 数据面：OAuth 令牌、目录、统一调用、确认、MCP、A2A。约定见 conventions.md，错误码见 error-codes.md。
 servers:
 - url: https://api.example-group.internal
 security:
 - bearer: []
 tags:
+- name: a2a
 - name: catalog
 - name: confirmation
 - name: internal
@@ -96,6 +97,21 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
       security: []
+  /.well-known/agent-card.json:
+    get:
+      operationId: agentCard
+      tags:
+      - a2a
+      summary: A2A Agent Card（需认证；skills 为已授权且 exposure 含 a2a 的 Workflow）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
   /oauth/token:
     post:
       operationId: token
@@ -449,6 +465,28 @@ paths:
             application/json:
               schema:
                 type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /a2a:
+    post:
+      operationId: a2a
+      tags:
+      - a2a
+      summary: A2A 1.0 JSON-RPC（SendMessage / GetTask；Task.id=run_id）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                description: JSON-RPC 响应
         default:
           $ref: '#/components/responses/Problem'
       requestBody:

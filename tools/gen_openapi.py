@@ -1216,6 +1216,14 @@ def data_plane() -> dict[str, Any]:
             )
         },
         "/.well-known/jwks.json": {"get": op("jwks", "oauth", "平台令牌验签公钥", res=ref("Jwks"), security=PUBLIC)},
+        "/.well-known/agent-card.json": {
+            "get": op(
+                "agentCard",
+                "a2a",
+                "A2A Agent Card（需认证；skills 为已授权且 exposure 含 a2a 的 Workflow）",
+                res={"type": "object"},
+            )
+        },
         "/oauth/token": {
             "post": {
                 **op(
@@ -1352,8 +1360,19 @@ def data_plane() -> dict[str, Any]:
                 "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object"}}}},
             }
         },
+        "/a2a": {
+            "post": {
+                **op(
+                    "a2a",
+                    "a2a",
+                    "A2A 1.0 JSON-RPC（SendMessage / GetTask；Task.id=run_id）",
+                    res={"type": "object", "description": "JSON-RPC 响应"},
+                ),
+                "requestBody": {"required": True, "content": {"application/json": {"schema": {"type": "object"}}}},
+            }
+        },
     }
-    return doc("AIP Data Plane API", "数据面：OAuth 令牌、目录、统一调用、确认、MCP", paths, sch)
+    return doc("AIP Data Plane API", "数据面：OAuth 令牌、目录、统一调用、确认、MCP、A2A", paths, sch)
 
 
 def doc(title: str, desc: str, paths: dict[str, Any], schemas: dict[str, Any]) -> dict[str, Any]:
