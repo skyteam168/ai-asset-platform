@@ -103,12 +103,24 @@ def _catalog_block(candidates: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(question: str, candidates: list[dict[str, Any]]) -> str:
+def build_prompt(
+    question: str,
+    candidates: list[dict[str, Any]],
+    *,
+    skill_guidance: str | None = None,
+) -> str:
     catalog = _catalog_block(candidates)
+    guidance = ""
+    if skill_guidance and skill_guidance.strip():
+        guidance = (
+            "下列 Skill 说明书约束你的选型（优先遵循其指引，再对照候选 Tool）：\n"
+            f"{skill_guidance.strip()[:4000]}\n\n"
+        )
     return (
         "你是企业工具路由器。根据用户问题，从下列候选 Tool 中选出最合适的一个 capability_id；"
         "若问题不适合调用任何工具，返回 capability_id=null。\n"
         "只输出 JSON 对象，勿输出其它文字。\n\n"
+        f"{guidance}"
         f"候选工具：\n{catalog}\n\n"
         f"用户问题：{question}"
     )
@@ -141,6 +153,7 @@ async def run_for_model(
     company_id: str,
     cases: list[EvalCase],
     candidates: list[dict[str, Any]],
+    skill_guidance: str | None = None,
 ) -> ModelRunResult:
     allowed = {str(t.get("capability_id")) for t in candidates if t.get("capability_id")}
     outcomes: list[CaseOutcome] = []
@@ -148,7 +161,7 @@ async def run_for_model(
         try:
             res = await llm.complete(
                 model_profile=model_profile,
-                prompt=build_prompt(case.question, candidates),
+                prompt=build_prompt(case.question, candidates, skill_guidance=skill_guidance),
                 variables={},
                 output_schema=OUTPUT_SCHEMA,
                 company_id=company_id,
@@ -240,18 +253,26 @@ async def run_selection_eval(
     model_profiles: list[str],
     cases: list[EvalCase],
     candidates: list[dict[str, Any]],
+    skill_guidance: str | None = None,
 ) -> tuple[bool, list[ModelRunResult], list[str]]:
     """返回 (全部模型通过, 各模型结果, 前置问题)。"""
     problems = validate_settings(model_profiles, cases)
     if not candidates:
-        problems.append("套件无候选 Tool")
+        problems.append("无候选 Tool（套件成员或 Skill.lock 引用）")
     if problems:
         return False, [], problems
     cid = str(company_id)
     results: list[ModelRunResult] = []
     for mp in model_profiles:
         results.append(
-            await run_for_model(llm, model_profile=mp, company_id=cid, cases=cases, candidates=candidates)
+            await run_for_model(
+                llm,
+                model_profile=mp,
+                company_id=cid,
+                cases=cases,
+                candidates=candidates,
+                skill_guidance=skill_guidance,
+            )
         )
     return all(r.passed for r in results), results, []
 

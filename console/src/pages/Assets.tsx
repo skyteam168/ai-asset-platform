@@ -2,7 +2,7 @@ import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, S
 import { useEffect, useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
+import { Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, GateRecord, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
@@ -185,7 +185,7 @@ function VersionPanel({
   const tabs = [
     { key: "gates", label: t("门禁记录"), children: (
       <Table<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
-        expandable={{ expandedRowRender: (r) => <JsonView value={r.evidence} /> }}
+        expandable={{ expandedRowRender: (r) => <GateEvidence value={r.evidence} /> }}
         columns={[
           { title: t("门"), dataIndex: "gate" },
           { title: t("结果"), dataIndex: "status", render: (s) => <StateTag state={s} /> },
@@ -200,10 +200,10 @@ function VersionPanel({
           children: <SkillPackagePanel versionId={versionId} assetId={v.asset_id} spec={v.spec} editable={dev && v.state === "draft"} onSaved={refresh} />,
         }]
       : []),
-    ...(assetType === "bundle"
+    ...(assetType === "bundle" || assetType === "skill"
       ? [{
           key: "selection-eval",
-          label: t("选择评测"),
+          label: assetType === "skill" ? t("指导效果评测") : t("选择评测"),
           children: <SelectionEvalEditor versionId={versionId} editable={dev && v.state === "draft"} />,
         }]
       : []),
