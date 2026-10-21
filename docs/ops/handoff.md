@@ -56,7 +56,7 @@
 | **H21** 响应体 Pydantic（门禁/审批） | 完成 | c77b6b2 |
 | **H22** 响应体 Pydantic（风控/webhook/Skill） | 完成 | 62323e0 |
 | **H23** 响应体 Pydantic（待办/LLM） | 完成 | 7f8ae10 |
-| **H24** 响应体 Pydantic（Importer） | 完成 | PENDING |
+| **H24** 响应体 Pydantic（Importer） | 完成 | ff1ecff |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
