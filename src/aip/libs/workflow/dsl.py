@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 from collections.abc import Callable, Iterable
 from typing import Any
 
@@ -26,7 +27,9 @@ from aip.libs.workflow import expr
 SCHEMA_PATH = pathlib.Path(__file__).resolve().parents[4] / "docs" / "specs" / "workflow-dsl.schema.json"
 SUPPORTED = {"tool", "llm", "condition", "human_task", "wait", "end", "loop", "parallel", "sub_workflow"}
 WRITE_RISKS = {"write", "danger"}
+# 平台角色（architecture.md 2.5）；业务角色编码见 BUSINESS_ROLE_RE（须在 iam.business_role 登记后按公司分配）
 ROLES = {"platform_admin", "asset_developer", "data_owner", "business_owner", "company_admin", "auditor"}
+BUSINESS_ROLE_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 EDGE_KEYS = ("next", "then", "else", "on_timeout", "on_reject", "body")
 
 ToolLookup = Callable[[str, str], dict[str, Any] | None]
@@ -271,8 +274,15 @@ def _is_gate(n: dict[str, Any]) -> bool:
 def _assignee_problems(assignee: str) -> list[str]:
     if assignee == "initiator" or assignee.startswith("user:"):
         return []
+    if not assignee.startswith("role:"):
+        return ["assignee 须为 initiator、user:<id> 或 role:<角色>@<组织>"]
     role, _, where = assignee[5:].partition("@")
-    out = [] if role in ROLES else [f"assignee 角色 {role} 不存在（可用：{', '.join(sorted(ROLES))}）"]
+    ok = role in ROLES or bool(BUSINESS_ROLE_RE.match(role))
+    out = (
+        []
+        if ok
+        else [f"assignee 角色 {role} 无效（平台角色或小写业务角色编码）"]
+    )
     expr_path = assignee_org_path(where)
     if (where.startswith("$") or where.startswith("org_of(")) and (
         expr_path is None or not expr_path.startswith("input.")

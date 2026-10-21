@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.db import Database, DbScope
-from aip.control_plane.iam import auth, consumers, orgs, snapshot, users
+from aip.control_plane.iam import auth, business_roles, consumers, orgs, snapshot, users
 from aip.control_plane.iam import tables as t
 from aip.control_plane.iam.authz import Actor
 from aip.libs.common.config import get_settings
@@ -88,6 +88,12 @@ class RoleIn(BaseModel):
     role: str
     scope_org_id: uuid.UUID
     expires_at: dt.datetime | None = None
+
+
+class BusinessRoleIn(BaseModel):
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
 
 
 class ClearanceIn(BaseModel):
@@ -265,6 +271,37 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             rid = await users.assign_role(conn, actor, id, body.role, body.scope_org_id, body.expires_at)
         return {"id": str(rid), "user_id": str(id), "role": body.role, "scope_org_id": str(body.scope_org_id)}
+
+    @r.get(f"{V}/companies/{{id}}/business-roles", tags=["iam"], operation_id="listBusinessRoles")
+    async def list_business_roles(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            items = await business_roles.list_roles(conn, id)
+        return {"items": items, "next_cursor": None, "has_more": False}
+
+    @r.post(
+        f"{V}/companies/{{id}}/business-roles",
+        tags=["iam"],
+        operation_id="createBusinessRole",
+        status_code=201,
+    )
+    async def create_business_role(
+        id: uuid.UUID, body: BusinessRoleIn, actor: ActorDep, db: DbDep
+    ) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return await business_roles.create(conn, actor, id, body.code, body.name, body.description)
+
+    @r.delete(
+        f"{V}/companies/{{id}}/business-roles/{{code}}",
+        tags=["iam"],
+        operation_id="deleteBusinessRole",
+        status_code=204,
+    )
+    async def delete_business_role(
+        id: uuid.UUID, code: str, actor: ActorDep, db: DbDep, response: Response
+    ) -> None:
+        async with db.tx(actor.db_scope()) as conn:
+            await business_roles.delete(conn, actor, id, code)
+        response.status_code = 204
 
     @r.post(f"{V}/clearance-requests", tags=["iam"], operation_id="requestClearance", status_code=201)
     async def request_clearance(body: ClearanceIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:

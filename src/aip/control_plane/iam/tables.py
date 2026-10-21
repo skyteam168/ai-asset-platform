@@ -114,6 +114,15 @@ user_role = Table(
     _id("granted_by"),
     _ts("expires_at"),
 )
+business_role = Table(
+    "business_role",
+    md,
+    _id("company_id", pk=True),
+    Column("code", Text, primary_key=True),
+    Column("name", Text),
+    Column("description", Text),
+    _ts("created_at"),
+)
 user_data_scope = Table(
     "user_data_scope",
     md,

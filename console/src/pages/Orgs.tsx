@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tree, Typography } from "antd";
 import { useMemo, useState } from "react";
-import { get, post, type Page } from "../api";
+import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, OrgName, PAGINATION, StateTag, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
@@ -88,6 +88,11 @@ export function OrgsPage() {
               { title: t("状态"), dataIndex: "status", render: (v) => <StateTag state={v} /> },
             ]} />
         </Card>
+        {sel?.type === "company" && canManage && (
+          <div style={{ marginTop: 16 }}>
+            <BusinessRoles companyId={sel.id} companyCode={sel.code} />
+          </div>
+        )}
       </Col>
       <NewOrgModal open={orgOpen} parent={sel} onClose={() => setOrgOpen(false)} onDone={reloadOrgs} />
       <NewUserModal open={userOpen} defaultOrg={selected} onClose={() => setUserOpen(false)}
@@ -99,6 +104,95 @@ export function OrgsPage() {
         <Typography.Paragraph copyable code style={{ wordBreak: "break-all" }}>{totpUri}</Typography.Paragraph>
       </Modal>
     </Row>
+  );
+}
+
+interface BizRole {
+  company_id: string;
+  code: string;
+  name: string;
+  description: string;
+}
+
+function BusinessRoles({ companyId, companyCode }: { companyId: string; companyCode: string }) {
+  const roles = useLoad(() => get<Page<BizRole>>(`/companies/${companyId}/business-roles`), [companyId]);
+  const [open, setOpen] = useState(false);
+  const [form] = Form.useForm();
+  const act = useAction();
+  return (
+    <Card
+      title={t("业务角色（{0}）", [companyCode])}
+      bordered={false}
+      style={{ borderRadius: 10 }}
+      extra={<Button size="small" type="primary" onClick={() => setOpen(true)}>{t("新建业务角色")}</Button>}
+    >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message={t("用于 Workflow 人工任务分派（如 role:purchase_manager@公司）；不授予控制台管理权限。")}
+      />
+      {roles.error && <Alert type="error" message={roles.error} style={{ marginBottom: 12 }} />}
+      <Table<BizRole>
+        size="small"
+        rowKey="code"
+        loading={roles.loading}
+        pagination={false}
+        dataSource={roles.data?.items ?? []}
+        locale={{ emptyText: t("尚未登记业务角色") }}
+        columns={[
+          { title: t("编码"), dataIndex: "code", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+          { title: t("名称"), dataIndex: "name" },
+          { title: t("说明"), dataIndex: "description", render: (v: string) => v || "-" },
+          {
+            title: t("操作"),
+            key: "ops",
+            render: (_, r) => (
+              <Button
+                size="small"
+                danger
+                onClick={() => Modal.confirm({
+                  title: t("删除业务角色 {0}？", [r.code]),
+                  onOk: async () => {
+                    if (await act(() => del(`/companies/${companyId}/business-roles/${r.code}`), t("已删除"))) {
+                      roles.reload();
+                    }
+                  },
+                })}
+              >
+                {t("删除")}
+              </Button>
+            ),
+          },
+        ]}
+      />
+      <Modal open={open} title={t("新建业务角色")} onCancel={() => setOpen(false)} onOk={() => form.submit()} destroyOnClose>
+        <Form
+          form={form}
+          layout="vertical"
+          preserve={false}
+          onFinish={async (v) => {
+            if (await act(
+              () => post(`/companies/${companyId}/business-roles`, v),
+              t("已创建业务角色"),
+            )) {
+              setOpen(false);
+              roles.reload();
+            }
+          }}
+        >
+          <Form.Item
+            name="code"
+            label={t("编码")}
+            rules={[{ required: true, pattern: /^[a-z][a-z0-9_]{1,63}$/, message: t("小写字母开头，仅含 a-z / 0-9 / _") }]}
+          >
+            <Input placeholder="purchase_manager" />
+          </Form.Item>
+          <Form.Item name="name" label={t("名称")} rules={[{ required: true }]}><Input /></Form.Item>
+          <Form.Item name="description" label={t("说明")}><Input /></Form.Item>
+        </Form>
+      </Modal>
+    </Card>
   );
 }
 

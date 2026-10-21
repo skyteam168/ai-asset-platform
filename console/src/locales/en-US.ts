@@ -458,4 +458,14 @@ export const enUS: Record<string, string> = {
   "评测模型（每行一个 name@semver）": "Eval models (one name@semver per line)",
   "评测用例（JSON 数组：name / question / expect_capability_id）": "Eval cases (JSON array: name / question / expect_capability_id)",
   "保存选择评测": "Save selection eval",
+  "业务角色（{0}）": "Business roles ({0})",
+  "新建业务角色": "New business role",
+  "用于 Workflow 人工任务分派（如 role:purchase_manager@公司）；不授予控制台管理权限。":
+    "For Workflow human-task assignment (e.g. role:purchase_manager@company); does not grant console admin rights.",
+  "尚未登记业务角色": "No business roles registered",
+  "删除业务角色 {0}？": "Delete business role {0}?",
+  "已删除": "Deleted",
+  "删除": "Delete",
+  "已创建业务角色": "Business role created",
+  "小写字母开头，仅含 a-z / 0-9 / _": "Lowercase letter first; only a-z / 0-9 / _",
 };

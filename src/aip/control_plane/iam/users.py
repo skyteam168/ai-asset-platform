@@ -23,6 +23,7 @@ from aip.libs.tokens.secrets_util import hash_password, seal
 
 ROLES = frozenset({"platform_admin", "asset_developer", "data_owner", "business_owner", "company_admin", "auditor"})
 HQ_ONLY_ROLES = frozenset({"platform_admin", "asset_developer", "data_owner", "auditor"})
+# 平台角色之外的 user_role.role 视为业务角色（须先在 iam.business_role 登记）
 MIN_PASSWORD = 12
 
 
@@ -126,15 +127,22 @@ async def assign_role(
     scope_org_id: uuid.UUID,
     expires_at: dt.datetime | None = None,
 ) -> uuid.UUID:
-    if role not in ROLES:
-        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "未知角色")
+    from aip.control_plane.iam import business_roles as biz
+
     org = await get_org(conn, scope_org_id)
+    is_platform = role in ROLES
+    if not is_platform:
+        if not await biz.exists(conn, org.company_id, role):
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "未知角色（平台角色或本公司已登记的业务角色）")
     if role in HQ_ONLY_ROLES and org.type not in ("group", "company"):
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "总部角色的生效节点必须是集团或公司")
     if role == "company_admin" and org.type != "company":
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "分公司管理员的生效节点必须是公司节点")
-    # 平台管理员可分配任意角色；分公司管理员只能在本公司子树内分配业务 Owner
-    actor.require(actor.has("platform_admin") or (role == "business_owner" and actor.manages_org(scope_org_id)))
+    # 平台管理员可分配任意角色；分公司管理员可分配业务 Owner 与本公司业务角色
+    can_company = actor.manages_org(scope_org_id) and (
+        role == "business_owner" or (not is_platform and actor.manages_org(org.company_id))
+    )
+    actor.require(actor.has("platform_admin") or can_company)
     rid = new_id()
     await conn.execute(
         t.user_role.insert().values(

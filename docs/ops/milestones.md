@@ -684,6 +684,23 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H12 IAM 业务角色 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 登记 purchase_manager 并可分配 | 通过 | `test_h12_business_roles.py::test_create_assign_and_dsl` |
+| 禁止把平台角色注册为业务角色 | 通过 | `test_reject_platform_code_as_business` |
+| 未登记编码不可分配 | 通过 | `test_assign_unknown_business_rejected` |
+| DSL / Schema 接受业务角色 assignee | 通过 | `purchase_manager@org_of(input.company)`；Schema 模式更新 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 表 | `iam.business_role`（RLS）；`user_role` CHECK 放宽 |
+| API | `GET/POST .../companies/{id}/business-roles`；`DELETE .../{code}` |
+| 行为 | 业务角色可赋给用户并用于 human_task / 待办 `qualifies`；不进入控制面 RBAC 装饰器语义 |
+| 控制台 | 组织页选中公司时管理业务角色 |
+| 不在本片 | 审批代理人；业务角色变更双人复核 |
+
 ### H11 执行快照信封加密 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

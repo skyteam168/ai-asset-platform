@@ -228,19 +228,34 @@ def control_plane() -> dict[str, Any]:
                     "id": ID,
                     "user_id": S,
                     "role": {
-                        "enum": [
-                            "platform_admin",
-                            "asset_developer",
-                            "data_owner",
-                            "business_owner",
-                            "company_admin",
-                            "auditor",
-                        ]
+                        "type": "string",
+                        "description": "平台角色或本公司已登记的业务角色编码",
                     },
                     "scope_org_id": S,
                     "expires_at": {"type": ["string", "null"], "format": "date-time"},
                 },
                 ["user_id", "role", "scope_org_id"],
+            ),
+            "BusinessRole": o(
+                {
+                    "company_id": ID,
+                    "code": S,
+                    "name": S,
+                    "description": S,
+                    "created_at": DT,
+                },
+                ["company_id", "code", "name"],
+            ),
+            "BusinessRoleCreate": o(
+                {
+                    "code": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{1,63}$",
+                    },
+                    "name": S,
+                    "description": S,
+                },
+                ["code", "name"],
             ),
             "ClearanceRequest": o(
                 {
@@ -629,12 +644,42 @@ def control_plane() -> dict[str, Any]:
             "post": op(
                 "assignRole",
                 "iam",
-                "分配角色",
+                "分配角色（平台角色或本公司业务角色）",
                 req=ref("RoleAssignment"),
                 res=ref("RoleAssignment"),
                 code="201",
                 params=["Id"],
             )
+        },
+        f"{A}/companies/{{id}}/business-roles": {
+            "get": op(
+                "listBusinessRoles",
+                "iam",
+                "公司业务角色列表",
+                res=page("BusinessRole"),
+                params=["Id"],
+            ),
+            "post": op(
+                "createBusinessRole",
+                "iam",
+                "登记公司业务角色",
+                req=ref("BusinessRoleCreate"),
+                res=ref("BusinessRole"),
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/companies/{{id}}/business-roles/{{code}}": {
+            "delete": {
+                "operationId": "deleteBusinessRole",
+                "tags": ["iam"],
+                "summary": "删除公司业务角色",
+                "parameters": [
+                    {"$ref": "#/components/parameters/Id"},
+                    {"name": "code", "in": "path", "required": True, "schema": S},
+                ],
+                "responses": ok(None, "204"),
+            }
         },
         f"{A}/clearance-requests": {
             "post": op(

@@ -458,4 +458,14 @@ export const viVN: Record<string, string> = {
   "评测模型（每行一个 name@semver）": "Mô hình đánh giá (mỗi dòng một name@semver)",
   "评测用例（JSON 数组：name / question / expect_capability_id）": "Ca đánh giá (mảng JSON: name / question / expect_capability_id)",
   "保存选择评测": "Lưu đánh giá chọn công cụ",
+  "业务角色（{0}）": "Vai trò nghiệp vụ ({0})",
+  "新建业务角色": "Vai trò nghiệp vụ mới",
+  "用于 Workflow 人工任务分派（如 role:purchase_manager@公司）；不授予控制台管理权限。":
+    "Dùng cho giao việc human_task trong Workflow (vd. role:purchase_manager@công ty); không cấp quyền quản trị console.",
+  "尚未登记业务角色": "Chưa đăng ký vai trò nghiệp vụ",
+  "删除业务角色 {0}？": "Xóa vai trò nghiệp vụ {0}?",
+  "已删除": "Đã xóa",
+  "删除": "Xóa",
+  "已创建业务角色": "Đã tạo vai trò nghiệp vụ",
+  "小写字母开头，仅含 a-z / 0-9 / _": "Bắt đầu bằng chữ thường; chỉ a-z / 0-9 / _",
 };

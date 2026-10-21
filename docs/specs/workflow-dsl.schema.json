@@ -300,7 +300,7 @@
               },
               "assignee": {
                 "type": "string",
-                "pattern": "^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@([A-Za-z0-9_.-]+|\\$input\\.[A-Za-z0-9_.]+|org_of\\(input\\.[A-Za-z0-9_.]+\\)))$"
+                "pattern": "^(initiator|user:[0-9a-f-]{36}|role:[a-z][a-z0-9_]{0,63}@([A-Za-z0-9_.-]+|\\$input\\.[A-Za-z0-9_.]+|org_of\\(input\\.[A-Za-z0-9_.]+\\)))$"
               },
               "summary": {
                 "type": "string",
@@ -319,7 +319,7 @@
               "escalate_to": {
                 "type": "string",
                 "description": "超时后升级到的处理人（与 assignee 同写法）；优先于 on_timeout",
-                "pattern": "^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@([A-Za-z0-9_.-]+|\\$input\\.[A-Za-z0-9_.]+|org_of\\(input\\.[A-Za-z0-9_.]+\\)))$"
+                "pattern": "^(initiator|user:[0-9a-f-]{36}|role:[a-z][a-z0-9_]{0,63}@([A-Za-z0-9_.-]+|\\$input\\.[A-Za-z0-9_.]+|org_of\\(input\\.[A-Za-z0-9_.]+\\)))$"
               },
               "input_schema": {
                 "type": "object"
