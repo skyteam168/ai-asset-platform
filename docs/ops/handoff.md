@@ -48,7 +48,7 @@
 | **H13** OTel Collector 与看板 | 完成 | da80976 |
 | **H14** 审计锚点 WORM | 完成 | 4d02eae |
 | **H15** 响应体 Pydantic（IAM 核心） | 完成 | 4b4e4d2 |
-| **H16** K8s 清单校验与 CI | 完成 | — |
+| **H16** K8s 清单校验与 CI | 完成 | 4a36b23 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
