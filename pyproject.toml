@@ -39,6 +39,14 @@ dev = [
     "types-jsonschema>=4.23",
     "mcp>=2.3",
 ]
+sdk = [
+    "langchain-core>=0.3",
+]
+
+[project.optional-dependencies]
+sdk = [
+    "langchain-core>=0.3",
+]
 
 [project.scripts]
 corp-skill = "aip.cli.corp_skill:main"
@@ -92,3 +100,7 @@ strict = true
 mypy_path = "src"
 packages = ["aip"]
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["langchain_core.*"]
+ignore_missing_imports = true

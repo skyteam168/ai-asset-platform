@@ -451,6 +451,23 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 2 通过 | `test_m7_upstream_mcp.py` |
 
+### M7e Python SDK + LangChain 适配 — 2026-10-21
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| Client catalog / invoke / get_execution | 通过 | `test_m7_sdk.py::test_sdk_catalog_invoke_and_execution` |
+| 静态令牌 jwt-bearer 换访问令牌 | 通过 | `test_m7_sdk.py::test_sdk_exchange_token` |
+| 非 2xx → SdkError(Problem Details) | 通过 | `test_m7_sdk.py::test_sdk_error_problem_details` |
+| 目录注册为 LangChain StructuredTool 并调用 | 通过（有 langchain-core 时） | `test_m7_sdk.py::test_sdk_as_langchain_tools` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 包 | `aip.sdk`：`Client`、`SdkError`；可选 `langchain_tools`（`client.as_langchain_tools`） |
+| 依赖 | `[dependency-groups] sdk` / `optional-dependencies.sdk`：`langchain-core>=0.3`（主依赖不强制） |
+| 认证 | 已有 `access_token`，或 `static_token` + `exchange_token(assertion)`（RFC 7523） |
+| REST | catalog / invoke / executions / runs / confirmations confirm·reject |
+| 不在本片 | TypeScript SDK、A2A、MCP Inspector 兼容矩阵、故障演练 |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |
