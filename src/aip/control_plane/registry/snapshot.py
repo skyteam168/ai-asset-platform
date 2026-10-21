@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.registry import tables as t
 from aip.libs.common.ids import utcnow
+from aip.libs.searchtext import build_search_text
 from aip.libs.tokens.keys import SigningKey
 from aip.libs.tokens.signed import sign_payload
 
@@ -58,25 +59,25 @@ async def build_payload(conn: AsyncConnection) -> dict[str, Any]:
     releases = []
     for r in rows.mappings():
         spec = r["spec"]
-        releases.append(
-            {
-                "release_id": str(r["id"]),
-                "asset_id": str(r["asset_id"]),
-                "version_id": str(r["version_id"]),
-                "asset_type": r["type"],
-                "name": r["name"],
-                "capability_id": spec.get("capability_id", r["name"]),
-                "version": r["semver"],
-                "content_hash": r["content_hash"],
-                "env": r["env"],
-                "channel": r["channel"],
-                "scope": r["scope"],
-                "exposure": list(r["exposure"]),
-                "status": STATUS_FROM_STATE.get(r["state"], "suspended"),
-                "classification": int(r["classification"]),
-                "spec": spec,
-            }
-        )
+        entry = {
+            "release_id": str(r["id"]),
+            "asset_id": str(r["asset_id"]),
+            "version_id": str(r["version_id"]),
+            "asset_type": r["type"],
+            "name": r["name"],
+            "capability_id": spec.get("capability_id", r["name"]),
+            "version": r["semver"],
+            "content_hash": r["content_hash"],
+            "env": r["env"],
+            "channel": r["channel"],
+            "scope": r["scope"],
+            "exposure": list(r["exposure"]),
+            "status": STATUS_FROM_STATE.get(r["state"], "suspended"),
+            "classification": int(r["classification"]),
+            "spec": spec,
+        }
+        entry["search_text"] = build_search_text(entry)
+        releases.append(entry)
     releases.sort(key=lambda x: (x["capability_id"], x["env"], x["channel"]))
     from aip.control_plane.conn.service import snapshot_part as connections
 

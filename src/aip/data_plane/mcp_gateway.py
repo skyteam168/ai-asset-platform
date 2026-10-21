@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import logging
-import unicodedata
 from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
@@ -24,6 +23,7 @@ from aip.data_plane.principal import Principal
 from aip.data_plane.runtime import ToolRuntime, run_result
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.searchtext import score_release
 
 log = logging.getLogger("aip.mcp")
 HANDSHAKE_VERSIONS = ("2025-06-18", "2025-11-25")
@@ -239,52 +239,9 @@ def discovery_tool_definitions() -> list[dict[str, Any]]:
     ]
 
 
-def _fold(text: str) -> str:
-    """大小写折叠 + 去掉结合音标（越文 unaccent 等价）。"""
-    norm = unicodedata.normalize("NFD", text.casefold())
-    return "".join(ch for ch in norm if unicodedata.category(ch) != "Mn")
-
-
 def _risk_of(release: dict[str, Any]) -> str:
     default = "read" if release.get("asset_type") == "workflow" else "danger"
     return str(release["spec"].get("risk_level", default))
-
-
-def _search_blob(release: dict[str, Any]) -> str:
-    spec = release["spec"]
-    parts = [
-        release["capability_id"],
-        str(spec.get("title") or ""),
-        str(spec.get("name") or ""),
-        str(spec.get("description") or ""),
-        str(spec.get("usage_notes") or ""),
-        str(spec.get("domain") or ""),
-    ]
-    return _fold(" ".join(parts))
-
-
-def _score_release(release: dict[str, Any], query: str) -> int:
-    """命中分：id 前缀 > title > 全文；0 表示未命中。"""
-    q = _fold(query).strip()
-    if not q:
-        return 0
-    cap = _fold(release["capability_id"])
-    spec = release["spec"]
-    title = _fold(str(spec.get("title") or spec.get("name") or ""))
-    blob = _search_blob(release)
-    tokens = [t for t in q.split() if t]
-    if not tokens:
-        return 0
-    if all(t in blob for t in tokens) or q in blob:
-        score = 10
-        if cap.startswith(q) or any(cap.startswith(t) for t in tokens):
-            score += 100
-        if q in title or any(t in title for t in tokens):
-            score += 40
-        if q in cap or any(t in cap for t in tokens):
-            score += 20
-        return score
-    return 0
 
 
 def _meta_dict(params: dict[str, Any]) -> dict[str, Any]:
@@ -771,7 +728,7 @@ class McpGateway:
                 continue
             if not await policy.visible(principal, rel, exposure="mcp"):
                 continue
-            score = _score_release(rel, query)
+            score = score_release(rel, query)
             if score > 0:
                 scored.append((score, rel))
         scored.sort(key=lambda x: (-x[0], x[1]["capability_id"]))

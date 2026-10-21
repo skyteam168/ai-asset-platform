@@ -11,6 +11,7 @@ from aip.control_plane.registry.snapshot import policy_bundle
 from aip.data_plane.app import create_app
 from aip.data_plane.principal import Principal
 from aip.data_plane.runtime import ExecutionStore, MemoryExecutionStore
+from aip.libs.searchtext import build_search_text
 from aip.libs.tokens.keys import SigningKey
 from aip.libs.tokens.replay import MemoryReplayStore
 from aip.libs.tokens.signed import sign_payload
@@ -210,24 +211,24 @@ class World:
                         "expires_at": "2099-01-01T00:00:00+00:00",
                     }
                 )
-            releases.append(
-                {
-                    "release_id": f"r{i}",
-                    "asset_id": asset,
-                    "asset_type": "tool",
-                    "name": spec["capability_id"],
-                    "capability_id": spec["capability_id"],
-                    "version": "1.0.0",
-                    "content_hash": "x",
-                    "env": "test",
-                    "channel": "stable",
-                    "scope": {"group": True, "company_ids": [], "consumer_ids": []},
-                    "exposure": exposure or ["rest", "mcp"],
-                    "status": "active",
-                    "classification": spec["data_classification"],
-                    "spec": spec,
-                }
-            )
+            rel = {
+                "release_id": f"r{i}",
+                "asset_id": asset,
+                "asset_type": "tool",
+                "name": spec["capability_id"],
+                "capability_id": spec["capability_id"],
+                "version": "1.0.0",
+                "content_hash": "x",
+                "env": "test",
+                "channel": "stable",
+                "scope": {"group": True, "company_ids": [], "consumer_ids": []},
+                "exposure": exposure or ["rest", "mcp"],
+                "status": "active",
+                "classification": spec["data_classification"],
+                "spec": spec,
+            }
+            rel["search_text"] = build_search_text(rel)
+            releases.append(rel)
         for bi, bspec in enumerate(bundles or []):
             asset = f"bundle-asset-{bi}"
             # 套件 MCP 端点按成员 Tool 的 PDP 可见性过滤；套件资产本身也挂一条授权便于快照一致
@@ -243,24 +244,24 @@ class World:
                     "expires_at": "2099-01-01T00:00:00+00:00",
                 }
             )
-            releases.append(
-                {
-                    "release_id": f"br{bi}",
-                    "asset_id": asset,
-                    "asset_type": "bundle",
-                    "name": bspec["name"],
-                    "capability_id": bspec.get("capability_id", bspec["name"]),
-                    "version": "1.0.0",
-                    "content_hash": "x",
-                    "env": "test",
-                    "channel": "stable",
-                    "scope": {"group": True, "company_ids": [], "consumer_ids": []},
-                    "exposure": exposure or ["rest", "mcp"],
-                    "status": "active",
-                    "classification": 2,
-                    "spec": bspec,
-                }
-            )
+            brel = {
+                "release_id": f"br{bi}",
+                "asset_id": asset,
+                "asset_type": "bundle",
+                "name": bspec["name"],
+                "capability_id": bspec.get("capability_id", bspec["name"]),
+                "version": "1.0.0",
+                "content_hash": "x",
+                "env": "test",
+                "channel": "stable",
+                "scope": {"group": True, "company_ids": [], "consumer_ids": []},
+                "exposure": exposure or ["rest", "mcp"],
+                "status": "active",
+                "classification": 2,
+                "spec": bspec,
+            }
+            brel["search_text"] = build_search_text(brel)
+            releases.append(brel)
         for j, dsl in enumerate(workflows or []):
             asset = f"wf-asset-{j}"
             iam["grants"].append(
@@ -275,24 +276,24 @@ class World:
                     "expires_at": "2099-01-01T00:00:00+00:00",
                 }
             )
-            releases.append(
-                {
-                    "release_id": f"wr{j}",
-                    "asset_id": asset,
-                    "asset_type": "workflow",
-                    "name": dsl["name"],
-                    "capability_id": dsl["capability_id"],
-                    "version": dsl["version"],
-                    "content_hash": "x",
-                    "env": "test",
-                    "channel": "stable",
-                    "scope": {"group": True, "company_ids": [], "consumer_ids": []},
-                    "exposure": exposure or ["rest", "mcp"],
-                    "status": "active",
-                    "classification": dsl.get("data_classification", 2),
-                    "spec": dsl,
-                }
-            )
+            wrel = {
+                "release_id": f"wr{j}",
+                "asset_id": asset,
+                "asset_type": "workflow",
+                "name": dsl["name"],
+                "capability_id": dsl["capability_id"],
+                "version": dsl["version"],
+                "content_hash": "x",
+                "env": "test",
+                "channel": "stable",
+                "scope": {"group": True, "company_ids": [], "consumer_ids": []},
+                "exposure": exposure or ["rest", "mcp"],
+                "status": "active",
+                "classification": dsl.get("data_classification", 2),
+                "spec": dsl,
+            }
+            wrel["search_text"] = build_search_text(wrel)
+            releases.append(wrel)
         rel = {
             "format": 1,
             "seq": 1,

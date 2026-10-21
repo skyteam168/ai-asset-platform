@@ -32,6 +32,7 @@
 | **M7j** consumer-kit 断言签名示例 | 完成 | 33aab1a |
 | **M7k** PostgreSQL 切换与审计零丢失 | 完成 | 1efdf31 |
 | **M7l** 多进程容量压测 | 完成 | 3c9058d |
+| **M7m** 发现检索物化 / 中文匹配 | 完成 | （本片） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -88,6 +89,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `docs/ops/client-compat.md` | MCP 客户端兼容矩阵与 Inspector 联调步骤 |
 | `docs/ops/fault-drills.md` | 故障演练矩阵（12.2）与自动化对照 |
 | `docs/ops/pg-failover.md` | PostgreSQL 主从切换本地演练（opt-in compose `pg-ha`） |
+| `docs/ops/search-index.md` | 发现检索物化 search_text；zhparser / pg_trgm 可选路径 |
 | `spikes/adr0003/` | 工作流引擎选型 spike（不进入产品代码） |
 
 ## 5. 约定与踩过的坑（务必遵守）
@@ -136,7 +138,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = zhparser / 横向**）
+## 7. 之后：M7 与横向事项（**当前下一步 = 横向**）
 
 - **M7a（已完成）**：MCP `io.modelcontextprotocol/tasks`、`aip.get_run_status`、Workflow 作 MCP 异步 Tool、`tasks/get`（task_id=run_id）。
 - **M7b（已完成）**：MCP elicitation / MRTR `input_required` 确认通道（`via=mcp`）；迁移 0014。
@@ -150,6 +152,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **M7j（已完成）**：`sdk/consumer-kit` 断言签名示例（Python / TS + Java / .NET 模板；CI 挂 Python/TS）。
 - **M7k（已完成）**：PostgreSQL 切换窗口审计零丢失（`test_m7_pg_failover.py` + [pg-failover.md](pg-failover.md) / opt-in `pg-ha`）；生产 Patroni 仍横向。
 - **M7l（已完成）**：多进程容量压测（`tools/loadtest.py --workers` + [slo.md](slo.md) §8 + `test_m7_capacity.py`）。
-- **M7 其余 / 横向（当前下一步）**：可选 zhparser 物化检索索引；G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
+- **M7m（已完成）**：发现检索物化 `search_text` + CJK 双字（[search-index.md](search-index.md)；zhparser 仍为生产镜像 opt-in）。
+- **横向（当前下一步）**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行；生产 Patroni / 库内 FTS（zhparser）按需。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

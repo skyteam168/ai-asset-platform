@@ -427,7 +427,7 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- |
 | 端点 | `POST /mcp/discovery`：`search_capabilities` / `get_capability` / `invoke_capability` + `aip.get_run_status` |
 | 过滤 | 先 PDP `visible(mcp)`，再排除 `risk_level=danger`；不可见统一 Unknown |
-| 检索 | 发布快照规范化文本（NFD 去音标 + 子串/分词）；未装 zhparser（alpine PG），后续可物化索引 |
+| 检索 | 发布快照物化 `search_text`（NFD + CJK 双字）；zhparser 为生产 opt-in，见 [search-index.md](search-index.md) |
 
 | 其他验收 | 结果 | 证据 |
 | --- | --- | --- |
@@ -571,6 +571,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 工具 | spawn 子进程数据面；`--workers 1,2,4` 输出 `scaling_vs_workers1` |
 | CI | `test_m7_capacity.py`（200 req 冒烟，不跑全量 2000） |
 | 不在本片 | zhparser；k8s 真实多副本集群压测；换 PG 镜像 |
+
+### M7m 发现检索物化与中文匹配 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 快照含 fold 后的 search_text | 通过 | `test_m7_search_index.py`；`registry/snapshot.py` |
+| 中文「工单」「查询工单」可命中 | 通过 | `test_m7_search_index.py` |
+| 越文去调 / danger 不可见 | 通过 | 同上（回归发现过滤） |
+
+| 部分 | 内容 |
+| --- | --- |
+| 库 | `aip.libs.searchtext`（fold / CJK 双字 / score）；mcp_gateway 复用 |
+| 文档 | [search-index.md](search-index.md)：alpine 现状；zhparser / pg_trgm 生产路径 |
+| 不在本片 | 换默认 PG 镜像；库内 FTS 表与迁移；G4 / 横向 |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
