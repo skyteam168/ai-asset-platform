@@ -684,6 +684,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H21 响应体 Pydantic（门禁 / 审批 / 使用申请）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 门禁用例/提交/Lab/灰度/影响挂载模型 | 通过 | 	est_h21_response_models.py |
+| 审批待办与决定、使用申请、复核挂载模型 | 通过 | 同上；	est_m4_gates.py / e2e |
+| OpenAPI ApprovalPending / GateSubmitResult 等 | 通过 | gen_openapi.py；decide → ApprovalDecision |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | gates/schemas.py；gateHistory 对齐 Page |
+| 契约 | decideApproval 不再假称完整 Approval |
+| 不在本片 | risk / webhook / skill / todo；zhparser；human_task.data 信封 |
+
 ### H20 响应体 Pydantic（控制台读路径 / 连接）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |

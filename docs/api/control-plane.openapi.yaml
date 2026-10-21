@@ -747,27 +747,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  gate:
-                    type: string
-                  passed:
-                    type: boolean
-                  problems:
-                    type: array
-                    items:
-                      type: string
-                  pii_suggestions:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        field:
-                          type: string
-                        kind:
-                          type: string
-                        source:
-                          type: string
+                $ref: '#/components/schemas/GateSubmitResult'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -784,7 +764,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/TestCase'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -846,7 +826,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/AcceptanceSheet'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -869,7 +849,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/LabRunResult'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -887,6 +867,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GateResult'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -903,7 +897,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/VersionImpact'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -920,7 +914,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/CanaryStarted'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -943,7 +937,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/PromoteResult'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -966,7 +960,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/ApprovalDelegate'
         default:
           $ref: '#/components/responses/Problem'
       requestBody:
@@ -987,7 +981,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/AccessReviewOpened'
         default:
           $ref: '#/components/responses/Problem'
       requestBody:
@@ -1008,7 +1002,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/AccessReviewClosed'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1172,7 +1166,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/UsageRequestCreated'
         default:
           $ref: '#/components/responses/Problem'
       requestBody:
@@ -1440,7 +1434,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Approval'
+                      $ref: '#/components/schemas/ApprovalPending'
                   next_cursor:
                     type:
                     - string
@@ -1464,7 +1458,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Approval'
+                $ref: '#/components/schemas/ApprovalDecision'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -3396,6 +3390,305 @@ components:
           type: array
           items:
             type: object
+    ApprovalPending:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        kind:
+          type: string
+        status:
+          type: string
+        subject:
+          type:
+          - string
+          - 'null'
+        subject_id:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        payload:
+          type: object
+        due_at:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+        excluded_users:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - kind
+      - status
+    ApprovalDecision:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        status:
+          type: string
+      required:
+      - id
+      - status
+    ApprovalDelegate:
+      type: object
+      properties:
+        delegate_user_id:
+          type: string
+          description: UUIDv7
+        valid_to:
+          type: string
+          format: date-time
+      required:
+      - delegate_user_id
+      - valid_to
+    TestCase:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        kind:
+          enum:
+          - functional
+          - permission
+        args:
+          type: object
+        expect:
+          type: object
+        principal:
+          type: object
+        critical:
+          type: boolean
+      required:
+      - id
+      - name
+      - kind
+    AcceptanceSheet:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        template:
+          type: object
+      required:
+      - version_id
+      - template
+    PiiSuggestion:
+      type: object
+      properties:
+        field:
+          type:
+          - string
+          - 'null'
+        kind:
+          type:
+          - string
+          - 'null'
+        source:
+          type:
+          - string
+          - 'null'
+    GateSubmitResult:
+      type: object
+      properties:
+        gate:
+          type: string
+        passed:
+          type: boolean
+        problems:
+          type: array
+          items:
+            type: string
+        pii_suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/PiiSuggestion'
+      required:
+      - gate
+      - passed
+    LabRunResult:
+      type: object
+      required:
+      - passed
+      properties:
+        passed:
+          type: boolean
+      additionalProperties: true
+    GateResult:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        version_id:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        gate:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        evidence:
+          type: object
+        operator:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+    ImpactItem:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: UUIDv7
+        version_id:
+          type: string
+          description: UUIDv7
+        asset_type:
+          type: string
+        name:
+          type: string
+        capability_id:
+          type:
+          - string
+          - 'null'
+        semver:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+        refs:
+          type: array
+          items:
+            type: string
+      required:
+      - asset_id
+      - version_id
+      - asset_type
+      - name
+    VersionImpact:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ImpactItem'
+      required:
+      - version_id
+      - items
+    CanaryStarted:
+      type: object
+      properties:
+        release_id:
+          type: string
+          description: UUIDv7
+      required:
+      - release_id
+    PromoteResult:
+      type: object
+      properties:
+        passed:
+          type: boolean
+        calls:
+          type:
+          - integer
+          - 'null'
+        errors:
+          type:
+          - integer
+          - 'null'
+        error_rate:
+          type:
+          - number
+          - 'null'
+        min_calls:
+          type:
+          - integer
+          - 'null'
+        max_error_rate:
+          type:
+          - number
+          - 'null'
+      required:
+      - passed
+    UsageRequestCreated:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        status:
+          type: string
+        consumer_id:
+          type:
+          - string
+          - 'null'
+        asset_id:
+          type:
+          - string
+          - 'null'
+        env:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - status
+    AccessReviewOpened:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+      required:
+      - id
+    AccessReviewClosed:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        revoked:
+          type: integer
+      required:
+      - id
+      - revoked
     AuditRecord:
       type: object
       properties:

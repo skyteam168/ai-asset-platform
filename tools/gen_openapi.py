@@ -488,6 +488,117 @@ def control_plane() -> dict[str, Any]:
                     "steps": {"type": "array", "items": {"type": "object"}},
                 }
             ),
+            "ApprovalPending": o(
+                {
+                    "id": ID,
+                    "kind": S,
+                    "status": S,
+                    "subject": SN,
+                    "subject_id": SN,
+                    "company_id": SN,
+                    "payload": {"type": "object"},
+                    "due_at": SN,
+                    "created_at": SN,
+                    "excluded_users": {"type": "array", "items": S},
+                },
+                ["id", "kind", "status"],
+            ),
+            "ApprovalDecision": o({"id": ID, "status": S}, ["id", "status"]),
+            "ApprovalDelegate": o(
+                {"delegate_user_id": ID, "valid_to": DT},
+                ["delegate_user_id", "valid_to"],
+            ),
+            "TestCase": o(
+                {
+                    "id": ID,
+                    "name": S,
+                    "kind": {"enum": ["functional", "permission"]},
+                    "args": {"type": "object"},
+                    "expect": {"type": "object"},
+                    "principal": {"type": "object"},
+                    "critical": B,
+                },
+                ["id", "name", "kind"],
+            ),
+            "AcceptanceSheet": o(
+                {"version_id": ID, "template": {"type": "object"}},
+                ["version_id", "template"],
+            ),
+            "PiiSuggestion": o(
+                {"field": SN, "kind": SN, "source": SN},
+            ),
+            "GateSubmitResult": o(
+                {
+                    "gate": S,
+                    "passed": B,
+                    "problems": {"type": "array", "items": S},
+                    "pii_suggestions": {"type": "array", "items": ref("PiiSuggestion")},
+                },
+                ["gate", "passed"],
+            ),
+            "LabRunResult": {
+                "type": "object",
+                "required": ["passed"],
+                "properties": {"passed": B},
+                "additionalProperties": True,
+            },
+            "GateResult": o(
+                {
+                    "id": ID,
+                    "version_id": SN,
+                    "company_id": SN,
+                    "gate": SN,
+                    "status": SN,
+                    "evidence": {"type": "object"},
+                    "operator": SN,
+                    "created_at": SN,
+                }
+            ),
+            "ImpactItem": o(
+                {
+                    "asset_id": ID,
+                    "version_id": ID,
+                    "asset_type": S,
+                    "name": S,
+                    "capability_id": SN,
+                    "semver": SN,
+                    "state": SN,
+                    "refs": {"type": "array", "items": S},
+                },
+                ["asset_id", "version_id", "asset_type", "name"],
+            ),
+            "VersionImpact": o(
+                {
+                    "version_id": ID,
+                    "items": {"type": "array", "items": ref("ImpactItem")},
+                },
+                ["version_id", "items"],
+            ),
+            "CanaryStarted": o({"release_id": ID}, ["release_id"]),
+            "PromoteResult": o(
+                {
+                    "passed": B,
+                    "calls": {"type": ["integer", "null"]},
+                    "errors": {"type": ["integer", "null"]},
+                    "error_rate": {"type": ["number", "null"]},
+                    "min_calls": {"type": ["integer", "null"]},
+                    "max_error_rate": {"type": ["number", "null"]},
+                },
+                ["passed"],
+            ),
+            "UsageRequestCreated": o(
+                {
+                    "id": ID,
+                    "status": S,
+                    "consumer_id": SN,
+                    "asset_id": SN,
+                    "env": SN,
+                    "reason": SN,
+                },
+                ["id", "status"],
+            ),
+            "AccessReviewOpened": o({"id": ID}, ["id"]),
+            "AccessReviewClosed": o({"id": ID, "revoked": INT}, ["id", "revoked"]),
             "AuditRecord": o(
                 {
                     "id": ID,
@@ -855,25 +966,7 @@ def control_plane() -> dict[str, Any]:
                 "submitVersion",
                 "release",
                 "提交门禁（G0；Tool 可返回 pii_suggestions 建议）",
-                res={
-                    "type": "object",
-                    "properties": {
-                        "gate": {"type": "string"},
-                        "passed": {"type": "boolean"},
-                        "problems": {"type": "array", "items": {"type": "string"}},
-                        "pii_suggestions": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "field": {"type": "string"},
-                                    "kind": {"type": "string"},
-                                    "source": {"type": "string"},
-                                },
-                            },
-                        },
-                    },
-                },
+                res=ref("GateSubmitResult"),
                 params=["Id"],
             )
         },
@@ -883,7 +976,7 @@ def control_plane() -> dict[str, Any]:
                 "release",
                 "添加门禁用例（功能 / 权限）",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("TestCase"),
                 code="201",
                 params=["Id"],
             )
@@ -911,22 +1004,22 @@ def control_plane() -> dict[str, Any]:
                 "release",
                 "设置验收单模板（G5）",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("AcceptanceSheet"),
                 params=["Id"],
             )
         },
         f"{A}/versions/{{id}}/run-tests": {
-            "post": op("runTests", "release", "Test Lab 执行 G1–G4", res={"type": "object"}, params=["Id"])
+            "post": op("runTests", "release", "Test Lab 执行 G1–G4", res=ref("LabRunResult"), params=["Id"])
         },
         f"{A}/versions/{{id}}/gates": {
-            "get": op("gateHistory", "release", "门禁记录", res={"type": "object"}, params=["Id"])
+            "get": op("gateHistory", "release", "门禁记录", res=page("GateResult"), params=["Id"])
         },
         f"{A}/versions/{{id}}/impact": {
             "get": op(
                 "listVersionImpact",
                 "release",
                 "G4 依赖影响：列出需回归的上层资产",
-                res={"type": "object"},
+                res=ref("VersionImpact"),
                 params=["Id"],
             )
         },
@@ -937,7 +1030,7 @@ def control_plane() -> dict[str, Any]:
                 "release",
                 "G7 灰度发布",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("CanaryStarted"),
                 code="201",
                 params=["Id"],
             )
@@ -948,7 +1041,7 @@ def control_plane() -> dict[str, Any]:
                 "release",
                 "G7 指标达标后全量（G8）",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("PromoteResult"),
                 params=["Id"],
             )
         },
@@ -958,7 +1051,7 @@ def control_plane() -> dict[str, Any]:
                 "approval",
                 "设置审批代理人",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("ApprovalDelegate"),
                 code="201",
             )
         },
@@ -968,13 +1061,17 @@ def control_plane() -> dict[str, Any]:
                 "grant",
                 "发起授权复核活动",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("AccessReviewOpened"),
                 code="201",
             )
         },
         f"{A}/access-reviews/{{id}}/close": {
             "post": op(
-                "closeAccessReview", "grant", "关闭复核（未确认的授权撤销）", res={"type": "object"}, params=["Id"]
+                "closeAccessReview",
+                "grant",
+                "关闭复核（未确认的授权撤销）",
+                res=ref("AccessReviewClosed"),
+                params=["Id"],
             )
         },
         f"{A}/assets/{{id}}/versions": {
@@ -1007,7 +1104,7 @@ def control_plane() -> dict[str, Any]:
                 "grant",
                 "使用申请（上限内，由本公司管理员审批）",
                 req={"type": "object"},
-                res={"type": "object"},
+                res=ref("UsageRequestCreated"),
                 code="201",
             ),
         },
@@ -1071,9 +1168,18 @@ def control_plane() -> dict[str, Any]:
                 params=["Id"],
             )
         },
-        f"{A}/approvals": {"get": op("listApprovals", "approval", "我的审批待办", res=page("Approval"), params=LIST)},
+        f"{A}/approvals": {
+            "get": op("listApprovals", "approval", "我的审批待办", res=page("ApprovalPending"), params=LIST)
+        },
         f"{A}/approvals/{{id}}/decide": {
-            "post": op("decideApproval", "approval", "审批", req=ref("Decision"), res=ref("Approval"), params=["Id"])
+            "post": op(
+                "decideApproval",
+                "approval",
+                "审批",
+                req=ref("Decision"),
+                res=ref("ApprovalDecision"),
+                params=["Id"],
+            )
         },
         f"{A}/risk-rules": {"get": op("listRiskRules", "risk", "风险规则", res=page("RiskRule"))},
         f"{A}/risk-rules/{{code}}": {
