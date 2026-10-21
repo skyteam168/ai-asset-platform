@@ -362,11 +362,19 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         await conn.execute(select(acceptance_sheet.c.version_id).where(acceptance_sheet.c.version_id == version_id))
     ).first() is None:
         problems.append("缺少验收单模板")
+    pii_suggestions: list[dict[str, str]] = []
+    if a["type"] == "tool" and not problems:
+        from aip.libs.pii import suggest_pii_fields
+
+        pii_suggestions = suggest_pii_fields(spec)
     ok = not problems
-    await _record(conn, actor, v, "G0", ok, {"problems": problems})
+    evidence: dict[str, Any] = {"problems": problems}
+    if pii_suggestions:
+        evidence["pii_suggestions"] = pii_suggestions
+    await _record(conn, actor, v, "G0", ok, evidence)
     if ok:
         await registry.transition(conn, actor, version_id, "testing", "G0 passed")
-    return {"gate": "G0", "passed": ok, "problems": problems}
+    return {"gate": "G0", "passed": ok, "problems": problems, "pii_suggestions": pii_suggestions}
 
 
 def _fast_track(spec: dict[str, Any], classification: int) -> bool:

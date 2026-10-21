@@ -669,14 +669,34 @@ paths:
       operationId: submitVersion
       tags:
       - release
-      summary: 提交门禁
+      summary: 提交门禁（G0；Tool 可返回 pii_suggestions 建议）
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AssetVersion'
+                type: object
+                properties:
+                  gate:
+                    type: string
+                  passed:
+                    type: boolean
+                  problems:
+                    type: array
+                    items:
+                      type: string
+                  pii_suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        field:
+                          type: string
+                        kind:
+                          type: string
+                        source:
+                          type: string
         default:
           $ref: '#/components/responses/Problem'
       parameters:

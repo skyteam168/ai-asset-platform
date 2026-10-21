@@ -684,6 +684,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H9 G0 Presidio / 规则辅助 PII — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 字段名启发式建议 PHONE/EMAIL | 通过 | `test_h9_pii_suggest.py::test_suggest_from_field_names` |
+| 已声明 pii_fields 不再建议 | 通过 | `test_suggest_skips_declared` |
+| G0 通过时 evidence / 响应含 pii_suggestions | 通过 | `test_g0_returns_pii_suggestions` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `libs/pii/suggest.py`（规则 + 可选 `presidio-analyzer`） |
+| 门禁 | G0 `submit` 对 Tool 写入 evidence.`pii_suggestions`；不强制改 Spec |
+| 依赖 | `pyproject` extra `pii`；未安装时仅规则 |
+| 不在本片 | 控制台确认写入 pii_fields；越南语自定义 recognizer 完整集 |
+
 ### H8 Importer AI 候选描述 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

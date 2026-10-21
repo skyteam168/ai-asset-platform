@@ -715,7 +715,31 @@ def control_plane() -> dict[str, Any]:
             ),
         },
         f"{A}/versions/{{id}}/submit": {
-            "post": op("submitVersion", "release", "提交门禁", res=ref("AssetVersion"), params=["Id"])
+            "post": op(
+                "submitVersion",
+                "release",
+                "提交门禁（G0；Tool 可返回 pii_suggestions 建议）",
+                res={
+                    "type": "object",
+                    "properties": {
+                        "gate": {"type": "string"},
+                        "passed": {"type": "boolean"},
+                        "problems": {"type": "array", "items": {"type": "string"}},
+                        "pii_suggestions": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "field": {"type": "string"},
+                                    "kind": {"type": "string"},
+                                    "source": {"type": "string"},
+                                },
+                            },
+                        },
+                    },
+                },
+                params=["Id"],
+            )
         },
         f"{A}/versions/{{id}}/test-cases": {
             "post": op(

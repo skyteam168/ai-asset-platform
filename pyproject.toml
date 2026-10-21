@@ -50,6 +50,9 @@ sdk = [
 sdk = [
     "langchain-core>=0.3",
 ]
+pii = [
+    "presidio-analyzer>=2.2",
+]
 
 [project.scripts]
 corp-skill = "aip.cli.corp_skill:main"
