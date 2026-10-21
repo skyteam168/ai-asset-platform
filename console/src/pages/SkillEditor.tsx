@@ -1,6 +1,7 @@
-import { Alert, Button, Col, Descriptions, Empty, Form, Input, List, Modal, Row, Select, Space, Tabs, Typography, Upload } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
+import { Alert, Button, Col, Descriptions, Empty, Form, Input, List, Modal, Row, Select, Space, Tabs, Typography, Upload, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, get, put, upload, type Page } from "../api";
+import { ApiError, describeError, downloadFile, get, put, upload, type Page } from "../api";
 import { useAction, useLoad } from "../hooks";
 import { Markdown } from "../markdown";
 import type { SkillSource, SkillSourceSaved, VersionSummary } from "../types";
@@ -55,9 +56,22 @@ function toBase64(file: Blob): Promise<string> {
 interface Props {
   versionId: string;
   assetId: string;
+  semver: string;
   spec: Record<string, unknown>;
   editable: boolean;
   onSaved: () => void;
+}
+
+async function downloadSkillZip(name: string, semver: string) {
+  try {
+    await downloadFile(
+      `/skills/${encodeURIComponent(name)}/versions/${encodeURIComponent(semver)}/download`,
+      `${name}@${semver}.zip`,
+    );
+    message.success(t("已开始下载 {0}", [`${name}@${semver}`]));
+  } catch (e) {
+    message.error(describeError(e));
+  }
 }
 
 /** Skill 版本面板：在线编辑 SKILL.md、Tool 引用与附带文件，服务端组装并签名；上传 zip 为次要入口。 */
@@ -75,14 +89,20 @@ export function SkillPackagePanel(p: Props) {
   if (source.error) return <Alert type="error" message={source.error} />;
   // 上传 zip 会整体替换包：重新读取并重建编辑器；在线保存只通知上层刷新版本信息
   const replaced = () => { setReload((n) => n + 1); p.onSaved(); };
-  if (!p.editable) return <SkillReadOnly source={source.data} />;
+  if (!p.editable) return <SkillReadOnly source={source.data} semver={p.semver} />;
   return <SkillEditor key={`${reload}`} {...p} initial={source.data} onReplaced={replaced} />;
 }
 
-function SkillReadOnly({ source }: { source: SkillSource | null }) {
+function SkillReadOnly({ source, semver }: { source: SkillSource | null; semver: string }) {
   if (!source) return <Empty description={t("尚未上传或保存 Skill 包")} />;
   return (
     <Space direction="vertical" style={{ width: "100%" }}>
+      <Button
+        icon={<DownloadOutlined />}
+        onClick={() => downloadSkillZip(source.name, semver)}
+      >
+        {t("下载 zip")}
+      </Button>
       <Descriptions size="small" column={2} bordered>
         <Descriptions.Item label="name">{source.name}</Descriptions.Item>
         <Descriptions.Item label="license">{source.license ?? "-"}</Descriptions.Item>
@@ -176,6 +196,11 @@ function SkillEditor(p: Props & { initial: SkillSource | null; onReplaced: () =>
       <Alert type="info" showIcon style={{ marginBottom: 12 }}
         message={t("在线编辑标准 Agent Skills 目录：SKILL.md + references/ + assets/；保存时由服务端组装 zip、计算哈希并签名。首期只支持指令型 Skill，不接受脚本。")} />
       <Space wrap style={{ marginBottom: 12 }}>
+        {p.initial?.name && (
+          <Button icon={<DownloadOutlined />} onClick={() => downloadSkillZip(p.initial!.name, p.semver)}>
+            {t("下载 zip")}
+          </Button>
+        )}
         <Select style={{ width: 260 }} placeholder={t("从已有版本载入（作为新版本起点）")}
           options={loadable.map((v) => ({ value: v.id, label: `${v.semver} · ${v.state}` }))}
           onChange={(id: string) => loadFrom(id)} />

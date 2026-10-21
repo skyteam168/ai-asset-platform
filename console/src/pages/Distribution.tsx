@@ -1,6 +1,7 @@
-import { Alert, Table, Tabs, Tag, Typography } from "antd";
+import { DownloadOutlined } from "@ant-design/icons";
+import { Alert, Button, message, Table, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
-import { get } from "../api";
+import { describeError, downloadFile, get } from "../api";
 import { matches, PageCard, PAGINATION, Toolbar } from "../components";
 import { useLoad } from "../hooks";
 import { t } from "../i18n";
@@ -10,15 +11,40 @@ interface SkillRow {
   version: string;
   description?: string;
   retracted?: boolean;
+  git_url?: string | null;
 }
 
-/** 套件 / Skill / webhook 管理入口（列表只读；写操作走对应 API）。 */
+/** 套件 / Skill / webhook 管理入口；Skill 支持目录浏览与 zip 下载。 */
 export function DistributionPage() {
   const skills = useLoad(() => get<{ items: SkillRow[] }>("/skills"), []);
   const [kw, setKw] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  async function onDownload(r: SkillRow) {
+    const key = `${r.name}@${r.version}`;
+    setBusy(key);
+    try {
+      await downloadFile(
+        `/skills/${encodeURIComponent(r.name)}/versions/${encodeURIComponent(r.version)}/download`,
+        `${r.name}@${r.version}.zip`,
+      );
+      message.success(t("已开始下载 {0}", [key]));
+    } catch (e) {
+      message.error(describeError(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <PageCard>
       <Toolbar placeholder={t("Skill / 能力")} onSearch={setKw} />
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message={t("下载 Skill zip 后可用 corp-skill install，或解压到 Cursor / Claude 的 skills 目录。")}
+      />
       <Tabs
         items={[
           {
@@ -52,6 +78,23 @@ export function DistributionPage() {
                       width: 100,
                       render: (v: boolean | undefined) =>
                         v ? <Tag color="default">{t("已撤回")}</Tag> : <Tag color="green">{t("有效")}</Tag>,
+                    },
+                    {
+                      title: t("操作"),
+                      key: "actions",
+                      width: 120,
+                      render: (_: unknown, r) => (
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<DownloadOutlined />}
+                          disabled={Boolean(r.retracted)}
+                          loading={busy === `${r.name}@${r.version}`}
+                          onClick={() => onDownload(r)}
+                        >
+                          {t("下载 zip")}
+                        </Button>
+                      ),
                     },
                   ]}
                 />

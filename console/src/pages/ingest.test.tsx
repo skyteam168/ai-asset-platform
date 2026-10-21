@@ -147,7 +147,7 @@ describe("在线 Skill 编辑器", () => {
       return method === "GET" ? page([]) : undefined;
     });
     render(wrap(
-      <SkillPackagePanel versionId="v1" assetId="a1" editable onSaved={() => undefined}
+      <SkillPackagePanel versionId="v1" assetId="a1" semver="1.0.0" editable onSaved={() => undefined}
         spec={{ name: "query-work-orders", description: "指导模型查询本厂在制工单并汇总状态。" }} />,
     ));
     const user = userEvent.setup();
@@ -184,7 +184,7 @@ describe("在线 Skill 编辑器", () => {
       }
       return method === "GET" ? page([]) : undefined;
     });
-    render(wrap(<SkillPackagePanel versionId="v2" assetId="a1" editable={false} onSaved={() => undefined} spec={{}} />));
+    render(wrap(<SkillPackagePanel versionId="v2" assetId="a1" semver="1.0.0" editable={false} onSaved={() => undefined} spec={{}} />));
     expect(await screen.findByRole("heading", { name: "已发布" })).toBeInTheDocument();
     expect(screen.getByText("production.mes.query_work_orders@1.0.0")).toBeInTheDocument();
     expect(screen.getByText("references/a.md")).toBeInTheDocument();

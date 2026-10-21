@@ -85,3 +85,33 @@ export function query(params: Record<string, string | number | undefined | null>
   const s = q.toString();
   return s ? `?${s}` : "";
 }
+
+/** 下载二进制（如 Skill zip）；用 Content-Disposition 文件名，否则用 fallbackName。 */
+export async function downloadFile(path: string, fallbackName: string): Promise<void> {
+  const headers: Record<string, string> = { Accept: "*/*" };
+  const token = session.get();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${BASE}${path}`, { method: "GET", headers });
+  if (!res.ok) {
+    const text = await res.text();
+    let data: { code?: string; detail?: string; errors?: FieldError[] } | undefined;
+    try {
+      data = text ? JSON.parse(text) : undefined;
+    } catch {
+      data = undefined;
+    }
+    const err = new ApiError(res.status, data?.code ?? "INTERNAL", data?.detail ?? res.statusText, data?.errors ?? []);
+    if (res.status === 401 && path !== "/auth/login") onUnauthorized();
+    throw err;
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get("Content-Disposition") || "";
+  const m = /filename\*?=(?:UTF-8''|")?([^\";]+)/i.exec(cd);
+  const rawName = m?.[1] ? decodeURIComponent(m[1].replace(/"/g, "")) : fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = rawName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
