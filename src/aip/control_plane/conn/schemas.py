@@ -56,3 +56,18 @@ class ConfigDraft(BaseModel):
 class TransportExceptionStatus(BaseModel):
     id: str
     status: str
+
+
+class ConnectorInstance(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    name: str
+    kind: Literal["declarative", "kb", "mock", "upstream_mcp"]
+    company_id: str | None = None
+    system_connection_id: str | None = None
+    config: dict[str, Any] = Field(default_factory=dict)
+    concurrency: int | None = None
+    rate_per_s: float | None = None
+    burst: int | None = None
+    status: str | None = None

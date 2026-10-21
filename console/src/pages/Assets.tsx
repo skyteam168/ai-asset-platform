@@ -6,6 +6,7 @@ import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, P
 import { useAction, useLoad } from "../hooks";
 import type { Asset, GateRecord, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
+import { SkillPackagePanel } from "./SkillEditor";
 
 const LIFECYCLE = ["draft", "testing", "in_review", "approved", "canary", "active"];
 
@@ -87,29 +88,74 @@ function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => v
   );
 }
 
-const SPEC_TEMPLATE = JSON.stringify({
-  capability_id: "production.mes.query_work_orders", domain: "production", name: "query_work_orders",
-  description: t("查询指定工厂的生产工单，按状态过滤，返回工单号、计划数量和状态。"),
-  input_schema: { type: "object", properties: { factory_id: { type: "string" } }, required: ["factory_id"] },
-  output_schema: { type: "array", items: { type: "object" } },
-  connector_ref: { connector: "mes_vn01", operation: "query_work_orders" },
-  risk_level: "read", timeout: { connect_ms: 2000, read_ms: 5000, deadline_ms: 8000 }, data_classification: 2,
-  identity_mode: "service_account", confirm_policy: "auto",
-  scope_binding: { factory_id: { dimension: "company", map: "by_code", system_key: "mes" } },
-}, null, 2);
+/** 新建版本的 Spec 起点与校验所用的 Schema 文件（docs/specs/），按资产类型切换。 */
+export const SPEC_TEMPLATES: Record<string, { schema: string; spec: unknown }> = {
+  tool: {
+    schema: "tool-spec",
+    spec: {
+      capability_id: "production.mes.query_work_orders", domain: "production", name: "query_work_orders",
+      description: t("查询指定工厂的生产工单，按状态过滤，返回工单号、计划数量和状态。"),
+      input_schema: { type: "object", properties: { factory_id: { type: "string" } }, required: ["factory_id"] },
+      output_schema: { type: "array", items: { type: "object" } },
+      connector_ref: { connector: "mes_vn01", operation: "query_work_orders" },
+      risk_level: "read", timeout: { connect_ms: 2000, read_ms: 5000, deadline_ms: 8000 }, data_classification: 2,
+      identity_mode: "service_account", confirm_policy: "auto",
+      scope_binding: { factory_id: { dimension: "company", map: "by_code", system_key: "mes" } },
+    },
+  },
+  skill: {
+    schema: "skill-spec",
+    spec: {
+      name: "query-work-orders",
+      description: t("指导模型查询本厂在制工单：先确认工厂，再按状态汇总。"),
+      tools: [],
+    },
+  },
+  workflow: {
+    schema: "workflow-dsl",
+    spec: {
+      name: "po_review", capability_id: "agent.finance.po_review", version: "1.0.0",
+      description: t("采购单审核：读取采购单，高风险时转人工审批。"),
+      input_schema: { type: "object", properties: { po: { type: "string" } }, required: ["po"] },
+      budget: { max_steps: 30, max_llm_calls: 3, timeout_s: 600 },
+      nodes: [
+        { id: "n1", type: "tool", ref: "finance.erp.get_po@1.0.0", args: { po: "$input.po" }, next: "n2" },
+        { id: "n2", type: "human_task", kind: "approve", assignee: "role:business_owner@VN01", summary: t("采购单需要业务负责人审批"), next: "n3" },
+        { id: "n3", type: "end", output: { po: "$n1.po_no" } },
+      ],
+    },
+  },
+  bundle: {
+    schema: "bundle-spec",
+    spec: { name: "production_basics", description: t("生产常用查询套件：工单、物料与产线状态。"), tools: [] },
+  },
+  model_profile: { schema: "model-profile", spec: {} },
+};
+
+export const specTemplate = (type: string) => JSON.stringify(SPEC_TEMPLATES[type]?.spec ?? {}, null, 2);
 
 function NewVersion(p: { asset: Asset; open: boolean; onClose: () => void; onDone: () => void }) {
   const [form] = Form.useForm();
   const act = useAction();
+  const schema = SPEC_TEMPLATES[p.asset.type]?.schema;
   return (
     <Modal open={p.open} title={t("新建版本")} width={760} onCancel={p.onClose} onOk={() => form.submit()} destroyOnClose>
-      <Form form={form} layout="vertical" preserve={false} initialValues={{ semver: "1.0.0", spec: SPEC_TEMPLATE }}
+      {(p.asset.type === "tool" || p.asset.type === "workflow") && (
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message={t("发布（灰度 / 全量）时出口 exposure 包含 mcp，即自动经数据面 /mcp 暴露为 MCP 工具，无需额外配置。")} />
+      )}
+      {p.asset.type === "skill" && (
+        <Alert type="info" showIcon style={{ marginBottom: 12 }}
+          message={t("Skill 版本创建后，在版本面板的「Skill 包」页签在线编写 SKILL.md（或上传 zip）；Skill 经目录与 corp-skill 分发，不经 /mcp。")} />
+      )}
+      <Form form={form} layout="vertical" preserve={false} initialValues={{ semver: "1.0.0", spec: specTemplate(p.asset.type) }}
         onFinish={async (v) => {
           const r = await act(() => post(`/assets/${p.asset.id}/versions`, { semver: v.semver, spec: parseJson(v.spec) }), t("已创建"));
           if (r) { p.onClose(); p.onDone(); }
         }}>
         <Form.Item name="semver" label={t("版本号")} rules={[{ required: true, pattern: /^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/, message: t("语义化版本，如 1.2.0") }]}><Input /></Form.Item>
-        <Form.Item name="spec" label={t("Spec（JSON，按 docs/specs/tool-spec.schema.json 校验）")} rules={[{ required: true }, jsonRule]}>
+        <Form.Item name="spec" rules={[{ required: true }, jsonRule]}
+          label={schema ? t("Spec（JSON，按 docs/specs/{0}.schema.json 校验）", [schema]) : t("Spec（JSON）")}>
           <JsonInput rows={18} />
         </Form.Item>
       </Form>
@@ -147,6 +193,13 @@ function VersionPanel({
         ]} />) },
     { key: "cases", label: t("门禁用例（{0}）", [v.test_cases.length]), children: <Cases v={v} editable={dev && v.state === "draft"} onDone={refresh} /> },
     { key: "acceptance", label: t("验收单"), children: <Acceptance v={v} editable={v.state === "draft"} onDone={refresh} /> },
+    ...(assetType === "skill"
+      ? [{
+          key: "skill",
+          label: t("Skill 包"),
+          children: <SkillPackagePanel versionId={versionId} assetId={v.asset_id} spec={v.spec} editable={dev && v.state === "draft"} onSaved={refresh} />,
+        }]
+      : []),
     ...(assetType === "bundle"
       ? [{
           key: "selection-eval",
@@ -204,7 +257,7 @@ function VersionPanel({
           description={labResult.cases.map((c) => (
             <div key={c.name}>{c.passed ? "✔" : "✘"} {c.name}（{c.status}）{c.detail && `：${c.detail}`}</div>))} />
       )}
-      <Tabs items={tabs} />
+      <Tabs items={tabs} defaultActiveKey={assetType === "skill" ? "skill" : undefined} />
     </Card>
   );
 }
@@ -310,7 +363,7 @@ function RolloutButton({ versionId, kind, onDone }: { versionId: string; kind: "
           ) : (
             <Form.Item name="min_calls" label={t("灰度期最少调用次数")}><InputNumber min={0} /></Form.Item>
           )}
-          <Form.Item name="exposure" label={t("出口")}>
+          <Form.Item name="exposure" label={t("出口")} extra={t("包含 mcp 即自动经数据面 /mcp 暴露")}>
             <Select mode="multiple" options={["rest", "mcp", "a2a"].map((e) => ({ value: e, label: e }))} />
           </Form.Item>
         </Form>

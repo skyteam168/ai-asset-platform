@@ -34,8 +34,9 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { get, type Page } from "./api";
 import { useAuth } from "./auth";
-import { Logo, Mark, PLATFORM_NAME, PRODUCT_NAME } from "./brand";
+import { Logo, Mark, PRODUCT_NAME } from "./brand";
 import { OrgProvider } from "./components";
+import { HelpDrawer } from "./Help";
 import { LANGS, lang, switchLang, t, type Lang } from "./i18n";
 import { LoginPage } from "./pages/Login";
 import { ThemePanel, useThemePrefs } from "./theme";
@@ -325,12 +326,7 @@ function HelpButton() {
       <Tooltip title={t("帮助")}>
         <Button className="aip-icon-btn" type="text" icon={<QuestionCircleOutlined />} aria-label={t("帮助")} onClick={() => setOpen(true)} />
       </Tooltip>
-      <Modal open={open} title={PLATFORM_NAME} footer={null} onCancel={() => setOpen(false)}>
-        <Typography.Paragraph>{t("统一登记、授权与审计集团的 AI 工具、工作流与连接，让各分公司的 Agent 安全地使用旧系统数据。")}</Typography.Paragraph>
-        <Typography.Paragraph type="secondary">
-          {t("快捷键：Ctrl / ⌘ + K 搜索功能。界面语言与明暗主题在右上角切换，选择会被记住。")}
-        </Typography.Paragraph>
-      </Modal>
+      <HelpDrawer open={open} onClose={() => setOpen(false)} />
     </>
   );
 }

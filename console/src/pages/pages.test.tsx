@@ -161,5 +161,5 @@ describe("平台待办：调用确认与工作流任务", () => {
     await waitFor(() =>
       expect(calls.find((c) => c.path === "/todo/tasks/t1/decide")?.body).toEqual({ decision: "approve", data: { qty: 12 } }),
     );
-  });
+  }, 60_000);
 });

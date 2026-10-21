@@ -104,6 +104,40 @@ async def attach_package(
     }
 
 
+MAX_PACKAGE_BYTES = 8 * 1024 * 1024
+
+
+async def save_source(
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    source: dict[str, Any],
+    *,
+    key: SigningKey | None = None,
+) -> dict[str, Any]:
+    """在线编辑器保存：服务端组装标准目录 zip，再走与上传相同的 attach_package（解析、哈希、签名、写回 spec）。
+
+    额外返回 G0 安全扫描的预检结果（warnings），让作者在提交前就能看到；正式判定仍在 G0。
+    """
+    from aip.control_plane.gates.service import scan_text
+
+    files = pkg.build_source_files(source)
+    raw = pkg.make_zip(files)
+    if len(raw) > MAX_PACKAGE_BYTES:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "Skill 包不能超过 8MB")
+    result = await attach_package(conn, actor, version_id, raw, key=key)
+    texts = [files[pkg.SKILL_MD].decode("utf-8")]
+    texts += [data.decode("utf-8") for path, data in files.items() if path.startswith("references/")]
+    return {**result, "warnings": scan_text(*texts)}
+
+
+async def load_source(conn: AsyncConnection, version_id: uuid.UUID) -> dict[str, Any]:
+    """把已入库的包拆回编辑器表单（继续修改或作为新版本的起点）。"""
+    row = await package_row(conn, version_id)
+    files = pkg.unpack_zip(bytes(row["zip_bytes"]))
+    return {"version_id": str(version_id), "content_sha256": row["content_sha256"], **pkg.read_source(files)}
+
+
 async def package_row(conn: AsyncConnection, version_id: uuid.UUID) -> dict[str, Any]:
     row = (await conn.execute(select(skill_package).where(skill_package.c.version_id == version_id))).mappings().first()
     if row is None:

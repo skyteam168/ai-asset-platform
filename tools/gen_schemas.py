@@ -215,7 +215,7 @@ NODE = obj(
                     "assignee": {
                         "type": "string",
                         # 组织：编码或 id、$input.x、org_of(input.x)（architecture.md 6.3 示例写法）
-                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@("
+                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z][a-z0-9_]{0,63}@("
                         r"[A-Za-z0-9_.-]+|\$input\.[A-Za-z0-9_.]+|org_of\(input\.[A-Za-z0-9_.]+\)))$",
                     },
                     "summary": {"type": "string", "maxLength": 500},
@@ -225,7 +225,7 @@ NODE = obj(
                     "escalate_to": {
                         "type": "string",
                         "description": "超时后升级到的处理人（与 assignee 同写法）；优先于 on_timeout",
-                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z_]+@("
+                        "pattern": r"^(initiator|user:[0-9a-f-]{36}|role:[a-z][a-z0-9_]{0,63}@("
                         r"[A-Za-z0-9_.-]+|\$input\.[A-Za-z0-9_.]+|org_of\(input\.[A-Za-z0-9_.]+\)))$",
                     },
                     "input_schema": {"type": "object"},

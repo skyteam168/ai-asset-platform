@@ -111,6 +111,20 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return out.ConfigDraft.model_validate(await svc.draft_trust(conn, actor, id))
 
+    @r.get(
+        f"{V}/connector-instances",
+        operation_id="listConnectorInstances",
+        response_model=Page[out.ConnectorInstance],
+    )
+    async def list_connectors(actor: ActorDep, db: DbDep) -> Page[out.ConnectorInstance]:
+        async with db.tx(actor.db_scope()) as conn:
+            rows = (
+                (await conn.execute(select(svc.connector_instance).order_by(svc.connector_instance.c.name).limit(200)))
+                .mappings()
+                .all()
+            )
+        return Page(items=[out.ConnectorInstance.model_validate(_out(dict(x))) for x in rows])
+
     @r.post(f"{V}/connector-instances", operation_id="createConnectorInstance", status_code=201)
     async def create_connector(body: ConnectorIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:

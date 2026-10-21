@@ -15,11 +15,15 @@ ALIAS = {
     "httpcore": "httpx",
     "starlette": "fastapi",
     "multipart": "python_multipart",
+    "yaml": "pyyaml",
+    "opentelemetry": "opentelemetry_api",
 }
 
 
 def test_runtime_imports_are_declared_dependencies() -> None:
-    deps = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+    # 可选 extras（sdk、pii）只允许函数内延迟导入，未安装时按功能降级
+    deps = project["dependencies"] + [d for ds in project.get("optional-dependencies", {}).values() for d in ds]
     declared = {d.split(">")[0].split("[")[0].split("=")[0].strip().lower().replace("-", "_") for d in deps}
     used: set[str] = set()
     for f in (ROOT / "src").rglob("*.py"):

@@ -406,6 +406,82 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["version_id", "name"],
             ),
+            "SkillSourceSaved": o(
+                {
+                    "version_id": ID,
+                    "name": S,
+                    "manifest": {"type": "object"},
+                    "signature": SN,
+                    "content_sha256": SN,
+                    "files": {"type": "array", "items": S},
+                    "warnings": {"type": "array", "items": S, "description": "G0 安全扫描预检（正式判定在 G0）"},
+                },
+                ["version_id", "name"],
+            ),
+            "SkillSourceIn": o(
+                {
+                    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+                    "description": {"type": "string", "minLength": 10, "maxLength": 1024},
+                    "license": SN,
+                    "compatibility": SN,
+                    "allowed_tools": {"type": "array", "items": S},
+                    "body": {"type": "string", "description": "SKILL.md 正文（Markdown，不含 frontmatter）"},
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string", "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"},
+                        "description": "写入 skill.lock.json 的 Tool@版本",
+                    },
+                    "references": {
+                        "type": "array",
+                        "items": o({"path": S, "content": S}, ["path", "content"]),
+                        "description": "references/ 下的文本文件",
+                    },
+                    "assets": {
+                        "type": "array",
+                        "items": o({"path": S, "content_base64": S}, ["path", "content_base64"]),
+                        "description": "assets/ 下的小附件（单个 ≤ 1MB，不接受脚本）",
+                    },
+                },
+                ["name", "description"],
+            ),
+            "SkillSource": o(
+                {
+                    "version_id": SN,
+                    "content_sha256": SN,
+                    "name": S,
+                    "description": S,
+                    "license": SN,
+                    "compatibility": SN,
+                    "allowed_tools": {"type": "array", "items": S},
+                    "body": S,
+                    "tools": {"type": "array", "items": S},
+                    "references": {"type": "array", "items": o({"path": S, "content": S}, ["path", "content"])},
+                    "assets": {
+                        "type": "array",
+                        "items": o(
+                            {"path": S, "content_base64": S, "size": {"type": ["integer", "null"]}},
+                            ["path", "content_base64"],
+                        ),
+                    },
+                    "warnings": {"type": "array", "items": S},
+                },
+                ["name"],
+            ),
+            "ConnectorInstance": o(
+                {
+                    "id": ID,
+                    "name": S,
+                    "kind": {"enum": ["declarative", "kb", "mock", "upstream_mcp"]},
+                    "company_id": SN,
+                    "system_connection_id": SN,
+                    "config": {"type": "object"},
+                    "concurrency": {"type": ["integer", "null"]},
+                    "rate_per_s": {"type": ["number", "null"]},
+                    "burst": {"type": ["integer", "null"]},
+                    "status": SN,
+                },
+                ["id", "name", "kind"],
+            ),
             "SkillCatalogItem": o(
                 {
                     "name": S,
@@ -1316,6 +1392,9 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/connector-instances": {
+            "get": op(
+                "listConnectorInstances", "connection", "Connector 实例列表", res=page("ConnectorInstance"), params=LIST
+            ),
             "post": op(
                 "createConnectorInstance",
                 "connection",
@@ -1500,6 +1579,23 @@ def control_plane() -> dict[str, Any]:
                     },
                 },
             }
+        },
+        f"{A}/versions/{{id}}/skill-source": {
+            "get": op(
+                "getSkillSource",
+                "skill",
+                "读取已入库 Skill 包的编辑器形态（frontmatter、正文、Tool 引用、references/assets）",
+                res=ref("SkillSource"),
+                params=["Id"],
+            ),
+            "put": op(
+                "saveSkillSource",
+                "skill",
+                "在线编辑保存：服务端组装标准 Agent Skills 目录 zip 并签名入库（draft，仅指令型）",
+                req=ref("SkillSourceIn"),
+                res=ref("SkillSourceSaved"),
+                params=["Id"],
+            ),
         },
         f"{A}/skills": {
             "get": {

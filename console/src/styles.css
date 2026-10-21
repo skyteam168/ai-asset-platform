@@ -274,3 +274,99 @@ body {
     display: none;
   }
 }
+
+/* SKILL.md 预览（markdown.tsx） */
+.aip-markdown {
+  border: 1px solid var(--aip-border);
+  border-radius: 6px;
+  padding: 12px 16px;
+  min-height: 320px;
+  max-height: 520px;
+  overflow: auto;
+  background: var(--aip-container);
+}
+.aip-markdown h1.ant-typography,
+.aip-markdown h2.ant-typography,
+.aip-markdown h3.ant-typography {
+  margin-top: 8px;
+}
+.aip-markdown-code {
+  background: var(--aip-subtle);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  overflow: auto;
+}
+.aip-markdown blockquote {
+  margin: 0 0 12px;
+  padding-left: 12px;
+  border-left: 3px solid var(--aip-border);
+  opacity: 0.85;
+}
+.aip-markdown table {
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+.aip-markdown th,
+.aip-markdown td {
+  border: 1px solid var(--aip-border);
+  padding: 4px 8px;
+}
+.aip-markdown th {
+  background: var(--aip-tableHead);
+}
+
+/* ---------- 使用说明抽屉 ---------- */
+.aip-help-drawer .ant-drawer-body {
+  overflow: hidden;
+}
+.aip-help-layout {
+  height: calc(100vh - 55px);
+  background: var(--aip-layout, #f5f6f8);
+}
+.aip-help-sider {
+  background: var(--aip-container, #fff) !important;
+  border-inline-end: 1px solid var(--aip-border);
+  overflow-y: auto;
+}
+.aip-help-sider .ant-layout-sider-children {
+  height: 100%;
+}
+.aip-help-sider .ant-menu {
+  border-inline-end: none !important;
+  background: transparent;
+  padding: 8px 0;
+}
+.aip-help-body {
+  padding: 20px 28px 32px;
+  overflow-y: auto;
+  background: var(--aip-layout, #f5f6f8);
+}
+.aip-help-hero {
+  margin-bottom: 16px;
+}
+.aip-help-card {
+  background: var(--aip-container, #fff);
+  border: 1px solid var(--aip-border);
+  border-radius: 10px;
+  padding: 16px 20px 8px;
+  margin-bottom: 12px;
+}
+.aip-help-steps {
+  margin: 0 0 8px;
+  padding-inline-start: 1.25rem;
+}
+.aip-help-steps li {
+  margin-bottom: 10px;
+  line-height: 1.65;
+}
+.aip-help-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 12px;
+}

@@ -135,6 +135,7 @@ async def _seed_all_tables(db: Database, s: Seed) -> None:
         await conn.execute(
             t.org_external_code.insert().values(org_id=s.kh, system_key="mes", external_code="F900", company_id=s.kh)
         )
+        await conn.execute(t.business_role.insert().values(company_id=s.kh, code="purchase_manager", name="采购经理"))
         await users.grant_data_scope(conn, sys_, s.users["kh_worker"], s.kh)
         await users.request_clearance(
             conn, sys_, s.users["kh_worker"], 2, "需要查看质量数据", utcnow() + dt.timedelta(days=30)

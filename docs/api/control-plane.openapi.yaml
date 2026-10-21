@@ -1354,6 +1354,37 @@ paths:
       parameters:
       - $ref: '#/components/parameters/Id'
   /api/v1/connector-instances:
+    get:
+      operationId: listConnectorInstances
+      tags:
+      - connection
+      summary: Connector 实例列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ConnectorInstance'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
     post:
       operationId: createConnectorInstance
       tags:
@@ -1875,6 +1906,45 @@ paths:
                   format: binary
               required:
               - file
+  /api/v1/versions/{id}/skill-source:
+    get:
+      operationId: getSkillSource
+      tags:
+      - skill
+      summary: 读取已入库 Skill 包的编辑器形态（frontmatter、正文、Tool 引用、references/assets）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillSource'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      operationId: saveSkillSource
+      tags:
+      - skill
+      summary: 在线编辑保存：服务端组装标准 Agent Skills 目录 zip 并签名入库（draft，仅指令型）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillSourceSaved'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillSourceIn'
   /api/v1/skills:
     get:
       operationId: listSkills
@@ -3266,6 +3336,207 @@ components:
       required:
       - version_id
       - name
+    SkillSourceSaved:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        manifest:
+          type: object
+        signature:
+          type:
+          - string
+          - 'null'
+        content_sha256:
+          type:
+          - string
+          - 'null'
+        files:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+          description: G0 安全扫描预检（正式判定在 G0）
+      required:
+      - version_id
+      - name
+    SkillSourceIn:
+      type: object
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_-]{1,63}$
+        description:
+          type: string
+          minLength: 10
+          maxLength: 1024
+        license:
+          type:
+          - string
+          - 'null'
+        compatibility:
+          type:
+          - string
+          - 'null'
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        body:
+          type: string
+          description: SKILL.md 正文（Markdown，不含 frontmatter）
+        tools:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z0-9_.]+@\d+\.\d+\.\d+$
+          description: 写入 skill.lock.json 的 Tool@版本
+        references:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              content:
+                type: string
+            required:
+            - path
+            - content
+          description: references/ 下的文本文件
+        assets:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              content_base64:
+                type: string
+            required:
+            - path
+            - content_base64
+          description: assets/ 下的小附件（单个 ≤ 1MB，不接受脚本）
+      required:
+      - name
+      - description
+    SkillSource:
+      type: object
+      properties:
+        version_id:
+          type:
+          - string
+          - 'null'
+        content_sha256:
+          type:
+          - string
+          - 'null'
+        name:
+          type: string
+        description:
+          type: string
+        license:
+          type:
+          - string
+          - 'null'
+        compatibility:
+          type:
+          - string
+          - 'null'
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        body:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        references:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              content:
+                type: string
+            required:
+            - path
+            - content
+        assets:
+          type: array
+          items:
+            type: object
+            properties:
+              path:
+                type: string
+              content_base64:
+                type: string
+              size:
+                type:
+                - integer
+                - 'null'
+            required:
+            - path
+            - content_base64
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - name
+    ConnectorInstance:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        kind:
+          enum:
+          - declarative
+          - kb
+          - mock
+          - upstream_mcp
+        company_id:
+          type:
+          - string
+          - 'null'
+        system_connection_id:
+          type:
+          - string
+          - 'null'
+        config:
+          type: object
+        concurrency:
+          type:
+          - integer
+          - 'null'
+        rate_per_s:
+          type:
+          - number
+          - 'null'
+        burst:
+          type:
+          - integer
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - name
+      - kind
     SkillCatalogItem:
       type: object
       properties:

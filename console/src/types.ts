@@ -204,3 +204,47 @@ export interface RunView {
   steps: { node_id: string; kind: string; status: string; attempts: number; executor: string }[];
   trace_id: string;
 }
+
+export interface ConnectorInstance {
+  id: string;
+  name: string;
+  kind: "declarative" | "kb" | "mock" | "upstream_mcp";
+  company_id: string | null;
+  system_connection_id: string | null;
+  config: Record<string, unknown>;
+  concurrency: number | null;
+  rate_per_s: number | null;
+  burst: number | null;
+  status: string | null;
+}
+
+export interface ImporterResult {
+  connector_config: Record<string, unknown>;
+  tools: Record<string, unknown>[];
+  warnings: string[];
+  connector_instance_id?: string | null;
+  drafts?: { asset_id: string; version_id: string; capability_id: string; state: string }[];
+}
+
+export interface SkillSource {
+  version_id?: string | null;
+  content_sha256?: string | null;
+  name: string;
+  description: string;
+  license: string | null;
+  compatibility: string | null;
+  allowed_tools: string[];
+  body: string;
+  tools: string[];
+  references: { path: string; content: string }[];
+  assets: { path: string; content_base64: string; size?: number | null }[];
+  warnings: string[];
+}
+
+export interface SkillSourceSaved {
+  version_id: string;
+  name: string;
+  files: string[];
+  content_sha256: string | null;
+  warnings: string[];
+}

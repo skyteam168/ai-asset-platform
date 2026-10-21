@@ -18,6 +18,40 @@ class SkillPackageUploaded(BaseModel):
     files: list[str] = Field(default_factory=list)
 
 
+class SkillSourceSaved(SkillPackageUploaded):
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SkillTextFile(BaseModel):
+    path: str
+    content: str
+
+
+class SkillAssetFile(BaseModel):
+    path: str
+    content_base64: str
+    size: int | None = None
+
+
+class SkillSource(BaseModel):
+    """在线编辑器的表单形态：frontmatter + SKILL.md 正文 + Tool 引用 + references/assets。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    version_id: str | None = None
+    content_sha256: str | None = None
+    name: str
+    description: str = ""
+    license: str | None = None
+    compatibility: str | None = None
+    allowed_tools: list[str] = Field(default_factory=list)
+    body: str = ""
+    tools: list[str] = Field(default_factory=list)
+    references: list[SkillTextFile] = Field(default_factory=list)
+    assets: list[SkillAssetFile] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class SkillCatalogItem(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
