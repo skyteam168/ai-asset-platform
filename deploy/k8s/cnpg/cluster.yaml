@@ -1,0 +1,52 @@
+# CloudNativePG 示例（architecture.md 12.1）：不纳入 base kustomize，由运维按需 apply。
+# 需集群已安装 CNPG operator：https://cloudnative-pg.io/
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: aip-pg
+  namespace: aip
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  storage:
+    size: 100Gi
+  postgresql:
+    parameters:
+      max_connections: "200"
+      shared_buffers: "4GB"
+  bootstrap:
+    initdb:
+      database: aip
+      owner: aip
+      secret:
+        name: aip-pg-owner
+  monitoring:
+    enablePodMonitor: true
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://aip-pg-backup/
+      endpointURL: https://s3.aip.internal
+      s3Credentials:
+        accessKeyId:
+          name: aip-pg-backup
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: aip-pg-backup
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: aip-pg-daily
+  namespace: aip
+spec:
+  cluster:
+    name: aip-pg
+  schedule: "0 0 2 * * *"
+  backupOwnerReference: self
+  method: barmanObjectStore

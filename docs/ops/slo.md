@@ -54,7 +54,7 @@ architecture.md 第 1 章的初始目标：平台自身附加延迟 P95 ≤ 100m
 | --- | --- | --- |
 | 切换窗口审计零丢失 | spool 续写 + ship 幂等恢复；链可 verify | `tests/test_m7_pg_failover.py`；[pg-failover.md](pg-failover.md) |
 | 本地主从 | opt-in compose profile `pg-ha`；默认 `dev.py up` 仍为单节点 | `deploy/docker-compose.pg-ha.yml` |
-| 生产自动切换 / PITR | 未在本仓库落地 | architecture 12.1（Patroni / CloudNativePG）；横向 |
+| 生产自动切换 / PITR | 示例清单已落地；未在真实集群部署 | [pg-ha-prod.md](pg-ha-prod.md)、`deploy/k8s/cnpg/` |
 
 ## 8. 多进程线性扩展（M7l）
 

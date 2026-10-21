@@ -29,6 +29,10 @@ kubectl kustomize deploy/k8s/overlays/prod
 3. 先跑 Job `aip-migrate`，再扩控制面 / 数据面。
 4. 数据面 `/readyz` 在快照与策略未齐前保持未就绪（fail closed）。
 
+## PostgreSQL（生产）
+
+CloudNativePG 示例见 `deploy/k8s/cnpg/` 与 [pg-ha-prod.md](pg-ha-prod.md)；**不**纳入 `base` kustomization。
+
 ## 不在本片
 
 - 真实集群部署与 e2e

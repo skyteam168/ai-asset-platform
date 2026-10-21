@@ -684,6 +684,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H17 pg_trgm 与生产 PG HA 示例 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 迁移启用 pg_trgm | 通过 | `test_h17_pg_fts_ha.py::test_pg_trgm_extension_present`；`0020` |
+| CNPG Cluster / ScheduledBackup YAML | 通过 | `test_cnpg_sample_yaml_parses` |
+| 不并入默认 kustomize base | 通过 | `test_cnpg_not_in_base_kustomization` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 迁移 | `20261021_0020_pg_trgm.py` |
+| 清单 | `deploy/k8s/cnpg/cluster.yaml`（operator 外置） |
+| 文档 | [pg-ha-prod.md](pg-ha-prod.md)；更新 search-index / pg-failover / slo / k8s |
+| 不在本片 | zhparser 镜像；CNPG 真实安装；业务表 GIN 列；Patroni Helm |
+
 ### H16 Kubernetes 清单校验与 CI — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

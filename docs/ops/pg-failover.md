@@ -65,8 +65,12 @@ docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.pg-ha.yml -
 
 见 [fault-drills.md](fault-drills.md)。审计库不可用期间的 spool 行为已由 M2 覆盖；本片补上「切换窗口续写 + 恢复入库」与本地主从操作手册。
 
-## 5. 不在本片
+## 5. 生产路径
 
-- Patroni / CloudNativePG / pgBackRest 生产部署
+见 [pg-ha-prod.md](pg-ha-prod.md)（CloudNativePG 示例 + PITR）。本地 pg-ha 不替代生产自动切换。
+
+## 6. 不在本片
+
+- 真实集群安装 CNPG operator / 恢复演练
 - 多副本 uvicorn 容量压测
-- zhparser
+- zhparser 镜像（见 [search-index.md](search-index.md)）
