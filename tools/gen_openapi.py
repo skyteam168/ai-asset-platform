@@ -503,6 +503,72 @@ def control_plane() -> dict[str, Any]:
                     "hash": S,
                 }
             ),
+            "ConsoleAuditRecord": o(
+                {
+                    "shard_id": S,
+                    "seq": INT,
+                    "occurred_at": DT,
+                    "company_id": SN,
+                    "kind": S,
+                    "record": {"type": "object"},
+                    "hash": S,
+                },
+                ["shard_id", "seq", "occurred_at", "kind", "hash"],
+            ),
+            "VersionSummary": o(
+                {
+                    "id": ID,
+                    "semver": S,
+                    "state": S,
+                    "content_hash": SN,
+                    "created_at": DT,
+                },
+                ["id", "semver", "state"],
+            ),
+            "VersionDetail": o(
+                {
+                    "id": ID,
+                    "asset_id": S,
+                    "semver": S,
+                    "content_hash": S,
+                    "spec": {"type": "object"},
+                    "state": S,
+                    "test_cases": {"type": "array", "items": {"type": "object"}},
+                    "acceptance": {"type": ["object", "null"]},
+                },
+                ["semver", "spec"],
+            ),
+            "AuditVerifyResult": o(
+                {
+                    "ok": B,
+                    "problems": {"type": "array", "items": S},
+                    "shards": INT,
+                    "records": INT,
+                },
+                ["ok"],
+            ),
+            "ConsoleCatalog": o(
+                {
+                    "items": {"type": "array", "items": {"type": "object"}},
+                    "bundles": {"type": "array", "items": {"type": "object"}},
+                    "next_cursor": SN,
+                    "has_more": B,
+                },
+                ["items", "has_more"],
+            ),
+            "UsageReport": o({"items": {"type": "array", "items": {"type": "object"}}}, ["items"]),
+            "TransportExceptionStatus": o({"id": ID, "status": S}, ["id", "status"]),
+            "UsageRequest": o(
+                {
+                    "id": ID,
+                    "company_id": S,
+                    "asset_id": S,
+                    "status": S,
+                    "env": S,
+                    "created_at": DT,
+                }
+            ),
+
             "Snapshot": o(
                 {
                     "kind": {"enum": ["iam", "release"]},
@@ -912,7 +978,7 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/assets/{{id}}/versions": {
-            "get": op("listVersions", "registry", "资产的版本列表", res={"type": "object"}, params=["Id"]),
+            "get": op("listVersions", "registry", "资产的版本列表", res=page("VersionSummary"), params=["Id"]),
             "post": op(
                 "createVersion",
                 "registry",
@@ -924,16 +990,18 @@ def control_plane() -> dict[str, Any]:
             ),
         },
         f"{A}/versions/{{id}}": {
-            "get": op("getVersion", "registry", "版本详情（含用例与验收单）", res={"type": "object"}, params=["Id"])
+            "get": op(
+                "getVersion", "registry", "版本详情（含用例与验收单）", res=ref("VersionDetail"), params=["Id"]
+            )
         },
         f"{A}/grant-ceilings": {
-            "get": op("listCeilings", "grant", "授权上限列表", res={"type": "object"}),
+            "get": op("listCeilings", "grant", "授权上限列表", res=page("GrantCeiling")),
             "post": op(
                 "createCeiling", "grant", "设置授权上限", req=ref("GrantCeiling"), res=ref("GrantCeiling"), code="201"
             ),
         },
         f"{A}/usage-requests": {
-            "get": op("listUsageRequests", "grant", "使用申请列表", res={"type": "object"}),
+            "get": op("listUsageRequests", "grant", "使用申请列表", res=page("UsageRequest")),
             "post": op(
                 "requestUsage",
                 "grant",
@@ -943,7 +1011,9 @@ def control_plane() -> dict[str, Any]:
                 code="201",
             ),
         },
-        f"{A}/audit-logs/verify": {"post": op("verifyAudit", "audit", "校验审计哈希链与锚点", res={"type": "object"})},
+        f"{A}/audit-logs/verify": {
+            "post": op("verifyAudit", "audit", "校验审计哈希链与锚点", res=ref("AuditVerifyResult"))
+        },
         f"{A}/releases": {
             "post": op(
                 "createRelease", "release", "发布", req=ref("Release"), res=ref("Release"), code="201", idem=True
@@ -972,7 +1042,7 @@ def control_plane() -> dict[str, Any]:
                 "approveTransportException",
                 "connection",
                 "审批传输例外（生产需两名数据 Owner）",
-                res={"type": "object"},
+                res=ref("TransportExceptionStatus"),
                 params=["Id"],
             )
         },
@@ -1060,7 +1130,7 @@ def control_plane() -> dict[str, Any]:
                     "usageReport",
                     "audit",
                     "计量：按日、公司、消费方、能力汇总调用、失败与写操作",
-                    res={"type": "object"},
+                    res=ref("UsageReport"),
                 ),
                 "parameters": [
                     {"name": "days", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 90}}
@@ -1130,7 +1200,7 @@ def control_plane() -> dict[str, Any]:
                 "consoleCatalog",
                 "catalog",
                 "控制台资产目录（最新发布快照中的 Tool 与套件）",
-                res={"type": "object"},
+                res=ref("ConsoleCatalog"),
             )
         },
         f"{A}/versions/{{id}}/skill-package": {
@@ -1347,7 +1417,12 @@ def control_plane() -> dict[str, Any]:
         },
         f"{A}/audit-logs": {
             "get": {
-                **op("searchAudit", "audit", "审计检索（按时间倒序；分公司管理员只看本公司）", res=page("AuditRecord")),
+                **op(
+                    "searchAudit",
+                    "audit",
+                    "审计检索（按时间倒序；分公司管理员只看本公司）",
+                    res=page("ConsoleAuditRecord"),
+                ),
                 "parameters": [
                     {"name": "kind", "in": "query", "schema": S},
                     {"name": "trace_id", "in": "query", "schema": S},

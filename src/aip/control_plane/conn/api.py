@@ -10,8 +10,10 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
+from aip.control_plane.conn import schemas as out
 from aip.control_plane.conn import service as svc
 from aip.control_plane.iam.api import ActorDep, DbDep
+from aip.libs.common.paging import Page
 
 V = "/api/v1"
 
@@ -61,36 +63,53 @@ def _out(r: dict[str, Any]) -> dict[str, Any]:
 def router() -> APIRouter:
     r = APIRouter(tags=["connection"])
 
-    @r.get(f"{V}/connections", operation_id="listConnections")
-    async def list_connections(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/connections", operation_id="listConnections", response_model=Page[out.SystemConnection])
+    async def list_connections(actor: ActorDep, db: DbDep) -> Page[out.SystemConnection]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(svc.system_connection).limit(200))).mappings().all()
-        return {"items": [_out(dict(x)) for x in rows], "next_cursor": None, "has_more": False}
+        return Page(items=[out.SystemConnection.model_validate(_out(dict(x))) for x in rows])
 
-    @r.post(f"{V}/connections", operation_id="createConnection", status_code=201)
-    async def create_connection(body: ConnectionIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/connections",
+        operation_id="createConnection",
+        status_code=201,
+        response_model=out.SystemConnection,
+    )
+    async def create_connection(body: ConnectionIn, actor: ActorDep, db: DbDep) -> out.SystemConnection:
         data = body.model_dump(mode="json", exclude_none=True, exclude={"company_id"})
         if body.transport_exception_expires_at is not None:
             data["transport_exception_expires_at"] = body.transport_exception_expires_at.isoformat()
         async with db.tx(actor.db_scope()) as conn:
             cid = await svc.create_connection(conn, actor, company_id=body.company_id, data=data)
-            return _out(await svc.row(conn, cid))
+            return out.SystemConnection.model_validate(_out(await svc.row(conn, cid)))
 
-    @r.post(f"{V}/connections/{{id}}/approve-exception", operation_id="approveTransportException")
-    async def approve(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/connections/{{id}}/approve-exception",
+        operation_id="approveTransportException",
+        response_model=out.TransportExceptionStatus,
+    )
+    async def approve(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.TransportExceptionStatus:
         async with db.tx(actor.db_scope()) as conn:
             status = await svc.approve_exception(conn, actor, id)
-        return {"id": str(id), "status": status}
+        return out.TransportExceptionStatus(id=str(id), status=status)
 
-    @r.post(f"{V}/connections/{{id}}/test", operation_id="testConnection")
-    async def test(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/connections/{{id}}/test",
+        operation_id="testConnection",
+        response_model=out.ConnectionTestResult,
+    )
+    async def test(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.ConnectionTestResult:
         async with db.tx(actor.db_scope()) as conn:
-            return await svc.test_connection(conn, actor, id)
+            return out.ConnectionTestResult.model_validate(await svc.test_connection(conn, actor, id))
 
-    @r.post(f"{V}/connections/{{id}}/trust-draft", operation_id="draftTrust")
-    async def draft(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/connections/{{id}}/trust-draft",
+        operation_id="draftTrust",
+        response_model=out.ConfigDraft,
+    )
+    async def draft(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.ConfigDraft:
         async with db.tx(actor.db_scope()) as conn:
-            return await svc.draft_trust(conn, actor, id)
+            return out.ConfigDraft.model_validate(await svc.draft_trust(conn, actor, id))
 
     @r.post(f"{V}/connector-instances", operation_id="createConnectorInstance", status_code=201)
     async def create_connector(body: ConnectorIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:

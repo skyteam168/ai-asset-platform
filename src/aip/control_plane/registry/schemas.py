@@ -65,7 +65,10 @@ class GrantCeiling(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     company_id: str
-    asset_set: dict[str, Any]
     max_classification: int = Field(ge=1, le=4)
     id: str | None = None
+    asset_set: dict[str, Any] = Field(default_factory=dict)
+    asset_ids: list[str] = Field(default_factory=list)
     quota: dict[str, Any] = Field(default_factory=dict)
+    status: str | None = None
+    created_at: str | None = None

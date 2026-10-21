@@ -9,13 +9,16 @@ from typing import Any
 from fastapi import APIRouter
 from sqlalchemy import select, text
 
+from aip.control_plane import console_schemas as out
 from aip.control_plane.db import DbScope
 from aip.control_plane.grant import flows
 from aip.control_plane.iam.api import ActorDep, DbDep
 from aip.control_plane.registry import tables as t
+from aip.control_plane.registry.schemas import GrantCeiling
 from aip.libs.audit.store import verify
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import utcnow
+from aip.libs.common.paging import Page
 from aip.libs.tokens.keys import platform_keys
 
 V = "/api/v1"
@@ -37,8 +40,13 @@ def _out(row: Any) -> dict[str, Any]:
 def router() -> APIRouter:
     r = APIRouter()
 
-    @r.get(f"{V}/assets/{{id}}/versions", tags=["registry"], operation_id="listVersions")
-    async def list_versions(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/assets/{{id}}/versions",
+        tags=["registry"],
+        operation_id="listVersions",
+        response_model=Page[out.VersionSummary],
+    )
+    async def list_versions(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.VersionSummary]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (
                 (
@@ -57,10 +65,15 @@ def router() -> APIRouter:
                 .mappings()
                 .all()
             )
-        return {"items": [_out(x) for x in rows], "next_cursor": None, "has_more": False}
+        return Page(items=[out.VersionSummary.model_validate(_out(x)) for x in rows])
 
-    @r.get(f"{V}/versions/{{id}}", tags=["registry"], operation_id="getVersion")
-    async def get_version(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/versions/{{id}}",
+        tags=["registry"],
+        operation_id="getVersion",
+        response_model=out.VersionDetail,
+    )
+    async def get_version(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.VersionDetail:
         from aip.control_plane.gates import service as gates
 
         async with db.tx(actor.db_scope()) as conn:
@@ -75,25 +88,48 @@ def router() -> APIRouter:
                 .mappings()
                 .first()
             )
-        return {**_out(row), "test_cases": [_out(c) for c in cases], "acceptance": _out(sheet) if sheet else None}
+        return out.VersionDetail.model_validate(
+            {**_out(row), "test_cases": [_out(c) for c in cases], "acceptance": _out(sheet) if sheet else None}
+        )
 
-    @r.get(f"{V}/grant-ceilings", tags=["grant"], operation_id="listCeilings")
-    async def list_ceilings(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/grant-ceilings",
+        tags=["grant"],
+        operation_id="listCeilings",
+        response_model=Page[GrantCeiling],
+    )
+    async def list_ceilings(actor: ActorDep, db: DbDep) -> Page[GrantCeiling]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (
                 (await conn.execute(select(t.grant_ceiling).order_by(t.grant_ceiling.c.created_at.desc()).limit(200)))
                 .mappings()
                 .all()
             )
-        return {"items": [_out(x) for x in rows], "next_cursor": None, "has_more": False}
+        items: list[GrantCeiling] = []
+        for x in rows:
+            d = _out(x)
+            if d.get("asset_ids") is not None and not d.get("asset_set"):
+                d["asset_set"] = {"asset_ids": d["asset_ids"]}
+            items.append(GrantCeiling.model_validate(d))
+        return Page(items=items)
 
-    @r.get(f"{V}/usage-requests", tags=["grant"], operation_id="listUsageRequests")
-    async def list_usage(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/usage-requests",
+        tags=["grant"],
+        operation_id="listUsageRequests",
+        response_model=Page[out.UsageRequest],
+    )
+    async def list_usage(actor: ActorDep, db: DbDep) -> Page[out.UsageRequest]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(flows.usage_request).limit(200))).mappings().all()
-        return {"items": [_out(x) for x in rows], "next_cursor": None, "has_more": False}
+        return Page(items=[out.UsageRequest.model_validate(_out(x)) for x in rows])
 
-    @r.get(f"{V}/audit-logs", tags=["audit"], operation_id="searchAudit")
+    @r.get(
+        f"{V}/audit-logs",
+        tags=["audit"],
+        operation_id="searchAudit",
+        response_model=Page[out.ConsoleAuditRecord],
+    )
     async def search_audit(
         actor: ActorDep,
         db: DbDep,
@@ -102,7 +138,7 @@ def router() -> APIRouter:
         since: dt.datetime | None = None,
         until: dt.datetime | None = None,
         limit: int = 100,
-    ) -> dict[str, Any]:
+    ) -> Page[out.ConsoleAuditRecord]:
         """审计员与平台管理员看全部；分公司管理员只看本公司（architecture.md 2.5）。只读。"""
         global_view = actor.has("auditor") or actor.has("platform_admin")
         companies = {g.scope_company_id for g in actor.roles if g.role == "company_admin"}
@@ -132,10 +168,13 @@ def router() -> APIRouter:
         )
         async with db.tx(DbScope.system()) as conn:
             rows = (await conn.execute(text(sql), params)).mappings().all()
-        return {"items": [_out(x) for x in rows], "next_cursor": None, "has_more": len(rows) == params["limit"]}
+        return Page(
+            items=[out.ConsoleAuditRecord.model_validate(_out(x)) for x in rows],
+            has_more=len(rows) == params["limit"],
+        )
 
-    @r.get(f"{V}/usage", tags=["audit"], operation_id="usageReport")
-    async def usage(actor: ActorDep, db: DbDep, days: int = 7) -> dict[str, Any]:
+    @r.get(f"{V}/usage", tags=["audit"], operation_id="usageReport", response_model=out.UsageReport)
+    async def usage(actor: ActorDep, db: DbDep, days: int = 7) -> out.UsageReport:
         """计量（12.4）：按日、公司、消费方、能力汇总调用、失败与写操作次数，来源是审计库的 tool.execution。"""
         global_view = actor.is_global
         companies = {g.scope_company_id for g in actor.roles if g.role == "company_admin"}
@@ -155,18 +194,30 @@ def router() -> APIRouter:
         )
         async with db.tx(DbScope.system()) as conn:
             rows = (await conn.execute(text(sql), params)).mappings().all()
-        return {"items": [_out(x) for x in rows]}
+        return out.UsageReport(items=[out.UsageMeterRow.model_validate(_out(x)) for x in rows])
 
-    @r.post(f"{V}/audit-logs/verify", tags=["audit"], operation_id="verifyAudit")
-    async def verify_audit(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/audit-logs/verify",
+        tags=["audit"],
+        operation_id="verifyAudit",
+        response_model=out.AuditVerifyResult,
+    )
+    async def verify_audit(actor: ActorDep, db: DbDep) -> out.AuditVerifyResult:
         actor.require(actor.has("auditor") or actor.has("platform_admin"), "只有审计员与平台管理员可以校验审计链")
         async with db.tx(DbScope.system()) as conn:
             problems = await verify(conn, list(platform_keys()))
             shards = (await conn.execute(text("SELECT count(DISTINCT shard_id), count(*) FROM audit.audit_log"))).one()
-        return {"ok": not problems, "problems": [str(p) for p in problems], "shards": shards[0], "records": shards[1]}
+        return out.AuditVerifyResult(
+            ok=not problems, problems=[str(p) for p in problems], shards=shards[0], records=shards[1]
+        )
 
-    @r.get(f"{V}/console/catalog", tags=["catalog"], operation_id="consoleCatalog")
-    async def console_catalog(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/console/catalog",
+        tags=["catalog"],
+        operation_id="consoleCatalog",
+        response_model=out.ConsoleCatalog,
+    )
+    async def console_catalog(actor: ActorDep, db: DbDep) -> out.ConsoleCatalog:
         """控制台资产目录：最新发布快照中的 Tool 与套件（运维视角；消费方可见性以数据面 GET /catalog 为准）。"""
         actor.require(
             actor.has("platform_admin")
@@ -220,6 +271,9 @@ def router() -> APIRouter:
                 }
             )
         items.sort(key=lambda x: x["capability_id"] or "")
-        return {"items": items, "bundles": bundles, "next_cursor": None, "has_more": False}
+        return out.ConsoleCatalog(
+            items=[out.CatalogTool.model_validate(i) for i in items],
+            bundles=[out.CatalogBundle.model_validate(b) for b in bundles],
+        )
 
     return r

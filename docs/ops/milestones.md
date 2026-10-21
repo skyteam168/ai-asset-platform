@@ -684,6 +684,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H20 响应体 Pydantic（控制台读路径 / 连接）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 连接 CRUD/测试/信任草案挂载模型 | 通过 | 	est_h20_response_models.py |
+| 控制台版本/上限/用量/审计/目录挂载模型 | 通过 | 同上；	est_m4_console_api.py |
+| OpenAPI 登记 Console* / Connection* | 通过 | gen_openapi.py；control-plane.openapi.yaml |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | conn/schemas.py、console_schemas.py；GrantCeiling 对齐列表载荷 |
+| 契约 | listConnections/testConnection/draftTrust；listVersions/searchAudit/usageReport 等 |
+| 不在本片 | gates / risk / webhook / skill 写路径；zhparser；human_task.data 信封 |
+
 ### H19 响应体 Pydantic（消费方 / 资产 / 授权）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |

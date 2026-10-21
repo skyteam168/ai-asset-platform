@@ -1026,6 +1026,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VersionSummary'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1064,7 +1078,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/VersionDetail'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1082,6 +1096,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/GrantCeiling'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
     post:
@@ -1117,6 +1145,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UsageRequest'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
     post:
@@ -1151,7 +1193,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/AuditVerifyResult'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/releases:
@@ -1312,7 +1354,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/TransportExceptionStatus'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1606,7 +1648,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/UsageReport'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1779,7 +1821,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/ConsoleCatalog'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/versions/{id}/skill-package:
@@ -2263,7 +2305,7 @@ paths:
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/AuditRecord'
+                      $ref: '#/components/schemas/ConsoleAuditRecord'
                   next_cursor:
                     type:
                     - string
@@ -3387,6 +3429,152 @@ components:
           type: integer
         hash:
           type: string
+    ConsoleAuditRecord:
+      type: object
+      properties:
+        shard_id:
+          type: string
+        seq:
+          type: integer
+        occurred_at:
+          type: string
+          format: date-time
+        company_id:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+        record:
+          type: object
+        hash:
+          type: string
+      required:
+      - shard_id
+      - seq
+      - occurred_at
+      - kind
+      - hash
+    VersionSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        semver:
+          type: string
+        state:
+          type: string
+        content_hash:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - semver
+      - state
+    VersionDetail:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        asset_id:
+          type: string
+        semver:
+          type: string
+        content_hash:
+          type: string
+        spec:
+          type: object
+        state:
+          type: string
+        test_cases:
+          type: array
+          items:
+            type: object
+        acceptance:
+          type:
+          - object
+          - 'null'
+      required:
+      - semver
+      - spec
+    AuditVerifyResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        problems:
+          type: array
+          items:
+            type: string
+        shards:
+          type: integer
+        records:
+          type: integer
+      required:
+      - ok
+    ConsoleCatalog:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        bundles:
+          type: array
+          items:
+            type: object
+        next_cursor:
+          type:
+          - string
+          - 'null'
+        has_more:
+          type: boolean
+      required:
+      - items
+      - has_more
+    UsageReport:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+      required:
+      - items
+    TransportExceptionStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        status:
+          type: string
+      required:
+      - id
+      - status
+    UsageRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        company_id:
+          type: string
+        asset_id:
+          type: string
+        status:
+          type: string
+        env:
+          type: string
+        created_at:
+          type: string
+          format: date-time
     Snapshot:
       type: object
       properties:
