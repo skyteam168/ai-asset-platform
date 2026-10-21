@@ -684,6 +684,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H18 wf_run.ctx / wf_step.output 信封 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| seal/hydrate 往返 | 通过 | `test_h18_wf_envelope.py::test_seal_ctx_and_output_roundtrip` |
+| 列 ctx_ref / output_ref 存在 | 通过 | `test_wf_run_ctx_not_plaintext_in_db`；`0021` |
+| M5 工作流回归（明文 ctx 断言已改） | 通过 | `test_m5_workflow.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 迁移 | `exec` / `exec_sandbox`：`ctx_ref`、`output_ref`；沙箱补齐 input_ref/result_ref |
+| 引擎 | 写路径密封；认领/驱动解封；旧行兼容明文 |
+| 不在本片 | human_task.data 信封；对象存储落盘；密钥吊销演练 |
+
 ### H17 pg_trgm 与生产 PG HA 示例 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |
@@ -794,7 +808,7 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 配置 | `AIP_ENVELOPE_BACKEND=local\|transit`；`transit_company_key_prefix` |
 | 表 | `exec.tool_execution.input_ref/result_ref`；`exec.wf_run.input_ref/result_ref` |
 | 行为 | Runtime/Workflow 写路径只落信封；读路径解密；审计仍仅哈希与元数据 |
-| 不在本片 | wf_step.output / ctx 全量加密；SeaweedFS 对象存储；密钥吊销销毁演练 |
+| 不在本片 | SeaweedFS 对象存储；密钥吊销销毁演练（ctx/step 见 H18） |
 
 ### H10 控制台 LLM 与选择评测 — 2026-10-21
 

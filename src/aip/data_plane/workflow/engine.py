@@ -69,6 +69,41 @@ def _str(row: Any) -> dict[str, Any]:
     return out
 
 
+def _hydrate_run(run: dict[str, Any]) -> dict[str, Any]:
+    """解封 input/ctx/result；兼容仅有明文列的旧行。不改写 datetime（租约/截止仍需比较）。"""
+    out = {k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(run).items()}
+    company = str(out["company_id"])
+    iref, cref, rref = out.get("input_ref"), out.get("ctx_ref"), out.get("result_ref")
+    if is_envelope(iref):
+        out["input"] = decrypt_json(company, iref)
+    if is_envelope(cref):
+        out["ctx"] = decrypt_json(company, cref)
+    elif out.get("ctx") is None:
+        out["ctx"] = {}
+    if is_envelope(rref):
+        out["result"] = decrypt_json(company, rref)
+    return out
+
+
+def _hydrate_step(step: dict[str, Any] | None, company_id: str) -> dict[str, Any] | None:
+    if step is None:
+        return None
+    out = {k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in dict(step).items()}
+    oref = out.get("output_ref")
+    if is_envelope(oref):
+        out["output"] = decrypt_json(company_id, oref)
+    return out
+
+
+def _seal_ctx(company_id: str, ctx: dict[str, Any]) -> tuple[str, str]:
+    """返回 (明文占位 JSON, ctx_ref JSON)。"""
+    return _j({}), _j(encrypt_json(company_id, ctx))
+
+
+def _seal_output(company_id: str, output: Any) -> tuple[str | None, str]:
+    return None, _j(encrypt_json(company_id, output))
+
+
 @dataclass
 class Next:
     target: str
@@ -184,22 +219,24 @@ class WorkflowEngine:
             else str(uuid.uuid4())
         )
         dl = deadline or (_now() + dt.timedelta(seconds=int(dsl["budget"]["timeout_s"])))
+        company = principal.consumer_company_id
+        ctx_plain, ctx_ref = _seal_ctx(company, {"input": input_})
         async with self._tx() as conn:
             created = (
                 await conn.execute(
                     self._q(
                         """INSERT INTO exec.wf_run (id, company_id, consumer_id, end_user_id, capability_id, version,
-                             release_id, dsl, principal, input, input_ref, ctx, current, status, deadline, trace_id,
-                             parent_run_id)
+                             release_id, dsl, principal, input, input_ref, ctx, ctx_ref, current, status, deadline,
+                             trace_id, parent_run_id)
                            VALUES (:id, :company, :consumer, :user, :cap, :ver, :rel, CAST(:dsl AS jsonb),
                              CAST(:principal AS jsonb), CAST(:input AS jsonb), CAST(:input_ref AS jsonb),
-                             CAST(:ctx AS jsonb), :current,
+                             CAST(:ctx AS jsonb), CAST(:ctx_ref AS jsonb), :current,
                              'running', :deadline, :trace, :parent)
                            ON CONFLICT (id) DO NOTHING RETURNING id"""
                     ),
                     {
                         "id": run_id,
-                        "company": principal.consumer_company_id,
+                        "company": company,
                         "consumer": principal.consumer_id,
                         "user": principal.user_id,
                         "cap": release["capability_id"],
@@ -208,8 +245,9 @@ class WorkflowEngine:
                         "dsl": _j(dsl),
                         "principal": _j(principal_to_json(principal)),
                         "input": _j({}),  # 明文占位（NOT NULL）；真实输入见 input_ref
-                        "input_ref": _j(encrypt_json(principal.consumer_company_id, input_)),
-                        "ctx": _j({"input": input_}),
+                        "input_ref": _j(encrypt_json(company, input_)),
+                        "ctx": ctx_plain,
+                        "ctx_ref": ctx_ref,
                         "current": dsl["nodes"][0]["id"],
                         "deadline": dl,
                         "trace": trace_id,
@@ -416,10 +454,11 @@ class WorkflowEngine:
             row = (await conn.execute(self._q(CLAIM), {"me": self.me, "lease": self.lease_s})).mappings().first()
         if row is None:
             return False
-        await self.drive(dict(row))
+        await self.drive(_hydrate_run(dict(row)))
         return True
 
     async def drive(self, run: dict[str, Any]) -> None:
+        run = _hydrate_run(run)
         run_id = str(run["id"])
         dsl: dict[str, Any] = run["dsl"]
         ctx: dict[str, Any] = run["ctx"]
@@ -443,7 +482,13 @@ class WorkflowEngine:
             except PlatformError as e:
                 outcome = Stop("failed", str(e.code), e.detail, current)
             if isinstance(outcome, Park):
-                return await self._park(run_id, ctx, current, min(outcome.until, run["deadline"]))
+                return await self._park(
+                    run_id,
+                    ctx,
+                    current,
+                    min(outcome.until, run["deadline"]),
+                    company_id=str(run["company_id"]),
+                )
             if isinstance(outcome, Stop):
                 return await self._fail(run, ctx, outcome)
             run["steps_used"] += 1
@@ -487,7 +532,7 @@ class WorkflowEngine:
     ) -> Next | Park | Stop:
         run_id, nid = str(run["id"]), n["id"]
         pid = self._persist_id(nid, ctx)
-        step = await self._get_step(run_id, pid)
+        step = await self._get_step(run_id, pid, company_id=str(run["company_id"]))
         if step and step["status"] == "done":
             return Next(n["next"], step["output"])
         cap, version = split_ref(n["ref"])
@@ -610,7 +655,7 @@ class WorkflowEngine:
     async def _llm(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
         nid, budget = n["id"], run["dsl"]["budget"]
         pid = self._persist_id(nid, ctx)
-        step = await self._get_step(str(run["id"]), pid)
+        step = await self._get_step(str(run["id"]), pid, company_id=str(run["company_id"]))
         if step and step["status"] == "done":
             return Next(n["next"], step["output"])
         if run["llm_calls"] + 1 > int(budget["max_llm_calls"]):
@@ -642,7 +687,7 @@ class WorkflowEngine:
     async def _loop(self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any]) -> Next | Park | Stop:
         """结构化循环：体结束时 next 指回本节点；journal 记录已完成迭代次数。"""
         nid = n["id"]
-        step = await self._get_step(str(run["id"]), nid)
+        step = await self._get_step(str(run["id"]), nid, company_id=str(run["company_id"]))
         state = dict((step or {}).get("output") or {})
         iteration = int(state.get("iteration") or 0)
         max_i = int(n["max_iterations"])
@@ -672,7 +717,7 @@ class WorkflowEngine:
         """逻辑并行：分支顺序执行，全部汇合后再走 next（首期不做真并发）。"""
         nid = n["id"]
         branches: list[str] = list(n["branches"])
-        step = await self._get_step(str(run["id"]), nid)
+        step = await self._get_step(str(run["id"]), nid, company_id=str(run["company_id"]))
         state = dict((step or {}).get("output") or {})
         done: list[str] = list(state.get("done") or [])
         # 分支返回：current 再次落到 parallel，且上一跳来自分支入口链
@@ -698,7 +743,7 @@ class WorkflowEngine:
         self, run: dict[str, Any], principal: Principal, n: dict[str, Any], ctx: dict[str, Any]
     ) -> Next | Park | Stop:
         nid = n["id"]
-        step = await self._get_step(str(run["id"]), nid)
+        step = await self._get_step(str(run["id"]), nid, company_id=str(run["company_id"]))
         if step and step["status"] == "done":
             return Next(n["next"], step["output"])
         if step and step["status"] == "waiting":
@@ -774,7 +819,7 @@ class WorkflowEngine:
             esc = n.get("escalate_to")
             esc_pid = f"{pid}#esc"
             if esc:
-                if await self._get_step(str(run["id"]), esc_pid) is None:
+                if await self._get_step(str(run["id"]), esc_pid, company_id=str(run["company_id"])) is None:
                     esc_assignee = esc
                     er, ea, ew = esc.partition("@")
                     epath = assignee_org_path(ew) if ea else None
@@ -850,13 +895,15 @@ class WorkflowEngine:
             "final": stop.status,
             "compensating": True,
         }
+        ctx_plain, ctx_ref = _seal_ctx(str(run["company_id"]), ctx)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    "UPDATE exec.wf_run SET error = CAST(:e AS jsonb), ctx = CAST(:ctx AS jsonb), updated_at = now() "
+                    "UPDATE exec.wf_run SET error = CAST(:e AS jsonb), ctx = CAST(:ctx AS jsonb), "
+                    "ctx_ref = CAST(:ctx_ref AS jsonb), updated_at = now() "
                     "WHERE id = :id AND lease_owner = :me"
                 ),
-                {"id": str(run["id"]), "e": _j(err), "ctx": _j(ctx), "me": self.me},
+                {"id": str(run["id"]), "e": _j(err), "ctx": ctx_plain, "ctx_ref": ctx_ref, "me": self.me},
             )
         await self._compensate_and_close(run, ctx, err)
 
@@ -915,12 +962,14 @@ class WorkflowEngine:
         parent: Any = None
         company = str(run["company_id"])
         result_ref = encrypt_json(company, result) if result is not None else None
+        ctx_plain, ctx_ref = _seal_ctx(company, ctx)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
                     "UPDATE exec.wf_run SET status = :s, result = CAST(:r AS jsonb), result_ref = CAST(:rr AS jsonb), "
                     "error = CAST(:e AS jsonb), "
-                    "ctx = CAST(:ctx AS jsonb), steps_used = :steps, llm_calls = :llm, tokens_used = :tok, "
+                    "ctx = CAST(:ctx AS jsonb), ctx_ref = CAST(:ctx_ref AS jsonb), "
+                    "steps_used = :steps, llm_calls = :llm, tokens_used = :tok, "
                     "lease_owner = NULL, lease_until = NULL, wake_at = NULL, updated_at = now() WHERE id = :id"
                 ),
                 {
@@ -929,7 +978,8 @@ class WorkflowEngine:
                     "r": _j({}) if result is not None else None,  # 明文占位；真实结果见 result_ref
                     "rr": _j(result_ref),
                     "e": _j(error),
-                    "ctx": _j(ctx),
+                    "ctx": ctx_plain,
+                    "ctx_ref": ctx_ref,
                     "steps": run["steps_used"],
                     "llm": run["llm_calls"],
                     "tok": run["tokens_used"],
@@ -984,16 +1034,19 @@ class WorkflowEngine:
             raise RuntimeError("租约已被其他 Worker 接手")
 
     async def _advance(self, run: dict[str, Any], ctx: dict[str, Any], target: str) -> None:
+        ctx_plain, ctx_ref = _seal_ctx(str(run["company_id"]), ctx)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    "UPDATE exec.wf_run SET current = :c, ctx = CAST(:ctx AS jsonb), steps_used = :steps, "
-                    "llm_calls = :llm, tokens_used = :tok, updated_at = now() WHERE id = :id AND lease_owner = :me"
+                    "UPDATE exec.wf_run SET current = :c, ctx = CAST(:ctx AS jsonb), "
+                    "ctx_ref = CAST(:ctx_ref AS jsonb), steps_used = :steps, llm_calls = :llm, "
+                    "tokens_used = :tok, updated_at = now() WHERE id = :id AND lease_owner = :me"
                 ),
                 {
                     "id": str(run["id"]),
                     "c": target,
-                    "ctx": _j(ctx),
+                    "ctx": ctx_plain,
+                    "ctx_ref": ctx_ref,
                     "steps": run["steps_used"],
                     "llm": run["llm_calls"],
                     "tok": run["tokens_used"],
@@ -1001,12 +1054,16 @@ class WorkflowEngine:
                 },
             )
 
-    async def _park(self, run_id: str, ctx: dict[str, Any], current: str, until: dt.datetime) -> None:
+    async def _park(
+        self, run_id: str, ctx: dict[str, Any], current: str, until: dt.datetime, *, company_id: str
+    ) -> None:
+        ctx_plain, ctx_ref = _seal_ctx(company_id, ctx)
         async with self._tx() as conn:
             # 当前节点的任务可能在建任务与挂起之间就被处理了：那样立即可再认领，不必等到截止时间
             await conn.execute(
                 self._q(
                     """UPDATE exec.wf_run SET status = 'waiting', current = :c, ctx = CAST(:ctx AS jsonb),
+                         ctx_ref = CAST(:ctx_ref AS jsonb),
                          lease_owner = NULL, lease_until = NULL, updated_at = now(),
                          wake_at = CASE WHEN EXISTS (
                              SELECT 1 FROM exec.human_task
@@ -1015,7 +1072,13 @@ class WorkflowEngine:
                            THEN now() ELSE :until END
                        WHERE id = :id"""
                 ),
-                {"id": run_id, "c": current, "ctx": _j(ctx), "until": until},
+                {
+                    "id": run_id,
+                    "c": current,
+                    "ctx": ctx_plain,
+                    "ctx_ref": ctx_ref,
+                    "until": until,
+                },
             )
 
     async def _taint(self, run: dict[str, Any], source: str) -> None:
@@ -1031,7 +1094,7 @@ class WorkflowEngine:
             )
         await self._audit_run("workflow.run.tainted", str(run["id"]), str(run["company_id"]), {"source": source})
 
-    async def _get_step(self, run_id: str, nid: str) -> dict[str, Any] | None:
+    async def _get_step(self, run_id: str, nid: str, *, company_id: str) -> dict[str, Any] | None:
         async with self._tx() as conn:
             m = (
                 (
@@ -1043,7 +1106,7 @@ class WorkflowEngine:
                 .mappings()
                 .first()
             )
-        return dict(m) if m else None
+        return _hydrate_step(dict(m) if m else None, company_id)
 
     async def _mark_started(
         self, run: dict[str, Any], n: dict[str, Any], ctx: dict[str, Any] | None = None
@@ -1071,22 +1134,26 @@ class WorkflowEngine:
     async def _set_step(
         self, run: dict[str, Any], nid: str, status: str, output: Any, execution_id: str | None = None
     ) -> None:
+        company = str(run["company_id"])
+        o_plain, o_ref = _seal_output(company, output)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, execution_id,
-                         attempts, started_at, executor)
+                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, output_ref,
+                         execution_id, attempts, started_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, 'tool', :s,
-                               CAST(:o AS jsonb), :ex, 1, now(), :me)
+                               CAST(:o AS jsonb), CAST(:or AS jsonb), :ex, 1, now(), :me)
                        ON CONFLICT (run_id, node_id) DO UPDATE SET status = :s, output = CAST(:o AS jsonb),
+                         output_ref = CAST(:or AS jsonb),
                          execution_id = COALESCE(:ex, exec.wf_step.execution_id)"""
                 ),
                 {
                     "id": str(run["id"]),
                     "n": nid,
-                    "company": str(run["company_id"]),
+                    "company": company,
                     "s": status,
-                    "o": _j(output),
+                    "o": o_plain,
+                    "or": o_ref,
                     "ex": execution_id,
                     "me": self.me,
                 },
@@ -1101,22 +1168,26 @@ class WorkflowEngine:
         ctx: dict[str, Any] | None = None,
     ) -> None:
         pid = self._persist_id(n["id"], ctx or {})
+        company = str(run["company_id"])
+        o_plain, o_ref = _seal_output(company, output)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, execution_id,
-                         attempts, started_at, finished_at, executor)
+                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, output_ref,
+                         execution_id, attempts, started_at, finished_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
-                               CAST(:o AS jsonb), :ex, 1, now(), now(), :me)
+                               CAST(:o AS jsonb), CAST(:or AS jsonb), :ex, 1, now(), now(), :me)
                        ON CONFLICT (run_id, node_id) DO UPDATE SET status = 'done', output = CAST(:o AS jsonb),
+                         output_ref = CAST(:or AS jsonb),
                          execution_id = COALESCE(:ex, exec.wf_step.execution_id), finished_at = now()"""
                 ),
                 {
                     "id": str(run["id"]),
                     "n": pid,
-                    "company": str(run["company_id"]),
+                    "company": company,
                     "kind": n["type"],
-                    "o": _j(output),
+                    "o": o_plain,
+                    "or": o_ref,
                     "ex": execution_id,
                     "me": self.me,
                 },
@@ -1124,22 +1195,25 @@ class WorkflowEngine:
 
     async def _upsert_step(self, run: dict[str, Any], nid: str, kind: str, output: Any) -> None:
         """可覆盖写入（loop / parallel 状态推进）。"""
+        company = str(run["company_id"])
+        o_plain, o_ref = _seal_output(company, output)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, attempts,
-                         started_at, finished_at, executor)
+                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, output_ref,
+                         attempts, started_at, finished_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
-                               CAST(:o AS jsonb), 1, now(), now(), :me)
-                       ON CONFLICT (run_id, node_id) DO UPDATE SET output = CAST(:o AS jsonb), status = 'done',
-                         finished_at = now()"""
+                               CAST(:o AS jsonb), CAST(:or AS jsonb), 1, now(), now(), :me)
+                       ON CONFLICT (run_id, node_id) DO UPDATE SET output = CAST(:o AS jsonb),
+                         output_ref = CAST(:or AS jsonb), status = 'done', finished_at = now()"""
                 ),
                 {
                     "id": str(run["id"]),
                     "n": nid,
-                    "company": str(run["company_id"]),
+                    "company": company,
                     "kind": kind,
-                    "o": _j(output),
+                    "o": o_plain,
+                    "or": o_ref,
                     "me": self.me,
                 },
             )
@@ -1149,30 +1223,36 @@ class WorkflowEngine:
     ) -> Any:
         """非 Tool 步骤：首次写入，之后读回首次的值（重放时结果不变）。"""
         pid = self._persist_id(n["id"], ctx or {})
+        company = str(run["company_id"])
+        o_plain, o_ref = _seal_output(company, output)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, attempts,
-                         started_at, finished_at, executor)
+                    """INSERT INTO exec.wf_step (run_id, node_id, seq, company_id, kind, status, output, output_ref,
+                         attempts, started_at, finished_at, executor)
                        VALUES (:id, :n, (SELECT count(*) FROM exec.wf_step WHERE run_id = :id), :company, :kind, 'done',
-                               CAST(:o AS jsonb), 1, now(), now(), :me)
+                               CAST(:o AS jsonb), CAST(:or AS jsonb), 1, now(), now(), :me)
                        ON CONFLICT (run_id, node_id) DO NOTHING"""
                 ),
                 {
                     "id": str(run["id"]),
                     "n": pid,
-                    "company": str(run["company_id"]),
+                    "company": company,
                     "kind": n["type"],
-                    "o": _j(output),
+                    "o": o_plain,
+                    "or": o_ref,
                     "me": self.me,
                 },
             )
-            return (
+            row = (
                 await conn.execute(
-                    self._q("SELECT output FROM exec.wf_step WHERE run_id = :id AND node_id = :n"),
+                    self._q("SELECT output, output_ref FROM exec.wf_step WHERE run_id = :id AND node_id = :n"),
                     {"id": str(run["id"]), "n": pid},
                 )
-            ).scalar_one()
+            ).mappings().one()
+        hydrated = _hydrate_step(dict(row), company)
+        assert hydrated is not None
+        return hydrated["output"]
 
     async def _create_task(
         self,

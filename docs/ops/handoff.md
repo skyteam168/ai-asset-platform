@@ -50,6 +50,7 @@
 | **H15** 响应体 Pydantic（IAM 核心） | 完成 | 4b4e4d2 |
 | **H16** K8s 清单校验与 CI | 完成 | 4a36b23 |
 | **H17** pg_trgm / CNPG 示例 | 完成 | 408b196 |
+| **H18** wf ctx/step 信封 | 完成 | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -98,7 +99,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/sdk/` | 官方 Python 消费方 SDK（`Client` / `SdkError`）与可选 LangChain 适配；出站用 httpx，不经 `libs/httpclient` |
 | `sdk/typescript/` | 官方 TypeScript 消费方 SDK（包名 `aip-sdk`：`Client` / `SdkError`）；fetch 可注入，与 Python 同 REST 面 |
 | `sdk/consumer-kit/` | 消费方断言签名示例（Python / TS 可运行；Java / .NET 单文件模板）；不接主 `aip` 依赖 |
-| `migrations/versions/` | Alembic，当前到 0020（pg_trgm；此前业务角色 / 信封 / LLM 等） |
+| `migrations/versions/` | Alembic，当前到 0021（wf ctx/step 信封；此前 pg_trgm） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
@@ -158,10 +159,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = wf 信封深化等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = 其余 response_model 等**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H17（已完成）**：至 pg_trgm/CNPG 示例、K8s CI、IAM response_model、WORM、OTel、业务角色、信封、LLM、G0 PII。
-- **横向（当前下一步）**：其余路由 response_model；wf ctx/step 信封深化；zhparser 镜像（可选）。
+- **H1–H18（已完成）**：至 wf ctx/step 信封、pg_trgm/CNPG、K8s CI、IAM response_model、WORM、OTel、业务角色、信封、LLM、G0 PII。
+- **横向（当前下一步）**：其余路由 response_model；zhparser 镜像（可选）；human_task.data 信封。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

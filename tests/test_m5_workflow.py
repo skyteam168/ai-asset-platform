@@ -227,7 +227,14 @@ async def test_llm_cannot_change_branch_and_human_approval(tmp_path: pathlib.Pat
     assert task["kind"] == "approve" and task["assignee_role"] == "business_owner"
     async with engine.begin() as conn:
         await conn.execute(text("SELECT set_config('app.bypass_rls', 'on', true)"))
-        ctx = (await conn.execute(text("SELECT ctx FROM exec.wf_run WHERE id = :id"), {"id": run_id})).scalar_one()
+        row = (
+            await conn.execute(text("SELECT * FROM exec.wf_run WHERE id = :id"), {"id": run_id})
+        ).mappings().one()
+    # 明文 ctx 列为空占位；业务上下文在 ctx_ref 信封中
+    assert row["ctx"] == {} and "risk_level" not in str(row["ctx"])
+    from aip.data_plane.workflow.engine import _hydrate_run
+
+    ctx = _hydrate_run(dict(row))["ctx"]
     assert ctx["n2"] == {"risk_level": "high"}  # 多余字段被裁掉
     assert executed() == []  # 批准前没有任何写操作
 
