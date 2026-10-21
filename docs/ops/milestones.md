@@ -617,6 +617,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 金标 | `tests/contracts/mes-vn01.openapi.yaml` |
 | 不在本片 | Postman；AI 描述；工具选择评测；Prism 自动拉起；控制台 Importer UI |
 
+### H3 Postman Importer（声明式草稿）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| preview mes-vn01 collection 含 list_work_orders 与 success_when | 通过 | `test_h3_postman_importer.py::test_preview_mes_vn01_collection` |
+| persist 落库 connector + draft | 通过 | `test_persist_postman_drafts` |
+| 非法文档 INVALID_ARGUMENT | 通过 | `test_invalid_postman_document` / HTTP 400 |
+| OpenAPI 路由登记 | 通过 | `importPostman` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `importer/postman.py`；复用 `draft.build_drafts` 与 persist |
+| API | `POST /api/v1/importer/postman` |
+| 金标 | `tests/contracts/mes-vn01.postman_collection.json` |
+| 不在本片 | Environment 合并；GraphQL/form-data；AI 描述；控制台 UI |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

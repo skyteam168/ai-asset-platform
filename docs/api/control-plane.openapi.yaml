@@ -1811,39 +1811,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  connector_config:
-                    type: object
-                  tools:
-                    type: array
-                    items:
-                      type: object
-                  warnings:
-                    type: array
-                    items:
-                      type: string
-                  connector_instance_id:
-                    type:
-                    - string
-                    - 'null'
-                  drafts:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        asset_id:
-                          type: string
-                        version_id:
-                          type: string
-                        capability_id:
-                          type: string
-                        state:
-                          type: string
-                required:
-                - connector_config
-                - tools
-                - warnings
+                $ref: '#/components/schemas/ImporterResult'
         default:
           $ref: '#/components/responses/Problem'
       requestBody:
@@ -1851,36 +1819,28 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                document:
-                  type: string
-                  minLength: 1
-                connector_name:
-                  type: string
-                  pattern: ^[a-z][a-z0-9_]{2,63}$
-                domain:
-                  type: string
-                  pattern: ^[a-z][a-z0-9_]*$
-                  default: imported
-                system:
-                  type: string
-                  pattern: ^[a-z][a-z0-9_]*$
-                  default: imported
-                persist:
-                  type: boolean
-                  default: false
-                connection_id:
-                  type:
-                  - string
-                  - 'null'
-                owner_org_id:
-                  type:
-                  - string
-                  - 'null'
-              required:
-              - document
-              - connector_name
+              $ref: '#/components/schemas/ImporterRequest'
+  /api/v1/importer/postman:
+    post:
+      operationId: importPostman
+      tags:
+      - importer
+      summary: 从 Postman Collection v2.x 生成声明式 Connector 与 Tool 草稿（可选落库）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImporterResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImporterRequest'
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota
@@ -3041,3 +3001,68 @@ components:
       - full
       - sha256
       - signature
+    ImporterRequest:
+      type: object
+      properties:
+        document:
+          type: string
+          minLength: 1
+        connector_name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{2,63}$
+        domain:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          default: imported
+        system:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          default: imported
+        persist:
+          type: boolean
+          default: false
+        connection_id:
+          type:
+          - string
+          - 'null'
+        owner_org_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - document
+      - connector_name
+    ImporterResult:
+      type: object
+      properties:
+        connector_config:
+          type: object
+        tools:
+          type: array
+          items:
+            type: object
+        warnings:
+          type: array
+          items:
+            type: string
+        connector_instance_id:
+          type:
+          - string
+          - 'null'
+        drafts:
+          type: array
+          items:
+            type: object
+            properties:
+              asset_id:
+                type: string
+              version_id:
+                type: string
+              capability_id:
+                type: string
+              state:
+                type: string
+      required:
+      - connector_config
+      - tools
+      - warnings

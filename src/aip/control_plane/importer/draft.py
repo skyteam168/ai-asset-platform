@@ -156,7 +156,7 @@ def build_drafts(
         cap = f"{dom}.{sys}.{op['operation']}"
         desc = op["description"].strip()
         if len(desc) < 20:
-            desc = f"{desc}（从 OpenAPI 导入的操作草稿）".strip()
+            desc = f"{desc}（从 Importer 导入的操作草稿）".strip()
         tool: dict[str, Any] = {
             "capability_id": cap,
             "domain": dom,

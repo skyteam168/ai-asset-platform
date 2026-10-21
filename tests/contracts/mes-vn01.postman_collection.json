@@ -1,0 +1,43 @@
+{
+  "info": {
+    "name": "VN01 MES",
+    "description": "接入台账中的旧系统接口（节选），对齐 mes-vn01.openapi.yaml",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "baseUrl", "value": "https://mes.vn01.example"}
+  ],
+  "item": [
+    {
+      "name": "listWorkOrders",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/v2/workorders?plant=F001&status=&pageSize=50",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "v2", "workorders"],
+          "query": [
+            {"key": "plant", "value": "F001"},
+            {"key": "status", "value": ""},
+            {"key": "pageSize", "value": "50"}
+          ]
+        },
+        "description": "查询指定工厂的生产工单列表"
+      },
+      "response": [
+        {
+          "name": "ok",
+          "originalRequest": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v2/workorders?plant=F001"
+          },
+          "status": "OK",
+          "code": 200,
+          "header": [{"key": "Content-Type", "value": "application/json"}],
+          "body": "{\"code\":0,\"data\":{\"nextPage\":null,\"items\":[{\"woNo\":\"WO-20261019-001\",\"planQty\":1200,\"status\":\"open\"},{\"woNo\":\"WO-20261019-002\",\"planQty\":800,\"status\":\"open\"}]}}"
+        }
+      ]
+    }
+  ]
+}
