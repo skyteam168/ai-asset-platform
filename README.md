@@ -13,6 +13,8 @@ python tools/dev.py ci           # 文档契约 + lint + 全部测试
 python tools/dev.py bootstrap    # 首次运行：建集团、总部与管理员，凭据写入 .aip-data/dev-admin.txt
 python tools/dev.py serve        # 控制面 :18081，数据面 :18082
 python tools/smoke.py            # 另开终端：对运行中的系统做端到端冒烟
+# 可选可观测（见 docs/ops/observability.md）：
+# python tools/dev.py otel-up && python tools/dev.py serve-otel
 ```
 
 控制台（React + Ant Design）在 `console/`，构建产物由控制面在 `/console/` 托管：
@@ -36,7 +38,7 @@ Linux / macOS 可用 `make up`、`make ci` 等同名任务。Windows 下用 `.ve
 | `console/` | 控制台：组织与用户、消费方与绑定、系统连接与连接测试、资产门禁与审批、授权、审计 |
 | `spikes/` | 技术选型 spike（不进入产品代码），如 `adr0003` 工作流引擎对比 |
 | `migrations/` | Alembic（异步），expand / contract 规则 |
-| `deploy/` | docker-compose（dev），后续 Helm / Kustomize |
+| `deploy/` | docker-compose（dev）；`docker-compose.otel.yml` 可观测栈；Kustomize |
 | `docs/` | 架构、ADR、OpenAPI 契约、JSON Schema、运维与里程碑记录 |
 | `tools/` | 生成器（ADR、Schema、OpenAPI）与检查脚本 |
 

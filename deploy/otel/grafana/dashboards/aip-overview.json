@@ -1,0 +1,78 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "content": "## AIP 可观测（H13）\n\n1. 控制面 / 数据面设置 `AIP_OTEL_EXPORTER=otlp`、`AIP_OTEL_ENDPOINT=http://127.0.0.1:14318/v1/traces`\n2. 在左侧 **Explore → Tempo** 按 `service.name`（`aip-control-plane` / `aip-data-plane`）或 `trace_id` 检索\n3. Prometheus 抓取 Collector 自身指标（job=`otel-collector`）\n\n命令：`python tools/dev.py otel-up`",
+        "mode": "markdown"
+      },
+      "title": "使用说明",
+      "type": "text"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 2,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "rate(otelcol_receiver_accepted_spans[5m])",
+          "legendFormat": "accepted spans/s",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(otelcol_receiver_refused_spans[5m])",
+          "legendFormat": "refused spans/s",
+          "refId": "B"
+        }
+      ],
+      "title": "Collector 接收 spans",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 3,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "otelcol_exporter_sent_spans",
+          "legendFormat": "sent {{exporter}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Collector 导出 spans",
+      "type": "timeseries"
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["aip", "otel"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "AIP OTel Overview",
+  "uid": "aip-otel-overview",
+  "version": 1
+}

@@ -684,6 +684,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H13 OTel Collector 与看板 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Collector / Tempo / Prometheus 配置可解析 | 通过 | `test_h13_otel_stack.py::test_otel_yaml_configs_parse` |
+| compose.otel config 校验 | 通过 | `test_compose_otel_config_valid` |
+| Grafana 预置看板 JSON | 通过 | `test_grafana_dashboard_json` |
+
+| 部分 | 内容 |
+| --- | --- |
+| Compose | `deploy/docker-compose.otel.yml`（不随 `dev.py up`） |
+| 命令 | `dev.py otel-up` / `otel-down` / `serve-otel` |
+| 文档 | [observability.md](observability.md) |
+| 端口 | Collector `:14318`；Grafana `:13000`；Tempo `:13200`；Prometheus `:19090` |
+| 不在本片 | Loki；Langfuse / GenAI；生产多租户 Tempo |
+
 ### H12 IAM 业务角色 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

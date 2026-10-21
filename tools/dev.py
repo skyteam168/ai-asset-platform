@@ -9,6 +9,8 @@ python tools/dev.py test      pytest（含 infra 用例，需先 up）
 python tools/dev.py ci        docs + lint + test
 python tools/dev.py bootstrap 初始化集团、总部与首个平台管理员（只运行一次）
 python tools/dev.py serve     本地运行控制面(18081)与数据面(18082)
+python tools/dev.py otel-up   启动 OTel Collector / Tempo / Prometheus / Grafana
+python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
 """
 
 from __future__ import annotations
@@ -23,6 +25,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PY = sys.executable
 COMPOSE = ["docker", "compose", "-f", str(ROOT / "deploy" / "docker-compose.yml")]
+COMPOSE_OTEL = [
+    "docker",
+    "compose",
+    "-f",
+    str(ROOT / "deploy" / "docker-compose.otel.yml"),
+]
+OTEL_HTTP = "http://127.0.0.1:14318/v1/traces"
 
 
 def run(cmd: list[str], check: bool = True) -> int:
@@ -162,8 +171,16 @@ def seed_demo() -> None:
     )
 
 
-def serve() -> None:
+def serve(*, with_otel: bool = False) -> None:
     env = dev_env()
+    if with_otel:
+        env = {
+            **env,
+            "AIP_OTEL_EXPORTER": "otlp",
+            "AIP_OTEL_ENDPOINT": env.get("AIP_OTEL_ENDPOINT") or OTEL_HTTP,
+        }
+        print(f"otel: exporter=otlp endpoint={env['AIP_OTEL_ENDPOINT']}")
+        print("grafana: http://127.0.0.1:13000/  （需先 otel-up）")
     procs = [
         subprocess.Popen(
             [PY, "-m", "uvicorn", "aip.control_plane.app:app", "--port", "18081", "--app-dir", "src"],
@@ -184,6 +201,21 @@ def serve() -> None:
             p.terminate()
 
 
+def otel_up() -> None:
+    """启动 OTel Collector + Tempo + Prometheus + Grafana（deploy/docker-compose.otel.yml）。"""
+    run([*COMPOSE_OTEL, "up", "-d"])
+    print("otel stack up")
+    print("  OTLP HTTP  http://127.0.0.1:14318")
+    print("  Grafana    http://127.0.0.1:13000/  (admin / aip-dev-only；匿名 Viewer)")
+    print("  Tempo      http://127.0.0.1:13200")
+    print("  Prometheus http://127.0.0.1:19090")
+    print("然后：python tools/dev.py serve-otel")
+
+
+def otel_down() -> None:
+    run([*COMPOSE_OTEL, "down"])
+
+
 TASKS = {
     "up": up,
     "down": down,
@@ -193,6 +225,9 @@ TASKS = {
     "test": test,
     "ci": lambda: (docs(), lint(), test()),
     "serve": serve,
+    "serve-otel": lambda: serve(with_otel=True),
+    "otel-up": otel_up,
+    "otel-down": otel_down,
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,
 }
