@@ -37,6 +37,13 @@ jobs:
           npm run typecheck
           npm test
           npm run build
+      - name: TypeScript SDK（类型检查、单测、构建）
+        working-directory: sdk/typescript
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
       - name: console e2e（真实控制面托管 console/dist）
         run: |
           uv run python tools/dev.py bootstrap

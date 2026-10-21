@@ -25,9 +25,10 @@
 | **M7c** MCP 发现模式三元工具 | 完成 | 92fdd8a |
 | **M7d** 上游 MCP 连接器 | 完成 | b81acbf |
 | **M7e** Python SDK + LangChain | 完成 | f401279 |
+| **M7f** TypeScript SDK | 完成 | （本片提交） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M7e 用例；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M7e 用例；TS SDK 有 vitest；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -53,6 +54,7 @@ cd console && npm ci && npm run build && cd ..
 .venv/Scripts/python tools/dev.py test        # 全量 pytest（需要 dev.py up 起来的基础设施）
 .venv/Scripts/python tools/dev.py docs        # 生成 ADR / JSON Schema / OpenAPI，并要求生成物已提交（git diff 为空）+ spectral + 链接检查
 cd console && npm run typecheck && npm test && npm run build
+cd sdk/typescript && npm ci && npm run typecheck && npm test && npm run build
 cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据读 .aip-data/dev-admin.txt
 ```
 
@@ -68,6 +70,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`oauth.py`、`pdp.py` / `facts.py` |
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
 | `src/aip/sdk/` | 官方 Python 消费方 SDK（`Client` / `SdkError`）与可选 LangChain 适配；出站用 httpx，不经 `libs/httpclient` |
+| `sdk/typescript/` | 官方 TypeScript 消费方 SDK（包名 `aip-sdk`：`Client` / `SdkError`）；fetch 可注入，与 Python 同 REST 面 |
 | `migrations/versions/` | Alembic，当前到 0015（upstream_mcp；此前 0014 decided_via=mcp） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
@@ -128,7 +131,8 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **M7c（已完成）**：`POST /mcp/discovery` 三元工具；danger 不进入；未授权搜不到。
 - **M7d（已完成）**：上游 MCP Connector（钉住 tools 清单哈希，防 rug pull）；迁移 0015。
 - **M7e（已完成）**：官方 Python SDK（`aip.sdk.Client`：令牌 / 目录 / 调用 / 确认 / Run·Execution）+ LangChain StructuredTool 适配（可选依赖组 `sdk`）。
-- **M7 其余（当前下一步）**：TypeScript SDK；A2A 端点；工具注解自动生成；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）；可选 zhparser 物化检索索引。
+- **M7f（已完成）**：官方 TypeScript SDK（`sdk/typescript` / `aip-sdk`，API 对齐 Python Client）；CI 已挂 typecheck / test / build。
+- **M7 其余（当前下一步）**：A2A 端点；MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）；可选 zhparser 物化检索索引。（工具注解已在 MCP Gateway 由 risk_level 等生成。）
 - **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

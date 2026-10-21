@@ -468,6 +468,23 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | REST | catalog / invoke / executions / runs / confirmations confirm·reject |
 | 不在本片 | TypeScript SDK、A2A、MCP Inspector 兼容矩阵、故障演练 |
 
+### M7f TypeScript SDK — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Client catalog / invoke / getExecution | 通过 | `sdk/typescript/src/client.test.ts` |
+| staticToken + exchangeToken | 通过 | 同上 |
+| 非 2xx → SdkError(Problem Details) | 通过 | 同上 |
+| confirm / reject | 通过 | 同上 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 包 | `sdk/typescript`（npm `aip-sdk`）：`Client`、`SdkError`；ESM + `dist` 构建 |
+| 认证 | `accessToken`，或 `staticToken` + `exchangeToken(assertion)`（RFC 7523） |
+| REST | catalog / invoke / executions / runs / confirmations confirm·reject |
+| CI | `.github/workflows/ci.yml` 增加 sdk/typescript typecheck / test / build |
+| 不在本片 | A2A、MCP Inspector 兼容矩阵、故障演练、consumer-kit、LangChain.js |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |
