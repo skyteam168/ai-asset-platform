@@ -69,6 +69,9 @@ class CatalogTool(BaseModel):
     egress_class: str = "none"
     data_classification: int | None = None
     bundles: list[str] = Field(default_factory=list)
+    connector: str | None = None
+    system_key: str | None = None
+    system_host: str | None = None
 
 
 class CatalogBundle(BaseModel):

@@ -31,6 +31,15 @@ class Asset(BaseModel):
     owner_user_id: str | None = None
     company_id: str | None = None
     created_at: str | None = None
+    # 列表摘要（来自最新版本 + 连接器关联，便于运营辨识）
+    latest_semver: str | None = None
+    latest_state: VersionState | None = None
+    title: str | None = None
+    description: str = ""
+    risk_level: str | None = None
+    connector: str | None = None
+    system_key: str | None = None
+    system_host: str | None = None
 
 
 class AssetVersion(BaseModel):

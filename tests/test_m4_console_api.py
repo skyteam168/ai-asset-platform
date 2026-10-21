@@ -38,6 +38,58 @@ async def login(cp: httpx.AsyncClient, seed: Seed, name: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {r.json()['session_token']}"}
 
 
+async def test_assets_and_catalog_list_summary(
+    cp: httpx.AsyncClient, db: Database, seeded: Seed, published: Published
+) -> None:
+    from aip.control_plane.conn import service as conn_service
+    from aip.control_plane.registry import snapshot as release_snapshot
+    from iam_seed import actor_for
+    from m2_fixtures import KEY
+
+    admin = await login(cp, seeded, "admin")
+    listed = (await cp.get(f"{V}/assets", headers=admin)).json()["items"]
+    hit = next(x for x in listed if x["id"] == str(published.asset_id))
+    assert "生产工单" in hit["description"]
+    assert hit["connector"] == "mes"
+    assert hit["latest_state"] == "active"
+    assert hit["latest_semver"] == "1.0.0"
+    assert hit["risk_level"] == "read"
+    assert hit["title"] == "query_work_orders"
+
+    dev = await actor_for(db, seeded, "admin")
+    async with db.tx(DbScope.system()) as conn:
+        cid = await conn_service.create_connection(
+            conn,
+            dev,
+            company_id=seeded.vn,
+            data={
+                "system_key": "mes",
+                "env": "test",
+                "base_url": "https://mes.example.internal:8443/api",
+                "scheme": "https",
+                "tls_mode": "pinned",
+                "pins": [{"kind": "spki", "sha256": "a" * 64}],
+                "credential_ref": "kv/data/mes/vn01",
+            },
+        )
+        await conn_service.create_connector_instance(
+            conn, dev, name="mes", kind="declarative", connection_id=cid, config={"operations": []}
+        )
+        await release_snapshot.publish(conn, KEY)
+
+    listed2 = (await cp.get(f"{V}/assets", headers=admin)).json()["items"]
+    hit2 = next(x for x in listed2 if x["id"] == str(published.asset_id))
+    assert hit2["system_key"] == "mes"
+    assert hit2["system_host"] == "mes.example.internal:8443"
+
+    cat = (await cp.get(f"{V}/console/catalog", headers=admin)).json()
+    tool = next(x for x in cat["items"] if x["capability_id"] == "production.mes.query_work_orders")
+    assert "生产工单" in tool["description"]
+    assert tool["connector"] == "mes"
+    assert tool["system_key"] == "mes"
+    assert tool["system_host"] == "mes.example.internal:8443"
+
+
 async def test_versions_list_and_detail(cp: httpx.AsyncClient, seeded: Seed, published: Published) -> None:
     admin = await login(cp, seeded, "admin")
     r = await cp.get(f"{V}/assets/{published.asset_id}/versions", headers=admin)

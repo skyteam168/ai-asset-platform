@@ -677,8 +677,31 @@ def control_plane() -> dict[str, Any]:
                     "owner_org_id": S,
                     "owner_user_id": S,
                     "classification": CLEAR,
+                    "latest_semver": SN,
+                    "latest_state": SN,
+                    "title": SN,
+                    "description": S,
+                    "risk_level": SN,
+                    "connector": SN,
+                    "system_key": SN,
+                    "system_host": SN,
                 },
                 ["type", "name", "owner_org_id", "classification"],
+            ),
+            "CatalogTool": o(
+                {
+                    "capability_id": SN,
+                    "version": SN,
+                    "title": SN,
+                    "description": S,
+                    "risk_level": S,
+                    "egress_class": S,
+                    "data_classification": {"type": ["integer", "null"]},
+                    "bundles": {"type": "array", "items": S},
+                    "connector": SN,
+                    "system_key": SN,
+                    "system_host": SN,
+                }
             ),
             "AssetVersion": o(
                 {
@@ -946,7 +969,7 @@ def control_plane() -> dict[str, Any]:
             ),
             "ConsoleCatalog": o(
                 {
-                    "items": {"type": "array", "items": {"type": "object"}},
+                    "items": {"type": "array", "items": ref("CatalogTool")},
                     "bundles": {"type": "array", "items": {"type": "object"}},
                     "next_cursor": SN,
                     "has_more": B,

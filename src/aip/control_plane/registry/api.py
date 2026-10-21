@@ -72,9 +72,12 @@ def router() -> APIRouter:
 
     @r.get(f"{V}/assets", tags=["registry"], operation_id="listAssets", response_model=Page[out.Asset])
     async def list_assets(actor: ActorDep, db: DbDep) -> Page[out.Asset]:
+        from aip.control_plane.registry.list_enrich import enrich_asset_rows
+
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(t.asset).order_by(t.asset.c.name).limit(200))).mappings().all()
-        return Page(items=[out.Asset.model_validate(_out(dict(x))) for x in rows])
+            enriched = await enrich_asset_rows(conn, [dict(x) for x in rows])
+        return Page(items=[out.Asset.model_validate(_out(x)) for x in enriched])
 
     @r.post(
         f"{V}/assets",

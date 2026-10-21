@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Table, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
@@ -10,6 +10,44 @@ import { SkillPackagePanel } from "./SkillEditor";
 
 const LIFECYCLE = ["draft", "testing", "in_review", "approved", "canary", "active"];
 
+function AssetDescCell({ asset }: { asset: Asset }) {
+  const title = (asset.title || "").trim();
+  const desc = (asset.description || "").trim();
+  if (!title && !desc) return <Typography.Text type="secondary">—</Typography.Text>;
+  return (
+    <div style={{ maxWidth: 320, minWidth: 160 }} onClick={(e) => e.stopPropagation()}>
+      {title ? (
+        <Typography.Text ellipsis style={{ maxWidth: 320, display: "block" }}>
+          {title}
+        </Typography.Text>
+      ) : null}
+      {desc ? (
+        <Tooltip title={desc}>
+          <Typography.Text type="secondary" ellipsis style={{ maxWidth: 320, display: "block", fontSize: 12 }}>
+            {desc}
+          </Typography.Text>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
+function AssetSystemCell({ asset }: { asset: Asset }) {
+  if (!asset.system_key && !asset.system_host) {
+    return <Typography.Text type="secondary">—</Typography.Text>;
+  }
+  return (
+    <div>
+      <div>{asset.system_key || "—"}</div>
+      {asset.system_host ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {asset.system_host}
+        </Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
 export function AssetsPage() {
   const { has } = useAuth();
   const assets = useLoad(() => get<Page<Asset>>("/assets"), []);
@@ -18,17 +56,57 @@ export function AssetsPage() {
   const [kw, setKw] = useState("");
   return (
     <PageCard>
-      <Toolbar placeholder={t("资产名称 / 类型")} onSearch={setKw}
+      <Toolbar placeholder={t("资产名称 / 类型 / 描述 / 系统")} onSearch={setKw}
         actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("新建资产")}</Button>} />
       {assets.error && <Alert type="error" message={assets.error} />}
-      <Table<Asset> pagination={PAGINATION} rowKey="id" loading={assets.loading} dataSource={(assets.data?.items ?? []).filter((a) => matches(a, kw, ["name", "type"]))}
+      <Table<Asset>
+        pagination={PAGINATION}
+        rowKey="id"
+        loading={assets.loading}
+        dataSource={(assets.data?.items ?? []).filter((a) =>
+          matches(a, kw, ["name", "type", "title", "description", "connector", "system_key", "system_host"]),
+        )}
         onRow={(r) => ({ onClick: () => setSelected(r), style: { cursor: "pointer" } })}
         columns={[
-          { title: t("名称"), dataIndex: "name", render: (v: string) => <Typography.Link>{v}</Typography.Link> },
-          { title: t("类型"), dataIndex: "type", render: (v) => <Tag>{v}</Tag> },
-          { title: t("归属"), dataIndex: "owner_org_id", render: (v) => <OrgName id={v} /> },
-          { title: t("密级"), dataIndex: "classification", render: (v) => <Clearance level={v} /> },
-        ]} />
+          {
+            title: t("名称"),
+            dataIndex: "name",
+            width: 220,
+            ellipsis: true,
+            render: (v: string) => <Typography.Link ellipsis style={{ maxWidth: 200 }}>{v}</Typography.Link>,
+          },
+          { title: t("类型"), dataIndex: "type", width: 100, render: (v) => <Tag>{v}</Tag> },
+          { title: t("说明"), key: "desc", width: 280, ellipsis: true, render: (_, r) => <AssetDescCell asset={r} /> },
+          {
+            title: t("连接器"),
+            dataIndex: "connector",
+            width: 130,
+            ellipsis: true,
+            render: (v: string | null | undefined) => v || "—",
+          },
+          { title: t("系统"), key: "system", width: 150, render: (_, r) => <AssetSystemCell asset={r} /> },
+          { title: t("归属"), dataIndex: "owner_org_id", width: 140, render: (v) => <OrgName id={v} /> },
+          { title: t("密级"), dataIndex: "classification", width: 70, render: (v) => <Clearance level={v} /> },
+          {
+            title: t("最新状态"),
+            dataIndex: "latest_state",
+            width: 110,
+            render: (v: string | null | undefined, r) =>
+              v ? (
+                <span>
+                  <StateTag state={v} />
+                  {r.latest_semver ? (
+                    <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
+                      @{r.latest_semver}
+                    </Typography.Text>
+                  ) : null}
+                </span>
+              ) : (
+                "—"
+              ),
+          },
+        ]}
+      />
       <NewAsset open={open} onClose={() => setOpen(false)} onDone={assets.reload} />
       <AssetDrawer asset={selected} onClose={() => setSelected(null)} />
     </PageCard>
@@ -197,7 +275,16 @@ function VersionPanel({
       ? [{
           key: "skill",
           label: t("Skill 包"),
-          children: <SkillPackagePanel versionId={versionId} assetId={v.asset_id} spec={v.spec} editable={dev && v.state === "draft"} onSaved={refresh} />,
+          children: (
+            <SkillPackagePanel
+              versionId={versionId}
+              assetId={v.asset_id}
+              semver={v.semver}
+              spec={v.spec}
+              editable={dev && v.state === "draft"}
+              onSaved={refresh}
+            />
+          ),
         }]
       : []),
     ...(assetType === "bundle" || assetType === "skill"

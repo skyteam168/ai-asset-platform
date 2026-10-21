@@ -203,39 +203,41 @@ export function AppShell() {
         </div>
       </Layout.Sider>
       <Layout>
-        <Layout.Header className="aip-header">
-          <span className="aip-page-title">{current?.label ?? PRODUCT_NAME}</span>
-          <div style={{ flex: 1 }} />
-          <Space size={6} align="center">
-            <PageSearch sections={visible} onPick={(p) => navigate(p)} />
-            <ServiceStatus />
-            <HelpButton />
-            <Tooltip title={prefs.mode === "dark" ? t("浅色") : t("深色")}>
-              <Button className="aip-icon-btn" type="text" aria-label={t("切换明暗")}
-                icon={prefs.mode === "dark" ? <SunOutlined /> : <MoonOutlined />}
-                onClick={() => prefs.update({ mode: prefs.mode === "dark" ? "light" : "dark" })} />
-            </Tooltip>
-            <Dropdown menu={{ selectedKeys: [lang()], items: LANGS.map((l) => ({ key: l.value, label: l.label })),
-              onClick: (e) => e.key !== lang() && switchLang(e.key as Lang) }}>
-              <Button className="aip-icon-btn" type="text" aria-label={t("语言")} style={{ fontSize: 14, fontWeight: 600 }}>
-                {LANG_SHORT[lang()]}
-              </Button>
-            </Dropdown>
-            <Notifications onOpen={() => navigate("/approvals")} enabled={has(...SECTIONS[0].roles)} />
-            <UserMenu name={me.display_name} roles={[...new Set(me.roles.map((r) => r.role))]} clearance={me.effective_clearance}
-              onLogout={() => void logout()} />
-          </Space>
-        </Layout.Header>
-        <TabStrip
-          tabs={tabs.tabs.map((p) => SECTIONS.find((s) => s.path === p)).filter((s): s is Section => Boolean(s))}
-          active={current?.path}
-          onPick={(p) => navigate(p)}
-          onClose={(p) => {
-            const next = tabs.close(p);
-            if (next !== undefined) navigate(next ?? "/");
-          }}
-          onReload={() => current && tabs.reload(current.path)}
-        />
+        <div className="aip-chrome">
+          <Layout.Header className="aip-header">
+            <span className="aip-page-title">{current?.label ?? PRODUCT_NAME}</span>
+            <div style={{ flex: 1 }} />
+            <Space size={6} align="center">
+              <PageSearch sections={visible} onPick={(p) => navigate(p)} />
+              <ServiceStatus />
+              <HelpButton />
+              <Tooltip title={prefs.mode === "dark" ? t("浅色") : t("深色")}>
+                <Button className="aip-icon-btn" type="text" aria-label={t("切换明暗")}
+                  icon={prefs.mode === "dark" ? <SunOutlined /> : <MoonOutlined />}
+                  onClick={() => prefs.update({ mode: prefs.mode === "dark" ? "light" : "dark" })} />
+              </Tooltip>
+              <Dropdown menu={{ selectedKeys: [lang()], items: LANGS.map((l) => ({ key: l.value, label: l.label })),
+                onClick: (e) => e.key !== lang() && switchLang(e.key as Lang) }}>
+                <Button className="aip-icon-btn" type="text" aria-label={t("语言")} style={{ fontSize: 14, fontWeight: 600 }}>
+                  {LANG_SHORT[lang()]}
+                </Button>
+              </Dropdown>
+              <Notifications onOpen={() => navigate("/approvals")} enabled={has(...SECTIONS[0].roles)} />
+              <UserMenu name={me.display_name} roles={[...new Set(me.roles.map((r) => r.role))]} clearance={me.effective_clearance}
+                onLogout={() => void logout()} />
+            </Space>
+          </Layout.Header>
+          <TabStrip
+            tabs={tabs.tabs.map((p) => SECTIONS.find((s) => s.path === p)).filter((s): s is Section => Boolean(s))}
+            active={current?.path}
+            onPick={(p) => navigate(p)}
+            onClose={(p) => {
+              const next = tabs.close(p);
+              if (next !== undefined) navigate(next ?? "/");
+            }}
+            onReload={() => current && tabs.reload(current.path)}
+          />
+        </div>
         <Layout.Content className="aip-content">
           <OrgProvider>
             <Suspense fallback={<Spin style={{ display: "block", marginTop: 48 }} />}>

@@ -1,4 +1,4 @@
-import { Alert, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Table, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useState } from "react";
 import { get } from "../api";
 import { matches, PageCard, PAGINATION, Toolbar } from "../components";
@@ -14,6 +14,9 @@ interface CatalogTool {
   egress_class: string;
   data_classification: number;
   bundles: string[];
+  connector?: string | null;
+  system_key?: string | null;
+  system_host?: string | null;
 }
 
 interface CatalogBundle {
@@ -31,12 +34,48 @@ interface CatalogData {
 
 const RISK_COLOR: Record<string, string> = { read: "green", write: "orange", danger: "red" };
 
+function DescCell({ title, description }: { title?: string; description?: string }) {
+  const desc = (description || "").trim();
+  const head = (title || "").trim();
+  if (!head && !desc) return <Typography.Text type="secondary">—</Typography.Text>;
+  return (
+    <div style={{ maxWidth: 360, minWidth: 160 }}>
+      {head ? (
+        <Typography.Text ellipsis style={{ maxWidth: 360, display: "block" }}>
+          {head}
+        </Typography.Text>
+      ) : null}
+      {desc ? (
+        <Tooltip title={desc}>
+          <Typography.Text type="secondary" ellipsis style={{ maxWidth: 360, display: "block", fontSize: 12 }}>
+            {desc}
+          </Typography.Text>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
+}
+
+function SystemCell({ systemKey, host }: { systemKey?: string | null; host?: string | null }) {
+  if (!systemKey && !host) return <Typography.Text type="secondary">—</Typography.Text>;
+  return (
+    <div>
+      <div>{systemKey || "—"}</div>
+      {host ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          {host}
+        </Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
 export function CatalogPage() {
   const data = useLoad(() => get<CatalogData>("/console/catalog"), []);
   const [kw, setKw] = useState("");
   return (
     <PageCard>
-      <Toolbar placeholder={t("能力 / 套件 / 描述")} onSearch={setKw} />
+      <Toolbar placeholder={t("能力 / 套件 / 描述 / 连接器 / 系统")} onSearch={setKw} />
       {data.error && <Alert type="error" message={data.error} style={{ marginBottom: 12 }} />}
       <Tabs
         items={[
@@ -49,12 +88,13 @@ export function CatalogPage() {
                 rowKey="capability_id"
                 loading={data.loading}
                 dataSource={(data.data?.items ?? []).filter((r) =>
-                  matches(r, kw, ["capability_id", "title", "description"]),
+                  matches(r, kw, ["capability_id", "title", "description", "connector", "system_key", "system_host"]),
                 )}
                 columns={[
                   {
                     title: t("能力"),
                     dataIndex: "capability_id",
+                    width: 260,
                     render: (v: string, r) => (
                       <span>
                         <Typography.Text strong>{v}</Typography.Text>
@@ -62,7 +102,23 @@ export function CatalogPage() {
                       </span>
                     ),
                   },
-                  { title: t("标题"), dataIndex: "title" },
+                  {
+                    title: t("说明"),
+                    key: "desc",
+                    render: (_, r) => <DescCell title={r.title} description={r.description} />,
+                  },
+                  {
+                    title: t("连接器"),
+                    dataIndex: "connector",
+                    width: 140,
+                    render: (v: string | null | undefined) => v || "—",
+                  },
+                  {
+                    title: t("系统"),
+                    key: "system",
+                    width: 160,
+                    render: (_, r) => <SystemCell systemKey={r.system_key} host={r.system_host} />,
+                  },
                   {
                     title: t("风险"),
                     dataIndex: "risk_level",

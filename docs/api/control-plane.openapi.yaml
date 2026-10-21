@@ -4219,11 +4219,82 @@ components:
           type: integer
           minimum: 1
           maximum: 4
+        latest_semver:
+          type:
+          - string
+          - 'null'
+        latest_state:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        description:
+          type: string
+        risk_level:
+          type:
+          - string
+          - 'null'
+        connector:
+          type:
+          - string
+          - 'null'
+        system_key:
+          type:
+          - string
+          - 'null'
+        system_host:
+          type:
+          - string
+          - 'null'
       required:
       - type
       - name
       - owner_org_id
       - classification
+    CatalogTool:
+      type: object
+      properties:
+        capability_id:
+          type:
+          - string
+          - 'null'
+        version:
+          type:
+          - string
+          - 'null'
+        title:
+          type:
+          - string
+          - 'null'
+        description:
+          type: string
+        risk_level:
+          type: string
+        egress_class:
+          type: string
+        data_classification:
+          type:
+          - integer
+          - 'null'
+        bundles:
+          type: array
+          items:
+            type: string
+        connector:
+          type:
+          - string
+          - 'null'
+        system_key:
+          type:
+          - string
+          - 'null'
+        system_host:
+          type:
+          - string
+          - 'null'
     AssetVersion:
       type: object
       properties:
@@ -4853,7 +4924,7 @@ components:
         items:
           type: array
           items:
-            type: object
+            $ref: '#/components/schemas/CatalogTool'
         bundles:
           type: array
           items:

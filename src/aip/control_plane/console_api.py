@@ -226,50 +226,55 @@ def router() -> APIRouter:
             or actor.has("company_admin"),
             "需要平台角色",
         )
+        from aip.control_plane.registry.list_enrich import attach_system_fields, summary_from_spec
+
         async with db.tx(DbScope.system()) as conn:
             row = (
                 await conn.execute(
                     select(t.release_snapshot.c.payload).order_by(t.release_snapshot.c.seq.desc()).limit(1)
                 )
             ).first()
-        releases = list((row[0] if row else {}).get("releases") or [])
-        membership: dict[str, list[str]] = {}
-        bundles: list[dict[str, Any]] = []
-        for rel in releases:
-            if rel.get("asset_type") != "bundle" or rel.get("status") != "active":
-                continue
-            bname = (rel.get("spec") or {}).get("name") or rel.get("name")
-            tools = list((rel.get("spec") or {}).get("tools") or [])
-            bundles.append(
-                {
-                    "name": bname,
-                    "capability_id": rel.get("capability_id"),
-                    "version": rel.get("version"),
-                    "description": (rel.get("spec") or {}).get("description", ""),
-                    "tools": tools,
-                }
-            )
-            for ref in tools:
-                cap, _, _ = str(ref).partition("@")
-                if cap:
-                    membership.setdefault(cap, []).append(bname)
-        items = []
-        for rel in releases:
-            if rel.get("asset_type") != "tool" or rel.get("status") != "active":
-                continue
-            spec = rel.get("spec") or {}
-            items.append(
-                {
-                    "capability_id": rel.get("capability_id"),
-                    "version": rel.get("version"),
-                    "title": spec.get("title") or spec.get("name") or rel.get("name"),
-                    "description": spec.get("description", ""),
-                    "risk_level": spec.get("risk_level", "danger"),
-                    "egress_class": spec.get("egress_class", "none"),
-                    "data_classification": spec.get("data_classification") or rel.get("classification"),
-                    "bundles": sorted(set(membership.get(rel.get("capability_id", ""), []))),
-                }
-            )
+            releases = list((row[0] if row else {}).get("releases") or [])
+            membership: dict[str, list[str]] = {}
+            bundles: list[dict[str, Any]] = []
+            for rel in releases:
+                if rel.get("asset_type") != "bundle" or rel.get("status") != "active":
+                    continue
+                bname = (rel.get("spec") or {}).get("name") or rel.get("name")
+                tools = list((rel.get("spec") or {}).get("tools") or [])
+                bundles.append(
+                    {
+                        "name": bname,
+                        "capability_id": rel.get("capability_id"),
+                        "version": rel.get("version"),
+                        "description": (rel.get("spec") or {}).get("description", ""),
+                        "tools": tools,
+                    }
+                )
+                for ref in tools:
+                    cap, _, _ = str(ref).partition("@")
+                    if cap:
+                        membership.setdefault(cap, []).append(bname)
+            items = []
+            for rel in releases:
+                if rel.get("asset_type") != "tool" or rel.get("status") != "active":
+                    continue
+                spec = rel.get("spec") or {}
+                sm = summary_from_spec(spec)
+                items.append(
+                    {
+                        "capability_id": rel.get("capability_id"),
+                        "version": rel.get("version"),
+                        "title": sm.get("title") or rel.get("name"),
+                        "description": sm.get("description") or "",
+                        "risk_level": sm.get("risk_level") or "danger",
+                        "egress_class": spec.get("egress_class", "none"),
+                        "data_classification": spec.get("data_classification") or rel.get("classification"),
+                        "bundles": sorted(set(membership.get(rel.get("capability_id", ""), []))),
+                        "connector": sm.get("connector"),
+                    }
+                )
+            items = await attach_system_fields(conn, items)
         items.sort(key=lambda x: x["capability_id"] or "")
         return out.ConsoleCatalog(
             items=[out.CatalogTool.model_validate(i) for i in items],

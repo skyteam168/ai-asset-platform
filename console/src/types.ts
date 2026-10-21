@@ -86,6 +86,14 @@ export interface Asset {
   name: string;
   owner_org_id: string;
   classification: number;
+  latest_semver?: string | null;
+  latest_state?: string | null;
+  title?: string | null;
+  description?: string;
+  risk_level?: string | null;
+  connector?: string | null;
+  system_key?: string | null;
+  system_host?: string | null;
 }
 
 export interface VersionSummary {
