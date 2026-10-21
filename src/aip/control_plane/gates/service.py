@@ -11,7 +11,21 @@ import re
 import uuid
 from typing import Any
 
-from sqlalchemy import Boolean, Column, DateTime, MetaData, Table, Text, and_, func, select, text, update
+from sqlalchemy import (
+    ARRAY,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    MetaData,
+    Table,
+    Text,
+    and_,
+    func,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -24,6 +38,13 @@ from aip.control_plane.iam.authz import Actor
 from aip.control_plane.registry import service as registry
 from aip.control_plane.registry import tables as rt
 from aip.control_plane.testlab.runner import run_cases
+from aip.control_plane.testlab.selection_eval import (
+    EvalCase,
+    evidence_from_results,
+    parse_ref,
+    run_selection_eval,
+    validate_settings,
+)
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
@@ -32,6 +53,38 @@ from aip.libs.workflow.dsl import validate as validate_dsl
 
 md = MetaData(schema="registry")
 U = UUID(as_uuid=True)
+selection_eval_settings = Table(
+    "selection_eval_settings",
+    md,
+    Column("version_id", U, primary_key=True),
+    Column("company_id", U),
+    Column("model_profiles", ARRAY(Text)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+selection_eval_case = Table(
+    "selection_eval_case",
+    md,
+    Column("id", U, primary_key=True),
+    Column("version_id", U),
+    Column("company_id", U),
+    Column("name", Text),
+    Column("question", Text),
+    Column("expect_capability_id", Text),
+    Column("created_at", DateTime(timezone=True)),
+)
+selection_eval_run = Table(
+    "selection_eval_run",
+    md,
+    Column("id", U, primary_key=True),
+    Column("version_id", U),
+    Column("company_id", U),
+    Column("model_profile", Text),
+    Column("top1_hit_rate", Float),
+    Column("false_call_rate", Float),
+    Column("passed", Boolean),
+    Column("evidence", JSONB),
+    Column("created_at", DateTime(timezone=True)),
+)
 test_case = Table(
     "test_case",
     md,
@@ -142,6 +195,91 @@ async def add_test_case(
     return cid
 
 
+async def put_selection_eval(
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    *,
+    model_profiles: list[str],
+    cases: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """覆盖套件选择评测配置与用例（architecture.md 7.2）。"""
+    v = await registry.version_row(conn, version_id)
+    a = await registry.asset_row(conn, v["asset_id"])
+    actor.require(actor.has("asset_developer") or actor.has("platform_admin"))
+    if a["type"] != "bundle":
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "选择评测仅适用于套件（bundle）")
+    if v["state"] not in ("draft", "testing"):
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "只能在 draft/testing 维护选择评测集")
+    eval_cases = [
+        EvalCase(
+            name=str(c["name"]),
+            question=str(c["question"]),
+            expect_capability_id=c.get("expect_capability_id"),
+        )
+        for c in cases
+    ]
+    problems = validate_settings(model_profiles, eval_cases, require_min_cases=False)
+    if problems:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, problems[0])
+    # 期望 capability 须属于套件成员（null 允许）
+    member_caps = {split_ref(r)[0] for r in _bundle_refs(v["spec"])}
+    for c in eval_cases:
+        exp = c.expect_capability_id
+        if exp is not None and exp not in member_caps:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"期望 Tool {exp} 不在套件成员中")
+    await conn.execute(selection_eval_case.delete().where(selection_eval_case.c.version_id == version_id))
+    await conn.execute(selection_eval_settings.delete().where(selection_eval_settings.c.version_id == version_id))
+    await conn.execute(
+        selection_eval_settings.insert().values(
+            version_id=version_id,
+            company_id=v["company_id"],
+            model_profiles=model_profiles,
+            updated_at=utcnow(),
+        )
+    )
+    for c in eval_cases:
+        await conn.execute(
+            selection_eval_case.insert().values(
+                id=new_id(),
+                version_id=version_id,
+                company_id=v["company_id"],
+                name=c.name,
+                question=c.question,
+                expect_capability_id=c.expect_capability_id,
+                created_at=utcnow(),
+            )
+        )
+    return await get_selection_eval(conn, version_id)
+
+
+async def get_selection_eval(conn: AsyncConnection, version_id: uuid.UUID) -> dict[str, Any]:
+    settings = (
+        await conn.execute(
+            select(selection_eval_settings).where(selection_eval_settings.c.version_id == version_id)
+        )
+    ).mappings().first()
+    rows = (
+        await conn.execute(
+            select(selection_eval_case)
+            .where(selection_eval_case.c.version_id == version_id)
+            .order_by(selection_eval_case.c.name)
+        )
+    ).mappings().all()
+    return {
+        "version_id": str(version_id),
+        "model_profiles": list(settings["model_profiles"]) if settings else [],
+        "cases": [
+            {
+                "name": r["name"],
+                "question": r["question"],
+                "expect_capability_id": r["expect_capability_id"],
+            }
+            for r in rows
+        ],
+    }
+
+
 async def set_acceptance(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, template: dict[str, Any]) -> None:
     """验收单模板在 Draft 阶段写入：目标场景、准确率、完成率、耗时、人工介入率（architecture.md 7.1）。"""
     v = await registry.version_row(conn, version_id)
@@ -236,7 +374,13 @@ def _fast_track(spec: dict[str, Any], classification: int) -> bool:
 
 
 async def run_lab(
-    conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, *, secrets: SecretStore, resolver: Any = None
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    *,
+    secrets: SecretStore,
+    resolver: Any = None,
+    llm: Any = None,
 ) -> dict[str, Any]:
     """G1–G3 后跑 G4 影响回归；全部通过则 testing → in_review 并发起 G5 / G6，失败退回 draft。"""
     v = await registry.version_row(conn, version_id)
@@ -248,7 +392,7 @@ async def run_lab(
         dict(r) for r in (await conn.execute(select(test_case).where(test_case.c.version_id == version_id))).mappings()
     ]
     if a["type"] in ("workflow", "bundle", "skill"):
-        return await _composition_lab(conn, actor, v, a)
+        return await _composition_lab(conn, actor, v, a, llm=llm)
     iam = await iam_snapshot.build_payload(conn)
     conns = await conn_service.snapshot_part(conn)
     report = await run_cases(
@@ -391,10 +535,15 @@ async def _tool_versions(conn: AsyncConnection, refs: list[str]) -> dict[tuple[s
 
 
 async def _composition_lab(
-    conn: AsyncConnection, actor: Actor, v: dict[str, Any], a: dict[str, Any]
+    conn: AsyncConnection,
+    actor: Actor,
+    v: dict[str, Any],
+    a: dict[str, Any],
+    *,
+    llm: Any = None,
 ) -> dict[str, Any]:
     """Workflow / 套件的 G1–G3：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
-    Workflow 在沙箱中的整体回放需要隔离的运行表，推迟到 M6e。"""
+    套件 G2 额外跑工具选择评测（architecture.md 7.2）。"""
     if a["type"] == "workflow":
         refs = _workflow_refs(v["spec"])
     else:
@@ -402,15 +551,26 @@ async def _composition_lab(
     tools = await _tool_versions(conn, refs)
     states = {r: (tools.get(split_ref(r)) or {}).get("state", "missing") for r in refs}
     # Skill 可以不引用 Tool；有引用时须可发布
-    ok = all(s in registry.RELEASABLE for s in states.values()) if refs else True
+    refs_ok = all(s in registry.RELEASABLE for s in states.values()) if refs else True
     risk = composition_risk_of([t["spec"] for t in tools.values()]) if a["type"] == "bundle" else None
     evidence: dict[str, Any] = {"mode": "composition", "tool_versions": states}
     if risk:
         evidence["composition_risk"] = risk
-    for gate in ("G1", "G2", "G3"):
-        await _record(conn, actor, v, gate, ok, evidence)
-    if not ok:
+    await _record(conn, actor, v, "G1", refs_ok, evidence)
+    g2_ok = refs_ok
+    if a["type"] == "bundle":
+        se = await _bundle_selection_g2(conn, actor, v, tools, llm=llm)
+        evidence["selection_eval"] = se["evidence"]
+        g2_ok = refs_ok and se["passed"]
+        await _record(conn, actor, v, "G2", g2_ok, evidence)
+    else:
+        await _record(conn, actor, v, "G2", refs_ok, evidence)
+    await _record(conn, actor, v, "G3", refs_ok, evidence)
+    if not refs_ok:
         await registry.transition(conn, actor, v["id"], "draft", "referenced tools not released")
+        return {"passed": False, **evidence}
+    if not g2_ok:
+        await registry.transition(conn, actor, v["id"], "draft", "selection eval failed")
         return {"passed": False, **evidence}
     g4 = await run_g4(conn, actor, v)  # 组合资产无上层时 impacted=[]，G4 通过
     if not g4["passed"]:
@@ -418,6 +578,107 @@ async def _composition_lab(
         return {"passed": False, **evidence, **g4}
     await registry.transition(conn, actor, v["id"], "in_review", "composition gates + G4 passed")
     return {"passed": True, **(await _open_reviews(conn, v, a)), **evidence, **g4}
+
+
+async def _bundle_selection_g2(
+    conn: AsyncConnection,
+    _actor: Actor,
+    v: dict[str, Any],
+    tools: dict[tuple[str, str], dict[str, Any]],
+    *,
+    llm: Any = None,
+) -> dict[str, Any]:
+    cfg = await get_selection_eval(conn, v["id"])
+    model_profiles = list(cfg["model_profiles"])
+    cases = [
+        EvalCase(
+            name=c["name"],
+            question=c["question"],
+            expect_capability_id=c["expect_capability_id"],
+        )
+        for c in cfg["cases"]
+    ]
+    candidates = [t["spec"] for t in tools.values()]
+    if llm is None:
+        try:
+            llm = await _default_selection_llm(conn)
+        except PlatformError as e:
+            ev = evidence_from_results([], [e.detail])
+            return {"passed": False, "evidence": ev}
+    passed, results, problems = await run_selection_eval(
+        llm,
+        company_id=v["company_id"],
+        model_profiles=model_profiles,
+        cases=cases,
+        candidates=candidates,
+    )
+    ev = evidence_from_results(results, problems)
+    for r in results:
+        await conn.execute(
+            selection_eval_run.insert().values(
+                id=new_id(),
+                version_id=v["id"],
+                company_id=v["company_id"],
+                model_profile=r.model_profile,
+                top1_hit_rate=r.top1_hit_rate,
+                false_call_rate=r.false_call_rate,
+                passed=r.passed,
+                evidence={
+                    "reason": r.reason,
+                    "outcomes": [
+                        {
+                            "name": o.name,
+                            "expect": o.expect,
+                            "selected": o.selected,
+                            "top1_hit": o.top1_hit,
+                            "false_call": o.false_call,
+                            "error": o.error,
+                        }
+                        for o in r.outcomes
+                    ],
+                },
+                created_at=utcnow(),
+            )
+        )
+    return {"passed": passed and not problems, "evidence": ev}
+
+
+async def _default_selection_llm(conn: AsyncConnection) -> Any:
+    """控制面默认 Gateway：Pg 白名单/预算 + 从 Registry 解析 model_profile。"""
+    from aip.data_plane.llm.allowlist import PgAllowlistStore
+    from aip.data_plane.llm.budget import PgBudgetStore
+    from aip.data_plane.llm.gateway import LlmGateway
+    from aip.libs.common.config import get_settings as _gs
+
+    engine = conn.engine
+    settings = _gs()
+
+    async def resolve(ref: str, _env: str) -> dict[str, Any]:
+        return await load_model_profile_spec(conn, ref)
+
+    return LlmGateway(
+        allowlist=PgAllowlistStore(engine),
+        budget=PgBudgetStore(engine),
+        resolve_profile=resolve,
+        env=settings.env if settings.env != "dev" else "test",
+        api_key=settings.llm_api_key or None,
+    )
+
+
+async def load_model_profile_spec(conn: AsyncConnection, ref: str) -> dict[str, Any]:
+    name, ver = parse_ref(ref)
+    row = (
+        await conn.execute(
+            select(rt.asset_version.c.spec)
+            .select_from(rt.asset_version.join(rt.asset, rt.asset.c.id == rt.asset_version.c.asset_id))
+            .where(rt.asset.c.type == "model_profile")
+            .where(rt.asset.c.name == name)
+            .where(rt.asset_version.c.semver == ver)
+        )
+    ).first()
+    if row is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, f"model_profile {ref} 不存在")
+    return dict(row[0])
 
 
 async def decide(

@@ -68,10 +68,18 @@ async def test_bundle_composition_requires_g6_override(db: Database, seeded: See
             conn, p.dev, type_="bundle", name="bundle.ops.shift_pack", owner_org_id=seeded.hq, classification=3
         )
         vid = await registry.create_version(conn, p.dev, aid, "1.0.0", _bundle_spec([ref_l3, ref_ext]))
+        # H7：套件 G2 需 ≥20 条选择评测；此处用脚本 LLM 恒返回期望 Tool
+        from test_h7_selection_eval import ScriptedLlm, _cases
+
+        se_cases = _cases(READ_L3, n=20)
+        await gates.put_selection_eval(
+            conn, p.dev, vid, model_profiles=["mp_select@1.0.0"], cases=se_cases
+        )
         await gates.set_acceptance(conn, p.dev, vid, {"scenarios": ["班次套件"]})
         g0 = await gates.submit(conn, p.dev, vid)
         assert g0["passed"] is True
-        lab = await gates.run_lab(conn, p.dev, vid, secrets=SECRETS)
+        llm = ScriptedLlm([c["expect_capability_id"] for c in se_cases])
+        lab = await gates.run_lab(conn, p.dev, vid, secrets=SECRETS, llm=llm)
         assert lab["passed"] is True
         g6 = uuid.UUID(lab["g6_approval"])
         g5 = uuid.UUID(lab["g5_approval"])

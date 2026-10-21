@@ -538,6 +538,34 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["company_id", "usage_date", "tokens_used", "daily_tokens"],
             ),
+            "SelectionEvalCase": o(
+                {
+                    "name": S,
+                    "question": S,
+                    "expect_capability_id": SN,
+                },
+                ["name", "question"],
+            ),
+            "SelectionEvalPut": o(
+                {
+                    "model_profiles": {
+                        "type": "array",
+                        "items": S,
+                        "minItems": 1,
+                        "maxItems": 2,
+                    },
+                    "cases": {"type": "array", "items": ref("SelectionEvalCase")},
+                },
+                ["model_profiles", "cases"],
+            ),
+            "SelectionEval": o(
+                {
+                    "version_id": ID,
+                    "model_profiles": {"type": "array", "items": S},
+                    "cases": {"type": "array", "items": ref("SelectionEvalCase")},
+                },
+                ["version_id", "model_profiles", "cases"],
+            ),
         }
     )
     A = "/api/v1"
@@ -690,6 +718,23 @@ def control_plane() -> dict[str, Any]:
                 code="201",
                 params=["Id"],
             )
+        },
+        f"{A}/versions/{{id}}/selection-eval": {
+            "get": op(
+                "getSelectionEval",
+                "release",
+                "读取套件工具选择评测集与模型配置",
+                res=ref("SelectionEval"),
+                params=["Id"],
+            ),
+            "put": op(
+                "putSelectionEval",
+                "release",
+                "覆盖套件选择评测配置与用例（draft/testing 的 bundle）",
+                req=ref("SelectionEvalPut"),
+                res=ref("SelectionEval"),
+                params=["Id"],
+            ),
         },
         f"{A}/versions/{{id}}/acceptance": {
             "put": op(

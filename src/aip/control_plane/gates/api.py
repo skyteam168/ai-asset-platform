@@ -30,6 +30,17 @@ class CaseIn(BaseModel):
     critical: bool = True
 
 
+class SelectionEvalCaseIn(BaseModel):
+    name: str = Field(min_length=1, max_length=128)
+    question: str = Field(min_length=1, max_length=4000)
+    expect_capability_id: str | None = None
+
+
+class SelectionEvalIn(BaseModel):
+    model_profiles: list[str] = Field(min_length=1, max_length=2)
+    cases: list[SelectionEvalCaseIn] = Field(default_factory=list)
+
+
 class DecisionIn(BaseModel):
     decision: Literal["approve", "reject"]
     comment: str = ""
@@ -122,6 +133,25 @@ def router() -> APIRouter:
             )
         return {"id": str(cid), **body.model_dump()}
 
+    @r.put(f"{V}/versions/{{id}}/selection-eval", tags=["release"], operation_id="putSelectionEval")
+    async def put_selection_eval(id: uuid.UUID, body: SelectionEvalIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return await gates.put_selection_eval(
+                conn,
+                actor,
+                id,
+                model_profiles=body.model_profiles,
+                cases=[c.model_dump() for c in body.cases],
+            )
+
+    @r.get(f"{V}/versions/{{id}}/selection-eval", tags=["release"], operation_id="getSelectionEval")
+    async def get_selection_eval(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        from aip.control_plane.registry import service as registry
+
+        async with db.tx(actor.db_scope()) as conn:
+            await registry.version_row(conn, id)
+            return await gates.get_selection_eval(conn, id)
+
     @r.put(f"{V}/versions/{{id}}/acceptance", tags=["release"], operation_id="setAcceptance")
     async def set_acceptance(id: uuid.UUID, template: dict[str, Any], actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
@@ -135,8 +165,9 @@ def router() -> APIRouter:
 
     @r.post(f"{V}/versions/{{id}}/run-tests", tags=["release"], operation_id="runTests")
     async def run_tests(id: uuid.UUID, request: Request, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        llm = getattr(request.app.state, "selection_llm", None)
         async with db.tx(actor.db_scope()) as conn:
-            return await gates.run_lab(conn, actor, id, secrets=_secrets(request))
+            return await gates.run_lab(conn, actor, id, secrets=_secrets(request), llm=llm)
 
     @r.get(f"{V}/versions/{{id}}/gates", tags=["release"], operation_id="gateHistory")
     async def history(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:

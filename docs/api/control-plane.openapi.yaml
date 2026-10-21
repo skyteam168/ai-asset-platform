@@ -704,6 +704,45 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/versions/{id}/selection-eval:
+    get:
+      operationId: getSelectionEval
+      tags:
+      - release
+      summary: 读取套件工具选择评测集与模型配置
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelectionEval'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      operationId: putSelectionEval
+      tags:
+      - release
+      summary: 覆盖套件选择评测配置与用例（draft/testing 的 bundle）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SelectionEval'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelectionEvalPut'
   /api/v1/versions/{id}/acceptance:
     put:
       operationId: setAcceptance
@@ -3314,3 +3353,51 @@ components:
       - usage_date
       - tokens_used
       - daily_tokens
+    SelectionEvalCase:
+      type: object
+      properties:
+        name:
+          type: string
+        question:
+          type: string
+        expect_capability_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - name
+      - question
+    SelectionEvalPut:
+      type: object
+      properties:
+        model_profiles:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          maxItems: 2
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionEvalCase'
+      required:
+      - model_profiles
+      - cases
+    SelectionEval:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        model_profiles:
+          type: array
+          items:
+            type: string
+        cases:
+          type: array
+          items:
+            $ref: '#/components/schemas/SelectionEvalCase'
+      required:
+      - version_id
+      - model_profiles
+      - cases

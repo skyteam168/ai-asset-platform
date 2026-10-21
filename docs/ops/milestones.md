@@ -684,6 +684,25 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H7 工具选择评测（套件 G2）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 20 条 + 恒返回期望 → top1=1.0 / G2 过 | 通过 | `test_h7_selection_eval.py::test_bundle_g2_pass_with_scripted_llm` |
+| 期望 null 却选出 Tool → 误调用升高失败 | 通过 | `test_runner_false_call_when_expect_null` |
+| cases &lt; 20 → G2 失败 | 通过 | `test_bundle_g2_fail_too_few_cases` |
+| 白名单外 model_profile → G2 失败 | 通过 | `test_gateway_allowlist_denies_in_eval` |
+| GET/PUT selection-eval | 通过 | `test_selection_eval_http` |
+| OpenAPI 路由登记 | 通过 | `getSelectionEval` / `putSelectionEval` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `testlab/selection_eval.py`；`gates` CRUD + bundle `_composition_lab` G2 |
+| 表 | `registry.selection_eval_settings` / `case` / `run`（RLS） |
+| 阈值 | ≥20 条；1–2 模型；top-1≥90%；误调用≤5% |
+| API | `GET/PUT /api/v1/versions/{id}/selection-eval`；`run-tests` 内跑评测 |
+| 不在本片 | 控制台评测页；promptfoo；Skill 选择评测；Presidio |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

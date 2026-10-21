@@ -97,6 +97,9 @@ async def truncate() -> None:
             "llm.company_model_allowlist",
             "llm.company_token_budget",
             "llm.company_token_usage",
+            "registry.selection_eval_run",
+            "registry.selection_eval_case",
+            "registry.selection_eval_settings",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:
