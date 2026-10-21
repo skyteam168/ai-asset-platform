@@ -403,6 +403,8 @@ def control_plane() -> dict[str, Any]:
                     "signature": SN,
                     "content_sha256": SN,
                     "files": {"type": "array", "items": S},
+                    "script_allowlist": {"type": "array", "items": {"type": "object"}},
+                    "script_files": {"type": "array", "items": S},
                 },
                 ["version_id", "name"],
             ),
@@ -414,6 +416,8 @@ def control_plane() -> dict[str, Any]:
                     "signature": SN,
                     "content_sha256": SN,
                     "files": {"type": "array", "items": S},
+                    "script_allowlist": {"type": "array", "items": {"type": "object"}},
+                    "script_files": {"type": "array", "items": S},
                     "warnings": {"type": "array", "items": S, "description": "G0 安全扫描预检（正式判定在 G0）"},
                 },
                 ["version_id", "name"],
@@ -494,8 +498,24 @@ def control_plane() -> dict[str, Any]:
                     "tools": {"type": "array", "items": S},
                     "asset_id": SN,
                     "version_id": SN,
+                    "git_url": SN,
                 },
                 ["name", "version"],
+            ),
+            "SkillGitPublished": o(
+                {
+                    "name": S,
+                    "version": S,
+                    "git_url": S,
+                    "bare_path": SN,
+                    "tag": SN,
+                    "content_sha256": SN,
+                },
+                ["name", "version", "git_url"],
+            ),
+            "SkillGitUrl": o(
+                {"name": S, "version": S, "git_url": S, "tag": SN},
+                ["name", "version", "git_url"],
             ),
             "SkillManifest": o(
                 {
@@ -517,6 +537,24 @@ def control_plane() -> dict[str, Any]:
                     "ok": B,
                 },
                 ["name", "version", "ok"],
+            ),
+            "SkillScriptAllowlistItem": o(
+                {
+                    "id": ID,
+                    "version_id": ID,
+                    "path_glob": S,
+                    "status": {"enum": ["pending", "approved", "rejected"]},
+                    "requested_by": SN,
+                    "approved_by": SN,
+                    "reason": SN,
+                    "expires_at": SN,
+                    "created_at": SN,
+                },
+                ["id", "version_id", "path_glob", "status"],
+            ),
+            "SkillScriptAllowlistPage": o(
+                {"items": {"type": "array", "items": ref("SkillScriptAllowlistItem")}},
+                ["items"],
             ),
             "TodoDecision": o(
                 {"decision": {"enum": ["approve", "reject"]}, "comment": S, "data": {"type": "object"}}, ["decision"]
@@ -1597,6 +1635,45 @@ def control_plane() -> dict[str, Any]:
                 params=["Id"],
             ),
         },
+        f"{A}/versions/{{id}}/skill-script-allowlist": {
+            "get": op(
+                "listSkillScriptAllowlist",
+                "skill",
+                "列出版本的脚本白名单申请",
+                res=ref("SkillScriptAllowlistPage"),
+                params=["Id"],
+            ),
+            "post": op(
+                "requestSkillScriptAllowlist",
+                "skill",
+                "申请脚本路径白名单（draft；须数据 Owner 审批）",
+                req=o(
+                    {
+                        "path_globs": {"type": "array", "items": S, "minItems": 1},
+                        "reason": S,
+                        "expires_at": {"type": "string", "format": "date-time"},
+                    },
+                    ["path_globs"],
+                ),
+                res=ref("SkillScriptAllowlistPage"),
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/skill-script-allowlist/{{entry_id}}/decide": {
+            "post": {
+                **op(
+                    "decideSkillScriptAllowlist",
+                    "skill",
+                    "审批脚本白名单（数据 Owner）",
+                    req=o({"approve": {"type": "boolean"}, "comment": S}, ["approve"]),
+                    res=ref("SkillScriptAllowlistItem"),
+                ),
+                "parameters": [
+                    {"name": "entry_id", "in": "path", "required": True, "schema": S},
+                ],
+            }
+        },
         f"{A}/skills": {
             "get": {
                 **op("listSkills", "skill", "Skill 目录（含撤回标记）", res=page("SkillCatalogItem")),
@@ -1641,6 +1718,34 @@ def control_plane() -> dict[str, Any]:
                 ),
                 res=ref("SkillInstallCheck"),
             )
+        },
+        f"{A}/skills/{{name}}/versions/{{version}}/publish-git": {
+            "post": {
+                **op(
+                    "publishSkillGit",
+                    "skill",
+                    "将 Active/Canary Skill 导出为平台侧 bare Git 镜像（与 zip 哈希一致）",
+                    res=ref("SkillGitPublished"),
+                ),
+                "parameters": [
+                    {"name": "name", "in": "path", "required": True, "schema": S},
+                    {"name": "version", "in": "path", "required": True, "schema": S},
+                ],
+            }
+        },
+        f"{A}/skills/{{name}}/versions/{{version}}/git-url": {
+            "get": {
+                **op(
+                    "getSkillGitUrl",
+                    "skill",
+                    "获取 Skill Git clone URL（须已 publish-git）",
+                    res=ref("SkillGitUrl"),
+                ),
+                "parameters": [
+                    {"name": "name", "in": "path", "required": True, "schema": S},
+                    {"name": "version", "in": "path", "required": True, "schema": S},
+                ],
+            }
         },
         f"{A}/importer/openapi": {
             "post": op(

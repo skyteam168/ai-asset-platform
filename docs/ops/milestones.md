@@ -1011,3 +1011,118 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 入口 | 顶栏「帮助」→ HelpDrawer（宽抽屉 + 左菜单 + 右步骤卡片） |
 | 不在本片 | 页内引导动画 / 「播放该页引导」 |
 
+### H35 Skill 包 SeaweedFS 存包 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 开启对象存储后 attach 写 object_key | 通过 | `test_h35_skill_storage.py::test_attach_writes_object_and_download_prefers_s3` |
+| 仅对象可读时 download 成功 | 通过 | 同上（清空 bytea） |
+| 关闭时回落 bytea | 通过 | `test_download_falls_back_to_bytea` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 迁移 | `0024` 增加 `skill_package.object_key` |
+| 模块 | `skill/storage.py`；`read_package_bytes` 双读 |
+| 配置 | `AIP_SKILL_OBJECT_STORAGE` / `AIP_SKILL_BUCKET` |
+
+### H34 Skill Git 分发渠道 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| bare 镜像 tag 与 zip 清单一致 | 通过 | `test_h34_skill_git.py` |
+| publish-git / git-url | 通过 | 同测服务层 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `skill/git_export.py`；`POST .../publish-git`；`GET .../git-url` |
+| 配置 | `AIP_SKILL_GIT_ROOT` / `AIP_SKILL_GIT_PUBLIC_BASE` |
+| 约束 | 平台侧 bare repo；不引入 GitHub App |
+
+### H31 脚本 Skill 白名单 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 无白名单 + `.py` → 拒 | 通过 | `test_h31_script_allowlist.py::test_script_rejected_without_allowlist` |
+| 审批后同包可 attach | 通过 | `test_script_allowed_after_approval` |
+| 路径不在白名单 → 拒 | 通过 | `test_path_outside_allowlist_still_rejected` |
+| 过期白名单 → 拒 | 通过 | `test_expired_allowlist_rejected` |
+| G0 证据含 script_allowlist | 通过 | `test_g0_records_script_allowlist_evidence` |
+| 申请 / 审批 HTTP | 通过 | `test_script_allowlist_http` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 表 | `registry.skill_script_allowlist`（RLS，迁移 0023） |
+| API | `POST/GET .../skill-script-allowlist`；`POST .../decide`（data_owner） |
+| 入库 | `unpack_zip(allowed_globs=…)`；在线编辑器仍硬拒脚本 |
+| 不在本片 | Git；SeaweedFS（H34/H35） |
+
+### H33 corp-skill --target 适配表 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 预设 cursor/claude/generic 解析到固定目录 | 通过 | `test_h33_skill_targets.py` |
+| 任意路径 expanduser | 通过 | 同测 |
+
+| 部分 | 内容 |
+| --- | --- |
+| CLI | `resolve_target` / `TARGET_PRESETS` |
+| 文档 | `docs/specs/skill-targets.md` |
+
+### H32 SDK SkillRegistryClient — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| list / manifest / download / install-check | 通过 | `test_h32_sdk_skills.py` |
+| TypeScript `SkillRegistryClient` 导出 | 通过 | `sdk/typescript` typecheck |
+
+| 部分 | 内容 |
+| --- | --- |
+| Python | `aip.sdk.skills.SkillRegistryClient`（控制面 base_url + session Bearer） |
+| TS | `sdk/typescript/src/skills.ts` |
+| 不在本片 | 脚本白名单；Git；SeaweedFS；`--target`（H31/H33–H35） |
+
+### H30 Skill 指导效果评测（G2）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Skill + Tool 引用 + 20 条用例 + 脚本 LLM → G2 通过 | 通过 | `test_h30_skill_eval.py::test_skill_g2_pass_with_scripted_llm` |
+| 有 Tool 引用但无评测集 → G2 失败 | 通过 | `test_skill_g2_fail_without_eval_when_tools_locked` |
+| prompt 注入 SKILL.md 正文 | 通过 | `test_build_prompt_includes_skill_guidance` |
+| 控制台 Skill 版本「指导效果评测」页签 | 通过 | Assets.tsx；i18n |
+
+| 部分 | 内容 |
+| --- | --- |
+| 复用 | `selection_eval_*` 表与 `PUT/GET .../selection-eval`（现允许 skill） |
+| G2 | `_composition_lab`：skill 且 lock 非空时跑评测并注入 guidance |
+| 不在本片 | 脚本白名单；Git；SeaweedFS；SDK（H31–H35） |
+
+### H29 Skill G0 接入 skills-ref validate — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 合法连字符 name 的包 G0 通过 | 通过 | `test_h29_skills_ref.py::test_g0_runs_skills_ref` |
+| 下划线 name 过平台挂载但 G0 因 skills-ref 失败 | 通过 | 同测后半；`test_validate_skill_files_rejects_invalid_name` |
+| 未安装 skills-ref 时明确报错 | 通过 | `skills_ref.validate_skill_files` ImportError 分支 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `skill/skills_ref.py`；`gates.service.submit` skill 分支 |
+| 依赖 | `skills-ref>=0.1.1`（dev + optional-extra `skills`） |
+| 文档 | `docs/specs/skill-package.md`；计划 `docs/superpowers/plans/2026-10-21-skill-gaps.md` |
+| 不在本片 | Skill 评测 / 脚本白名单 / Git / SeaweedFS / SDK（H30–H35） |
+
+### H28 Nike Postman 全链路演示脚本 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 3 个只读导入 Tool 经 G0–G8 到 Active | 通过 | `tools/activate_nike_path.py`（Mock Connector `nike_demo`） |
+| demo-agent Grant 后 REST invoke 成功 | 通过 | `.aip-data/nike-path.json` status=succeeded |
+| 同能力 MCP tools/call HTTP 200 | 通过 | 同上 |
+| 步骤说明 | 文档 | `docs/ops/nike-e2e-path.md`；`python tools/dev.py activate-nike` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 范围 | 运营/演示路径，不改架构；真机 HTTP 另走传输例外审批 |
+| 能力 | `nike.sample.app_13` / `pc_12` / `app_8` |
+| 不在本片 | 其余 46 个草稿批量上架；写类 Tool；打真机 10.10.131.188 |
+

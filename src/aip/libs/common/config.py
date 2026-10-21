@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     otel_endpoint: str = ""
     # LLM Gateway：上游 API Key（可选；本地 / 内网模型可为空）
     llm_api_key: str = ""
+    # Skill Git bare 镜像根目录（空=禁用 H34）；clone URL 前缀（空则返回本地 bare 路径）
+    skill_git_root: str = ""
+    skill_git_public_base: str = ""
+    # Skill 包对象存储（H35）：双写 SeaweedFS + bytea；下载 object 优先
+    skill_bucket: str = "aip-skills"
+    skill_object_storage: bool = False
 
     @model_validator(mode="after")
     def _no_dev_secrets_outside_dev(self) -> Settings:

@@ -16,6 +16,8 @@ class SkillPackageUploaded(BaseModel):
     signature: str | None = None
     content_sha256: str | None = None
     files: list[str] = Field(default_factory=list)
+    script_allowlist: list[dict[str, Any]] = Field(default_factory=list)
+    script_files: list[str] = Field(default_factory=list)
 
 
 class SkillSourceSaved(SkillPackageUploaded):
@@ -65,6 +67,27 @@ class SkillCatalogItem(BaseModel):
     tools: list[str] = Field(default_factory=list)
     asset_id: str | None = None
     version_id: str | None = None
+    git_url: str | None = None
+
+
+class SkillGitPublished(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    version: str
+    git_url: str
+    bare_path: str | None = None
+    tag: str | None = None
+    content_sha256: str | None = None
+
+
+class SkillGitUrl(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    version: str
+    git_url: str
+    tag: str | None = None
 
 
 class SkillManifest(BaseModel):
@@ -87,3 +110,21 @@ class SkillInstallCheck(BaseModel):
     retracted: bool = False
     missing_grants: list[str] = Field(default_factory=list)
     ok: bool
+
+
+class SkillScriptAllowlistItem(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    version_id: str
+    path_glob: str
+    status: str
+    requested_by: str | None = None
+    approved_by: str | None = None
+    reason: str | None = None
+    expires_at: str | None = None
+    created_at: str | None = None
+
+
+class SkillScriptAllowlistPage(BaseModel):
+    items: list[SkillScriptAllowlistItem] = Field(default_factory=list)

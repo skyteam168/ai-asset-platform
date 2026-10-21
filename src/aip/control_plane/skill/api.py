@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, File, Query, UploadFile
@@ -25,6 +26,17 @@ class InstallCheckIn(BaseModel):
     name: str
     version: str
     env: str = Field(default="test", pattern="^(test|staging|prod)$")
+
+
+class ScriptAllowlistIn(BaseModel):
+    path_globs: list[str] = Field(min_length=1, max_length=20)
+    reason: str | None = Field(default=None, max_length=2000)
+    expires_at: datetime | None = None
+
+
+class ScriptAllowlistDecideIn(BaseModel):
+    approve: bool
+    comment: str = Field(default="", max_length=2000)
 
 
 class SkillTextFileIn(BaseModel):
@@ -92,6 +104,54 @@ def router() -> APIRouter:
                 await skill.attach_package(conn, actor, id, raw, key=platform_key())
             )
 
+    @r.get(
+        f"{V}/versions/{{id}}/skill-script-allowlist",
+        tags=["skill"],
+        operation_id="listSkillScriptAllowlist",
+        response_model=out.SkillScriptAllowlistPage,
+    )
+    async def list_allowlist(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.SkillScriptAllowlistPage:
+        async with db.tx(actor.db_scope()) as conn:
+            items = await skill.list_script_allowlist(conn, id)
+        return out.SkillScriptAllowlistPage(items=[out.SkillScriptAllowlistItem.model_validate(x) for x in items])
+
+    @r.post(
+        f"{V}/versions/{{id}}/skill-script-allowlist",
+        tags=["skill"],
+        operation_id="requestSkillScriptAllowlist",
+        status_code=201,
+        response_model=out.SkillScriptAllowlistPage,
+    )
+    async def request_allowlist(
+        id: uuid.UUID, body: ScriptAllowlistIn, actor: ActorDep, db: DbDep
+    ) -> out.SkillScriptAllowlistPage:
+        async with db.tx(actor.db_scope()) as conn:
+            items = await skill.request_script_allowlist(
+                conn,
+                actor,
+                id,
+                path_globs=body.path_globs,
+                reason=body.reason,
+                expires_at=body.expires_at,
+            )
+        return out.SkillScriptAllowlistPage(items=[out.SkillScriptAllowlistItem.model_validate(x) for x in items])
+
+    @r.post(
+        f"{V}/skill-script-allowlist/{{entry_id}}/decide",
+        tags=["skill"],
+        operation_id="decideSkillScriptAllowlist",
+        response_model=out.SkillScriptAllowlistItem,
+    )
+    async def decide_allowlist(
+        entry_id: uuid.UUID, body: ScriptAllowlistDecideIn, actor: ActorDep, db: DbDep
+    ) -> out.SkillScriptAllowlistItem:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.SkillScriptAllowlistItem.model_validate(
+                await skill.decide_script_allowlist(
+                    conn, actor, entry_id, approve=body.approve, comment=body.comment
+                )
+            )
+
     @r.get(f"{V}/skills", tags=["skill"], operation_id="listSkills", response_model=Page[out.SkillCatalogItem])
     async def list_skills(
         actor: ActorDep,
@@ -156,5 +216,27 @@ def router() -> APIRouter:
             missing_grants=missing,
             ok=not missing and not retracted,
         )
+
+    @r.post(
+        f"{V}/skills/{{name}}/versions/{{version}}/publish-git",
+        tags=["skill"],
+        operation_id="publishSkillGit",
+        response_model=out.SkillGitPublished,
+    )
+    async def publish_git(name: str, version: str, actor: ActorDep, db: DbDep) -> out.SkillGitPublished:
+        async with db.tx(actor.db_scope()) as conn:
+            _, ver = await skill.resolve_skill(conn, name, version)
+            return out.SkillGitPublished.model_validate(await skill.publish_git(conn, actor, ver["id"]))
+
+    @r.get(
+        f"{V}/skills/{{name}}/versions/{{version}}/git-url",
+        tags=["skill"],
+        operation_id="getSkillGitUrl",
+        response_model=out.SkillGitUrl,
+    )
+    async def git_url(name: str, version: str, actor: ActorDep, db: DbDep) -> out.SkillGitUrl:
+        async with db.tx(actor.db_scope()) as conn:
+            _, ver = await skill.resolve_skill(conn, name, version)
+            return out.SkillGitUrl.model_validate(await skill.get_git_url(conn, ver["id"]))
 
     return r

@@ -176,3 +176,13 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **横向（当前下一步）**：zhparser 镜像（可选）；压测巩固。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
+
+## 8. Nike 导入 → Active → Grant → MCP（演示）
+
+见 [nike-e2e-path.md](nike-e2e-path.md)。本地一条命令（需已 serve、已导入 Collection、已 seed-demo）：
+
+```bash
+.venv/Scripts/python tools/dev.py activate-nike
+```
+
+产物：`.aip-data/nike-path.json`。

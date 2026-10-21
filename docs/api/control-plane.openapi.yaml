@@ -1945,6 +1945,92 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SkillSourceIn'
+  /api/v1/versions/{id}/skill-script-allowlist:
+    get:
+      operationId: listSkillScriptAllowlist
+      tags:
+      - skill
+      summary: 列出版本的脚本白名单申请
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillScriptAllowlistPage'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      operationId: requestSkillScriptAllowlist
+      tags:
+      - skill
+      summary: 申请脚本路径白名单（draft；须数据 Owner 审批）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillScriptAllowlistPage'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                path_globs:
+                  type: array
+                  items:
+                    type: string
+                  minItems: 1
+                reason:
+                  type: string
+                expires_at:
+                  type: string
+                  format: date-time
+              required:
+              - path_globs
+  /api/v1/skill-script-allowlist/{entry_id}/decide:
+    post:
+      operationId: decideSkillScriptAllowlist
+      tags:
+      - skill
+      summary: 审批脚本白名单（数据 Owner）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillScriptAllowlistItem'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                approve:
+                  type: boolean
+                comment:
+                  type: string
+              required:
+              - approve
+      parameters:
+      - name: entry_id
+        in: path
+        required: true
+        schema:
+          type: string
   /api/v1/skills:
     get:
       operationId: listSkills
@@ -2079,6 +2165,58 @@ paths:
               - consumer_id
               - name
               - version
+  /api/v1/skills/{name}/versions/{version}/publish-git:
+    post:
+      operationId: publishSkillGit
+      tags:
+      - skill
+      summary: 将 Active/Canary Skill 导出为平台侧 bare Git 镜像（与 zip 哈希一致）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillGitPublished'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/skills/{name}/versions/{version}/git-url:
+    get:
+      operationId: getSkillGitUrl
+      tags:
+      - skill
+      summary: 获取 Skill Git clone URL（须已 publish-git）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillGitUrl'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: version
+        in: path
+        required: true
+        schema:
+          type: string
   /api/v1/importer/openapi:
     post:
       operationId: importOpenApi
@@ -3333,6 +3471,14 @@ components:
           type: array
           items:
             type: string
+        script_allowlist:
+          type: array
+          items:
+            type: object
+        script_files:
+          type: array
+          items:
+            type: string
       required:
       - version_id
       - name
@@ -3355,6 +3501,14 @@ components:
           - string
           - 'null'
         files:
+          type: array
+          items:
+            type: string
+        script_allowlist:
+          type: array
+          items:
+            type: object
+        script_files:
           type: array
           items:
             type: string
@@ -3572,9 +3726,55 @@ components:
           type:
           - string
           - 'null'
+        git_url:
+          type:
+          - string
+          - 'null'
       required:
       - name
       - version
+    SkillGitPublished:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        git_url:
+          type: string
+        bare_path:
+          type:
+          - string
+          - 'null'
+        tag:
+          type:
+          - string
+          - 'null'
+        content_sha256:
+          type:
+          - string
+          - 'null'
+      required:
+      - name
+      - version
+      - git_url
+    SkillGitUrl:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        git_url:
+          type: string
+        tag:
+          type:
+          - string
+          - 'null'
+      required:
+      - name
+      - version
+      - git_url
     SkillManifest:
       type: object
       properties:
@@ -3621,6 +3821,56 @@ components:
       - name
       - version
       - ok
+    SkillScriptAllowlistItem:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        version_id:
+          type: string
+          description: UUIDv7
+        path_glob:
+          type: string
+        status:
+          enum:
+          - pending
+          - approved
+          - rejected
+        requested_by:
+          type:
+          - string
+          - 'null'
+        approved_by:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+        expires_at:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - version_id
+      - path_glob
+      - status
+    SkillScriptAllowlistPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillScriptAllowlistItem'
+      required:
+      - items
     TodoDecision:
       type: object
       properties:

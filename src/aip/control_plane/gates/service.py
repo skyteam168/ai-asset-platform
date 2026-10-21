@@ -203,12 +203,12 @@ async def put_selection_eval(
     model_profiles: list[str],
     cases: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """覆盖套件选择评测配置与用例（architecture.md 7.2）。"""
+    """覆盖套件 / Skill 选择（指导效果）评测配置与用例（architecture.md 6.2 / 7.2）。"""
     v = await registry.version_row(conn, version_id)
     a = await registry.asset_row(conn, v["asset_id"])
     actor.require(actor.has("asset_developer") or actor.has("platform_admin"))
-    if a["type"] != "bundle":
-        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "选择评测仅适用于套件（bundle）")
+    if a["type"] not in ("bundle", "skill"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "选择评测仅适用于套件（bundle）或 Skill")
     if v["state"] not in ("draft", "testing"):
         raise PlatformError(ErrorCode.PRECONDITION_FAILED, "只能在 draft/testing 维护选择评测集")
     eval_cases = [
@@ -222,12 +222,12 @@ async def put_selection_eval(
     problems = validate_settings(model_profiles, eval_cases, require_min_cases=False)
     if problems:
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, problems[0])
-    # 期望 capability 须属于套件成员（null 允许）
+    # 期望 capability 须属于套件成员或 Skill.lock 引用（null 允许）
     member_caps = {split_ref(r)[0] for r in _bundle_refs(v["spec"])}
     for c in eval_cases:
         exp = c.expect_capability_id
         if exp is not None and exp not in member_caps:
-            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"期望 Tool {exp} 不在套件成员中")
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"期望 Tool {exp} 不在成员/引用列表中")
     await conn.execute(selection_eval_case.delete().where(selection_eval_case.c.version_id == version_id))
     await conn.execute(selection_eval_settings.delete().where(selection_eval_settings.c.version_id == version_id))
     await conn.execute(
@@ -320,6 +320,7 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         for ref in refs:
             if split_ref(ref) not in tools:
                 problems.append(f"依赖不可解析：Tool {ref}")
+    script_allow_evidence: list[dict[str, Any]] = []
     if a["type"] == "skill" and not problems:
         # Skill：须已上传包；扫描 SKILL 描述；lock 中 Tool 可解析（architecture.md 10.4）
         from aip.control_plane.skill import service as skill_svc
@@ -332,11 +333,21 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
         problems += scan_text(spec.get("description", ""), spec.get("name", ""))
         if pkg_row is not None:
             from aip.control_plane.skill import package as skill_pkg
+            from aip.control_plane.skill import skills_ref as skill_ref
 
             try:
-                files = skill_pkg.unpack_zip(bytes(pkg_row["zip_bytes"]))
+                zip_bytes = await skill_svc.read_package_bytes(conn, version_id)
+                files = skill_pkg.unpack_zip(zip_bytes, check_scripts=False)
                 body = files[skill_pkg.SKILL_MD].decode("utf-8")
                 problems += scan_text(body)
+                problems += skill_ref.validate_skill_files(files)
+                script_files = [p for p in files if skill_pkg.is_blocked_script(p)]
+                if script_files:
+                    script_allow_evidence = await skill_svc.active_script_globs(conn, version_id)
+                    globs = [x["path_glob"] for x in script_allow_evidence]
+                    for sp in script_files:
+                        if not skill_pkg.path_allowed_by_globs(sp, globs):
+                            problems.append(f"脚本路径未在有效白名单中：{sp}")
             except PlatformError as e:
                 problems.append(e.detail)
         refs = list(spec.get("tools") or [])
@@ -371,10 +382,18 @@ async def submit(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> 
     evidence: dict[str, Any] = {"problems": problems}
     if pii_suggestions:
         evidence["pii_suggestions"] = pii_suggestions
+    if script_allow_evidence:
+        evidence["script_allowlist"] = script_allow_evidence
     await _record(conn, actor, v, "G0", ok, evidence)
     if ok:
         await registry.transition(conn, actor, version_id, "testing", "G0 passed")
-    return {"gate": "G0", "passed": ok, "problems": problems, "pii_suggestions": pii_suggestions}
+    return {
+        "gate": "G0",
+        "passed": ok,
+        "problems": problems,
+        "pii_suggestions": pii_suggestions,
+        "evidence": evidence,
+    }
 
 
 def _fast_track(spec: dict[str, Any], classification: int) -> bool:
@@ -550,8 +569,8 @@ async def _composition_lab(
     *,
     llm: Any = None,
 ) -> dict[str, Any]:
-    """Workflow / 套件的 G1–G3：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
-    套件 G2 额外跑工具选择评测（architecture.md 7.2）。"""
+    """Workflow / 套件 / Skill 的 G1–G3：引用的每个 Tool 版本必须已通过自身门禁（approved 及以后状态）。
+    套件与引用了 Tool 的 Skill：G2 额外跑选择/指导效果评测（architecture.md 6.2 / 7.2）。"""
     if a["type"] == "workflow":
         refs = _workflow_refs(v["spec"])
     else:
@@ -566,8 +585,9 @@ async def _composition_lab(
         evidence["composition_risk"] = risk
     await _record(conn, actor, v, "G1", refs_ok, evidence)
     g2_ok = refs_ok
-    if a["type"] == "bundle":
-        se = await _bundle_selection_g2(conn, actor, v, tools, llm=llm)
+    if a["type"] == "bundle" or (a["type"] == "skill" and refs):
+        guidance = await _skill_guidance_text(conn, a["type"], v["id"]) if a["type"] == "skill" else None
+        se = await _bundle_selection_g2(conn, actor, v, tools, llm=llm, skill_guidance=guidance)
         evidence["selection_eval"] = se["evidence"]
         g2_ok = refs_ok and se["passed"]
         await _record(conn, actor, v, "G2", g2_ok, evidence)
@@ -588,6 +608,23 @@ async def _composition_lab(
     return {"passed": True, **(await _open_reviews(conn, v, a)), **evidence, **g4}
 
 
+async def _skill_guidance_text(conn: AsyncConnection, asset_type: str, version_id: uuid.UUID) -> str | None:
+    """Skill G2：把 SKILL.md 正文作为选型指引注入评测 prompt。"""
+    if asset_type != "skill":
+        return None
+    from aip.control_plane.skill import package as skill_pkg
+    from aip.control_plane.skill import service as skill_svc
+
+    try:
+        zip_bytes = await skill_svc.read_package_bytes(conn, version_id)
+        files = skill_pkg.unpack_zip(zip_bytes, check_scripts=False)
+        text = files[skill_pkg.SKILL_MD].decode("utf-8")
+        _, body = skill_pkg.parse_frontmatter(text)
+        return body.strip() or text
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _bundle_selection_g2(
     conn: AsyncConnection,
     _actor: Actor,
@@ -595,6 +632,7 @@ async def _bundle_selection_g2(
     tools: dict[tuple[str, str], dict[str, Any]],
     *,
     llm: Any = None,
+    skill_guidance: str | None = None,
 ) -> dict[str, Any]:
     cfg = await get_selection_eval(conn, v["id"])
     model_profiles = list(cfg["model_profiles"])
@@ -619,6 +657,7 @@ async def _bundle_selection_g2(
         model_profiles=model_profiles,
         cases=cases,
         candidates=candidates,
+        skill_guidance=skill_guidance,
     )
     ev = evidence_from_results(results, problems)
     for r in results:
