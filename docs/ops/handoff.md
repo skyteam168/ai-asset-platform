@@ -37,7 +37,7 @@
 | **H2** OpenAPI Importer（声明式草稿） | 完成 | 9414150 |
 | **H3** Postman Importer（声明式草稿） | 完成 | 30cbde4 |
 | **H4** Prism Mock 自动生成 | 完成 | 52bbb04 |
-| **H5** OpenTelemetry 贯通 | 完成 | （本片提交） |
+| **H5** OpenTelemetry 贯通 | 完成 | 699b4ad |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
