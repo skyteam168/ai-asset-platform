@@ -52,7 +52,7 @@
 | **H17** pg_trgm / CNPG 示例 | 完成 | 408b196 |
 | **H18** wf ctx/step 信封 | 完成 | 33f1fc2 |
 | **H19** 响应体 Pydantic（消费方/资产） | 完成 | 2015485 |
-| **H20** 响应体 Pydantic（控制台/连接） | 完成 | PENDING |
+| **H20** 响应体 Pydantic（控制台/连接） | 完成 | bab7222 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
