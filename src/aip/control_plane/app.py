@@ -15,6 +15,7 @@ from aip.control_plane.console_api import router as console_router
 from aip.control_plane.db import Database
 from aip.control_plane.gates.api import router as gates_router
 from aip.control_plane.iam.api import router as iam_router
+from aip.control_plane.importer.api import router as importer_router
 from aip.control_plane.internal_api import router as internal_router
 from aip.control_plane.registry.api import router as registry_router
 from aip.control_plane.risk.api import router as risk_router
@@ -63,6 +64,7 @@ def create_app(db: Database | None = None) -> FastAPI:
     app.include_router(risk_router())
     app.include_router(webhook_router())
     app.include_router(skill_router())
+    app.include_router(importer_router())
     # 控制台静态文件（console/dist，构建后存在时才挂载）；同源访问，无需 CORS
     console_dist = pathlib.Path(settings.console_dist) if settings.console_dist else CONSOLE_DIST
     if console_dist.is_dir():

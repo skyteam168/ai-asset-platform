@@ -15,6 +15,7 @@ tags:
 - name: connection
 - name: grant
 - name: iam
+- name: importer
 - name: ops
 - name: registry
 - name: release
@@ -1798,6 +1799,88 @@ paths:
               - consumer_id
               - name
               - version
+  /api/v1/importer/openapi:
+    post:
+      operationId: importOpenApi
+      tags:
+      - importer
+      summary: 从 OpenAPI 3.x 生成声明式 Connector 与 Tool 草稿（可选落库）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  connector_config:
+                    type: object
+                  tools:
+                    type: array
+                    items:
+                      type: object
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                  connector_instance_id:
+                    type:
+                    - string
+                    - 'null'
+                  drafts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        asset_id:
+                          type: string
+                        version_id:
+                          type: string
+                        capability_id:
+                          type: string
+                        state:
+                          type: string
+                required:
+                - connector_config
+                - tools
+                - warnings
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document:
+                  type: string
+                  minLength: 1
+                connector_name:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]{2,63}$
+                domain:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]*$
+                  default: imported
+                system:
+                  type: string
+                  pattern: ^[a-z][a-z0-9_]*$
+                  default: imported
+                persist:
+                  type: boolean
+                  default: false
+                connection_id:
+                  type:
+                  - string
+                  - 'null'
+                owner_org_id:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - document
+              - connector_name
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota

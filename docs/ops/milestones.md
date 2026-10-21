@@ -601,6 +601,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET /api/v1/versions/{id}/impact` |
 | 不在本片 | 上层完整 Test Lab 重跑；控制台影响图；Importer / OTel |
 
+### H2 OpenAPI Importer（声明式草稿）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| preview mes-vn01 含 list_work_orders、query 与 success_when/extract | 通过 | `test_h2_importer.py::test_preview_mes_vn01` |
+| persist 落库 connector + draft Tool | 通过 | `test_persist_creates_connector_and_draft` |
+| 非法文档 INVALID_ARGUMENT | 通过 | `test_invalid_document_raises` / HTTP 400 |
+| OpenAPI 路由登记 | 通过 | `importOpenApi` + 契约测试 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `control_plane/importer/`（openapi 解析、draft、service、api） |
+| API | `POST /api/v1/importer/openapi`（asset_developer / platform_admin） |
+| 金标 | `tests/contracts/mes-vn01.openapi.yaml` |
+| 不在本片 | Postman；AI 描述；工具选择评测；Prism 自动拉起；控制台 Importer UI |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

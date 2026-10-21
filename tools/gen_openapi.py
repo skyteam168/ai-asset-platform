@@ -986,6 +986,48 @@ def control_plane() -> dict[str, Any]:
                 res={"type": "object"},
             )
         },
+        f"{A}/importer/openapi": {
+            "post": op(
+                "importOpenApi",
+                "importer",
+                "从 OpenAPI 3.x 生成声明式 Connector 与 Tool 草稿（可选落库）",
+                req=o(
+                    {
+                        "document": {"type": "string", "minLength": 1},
+                        "connector_name": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                        },
+                        "domain": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "default": "imported"},
+                        "system": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "default": "imported"},
+                        "persist": {"type": "boolean", "default": False},
+                        "connection_id": SN,
+                        "owner_org_id": SN,
+                    },
+                    ["document", "connector_name"],
+                ),
+                res=o(
+                    {
+                        "connector_config": {"type": "object"},
+                        "tools": {"type": "array", "items": {"type": "object"}},
+                        "warnings": {"type": "array", "items": S},
+                        "connector_instance_id": SN,
+                        "drafts": {
+                            "type": "array",
+                            "items": o(
+                                {
+                                    "asset_id": S,
+                                    "version_id": S,
+                                    "capability_id": S,
+                                    "state": S,
+                                }
+                            ),
+                        },
+                    },
+                    ["connector_config", "tools", "warnings"],
+                ),
+            )
+        },
         f"{A}/grant-ceilings/{{id}}/quota": {
             "put": op(
                 "setCeilingQuota",
