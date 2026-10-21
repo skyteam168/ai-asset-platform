@@ -543,6 +543,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | CI | `.github/workflows/ci.yml` 增加 consumer-kit Python pytest 与 TypeScript typecheck/test/build |
 | 不在本片 | 并入主 `aip` 依赖；Java/.NET CI；控制台断言调试器；PG 主从 / 容量压测 / zhparser |
 
+### M7k PostgreSQL 主从切换与审计零丢失 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 切换窗口 spool 续写 + 恢复 ship 零丢失 | 通过 | `test_m7_pg_failover.py` |
+| 调用路径断库仍成功并累积审计 | 通过 | `test_m7_pg_failover.py::test_invoke_buffers_audit_during_db_outage` |
+| 本地主从操作手册 | 交付 | [pg-failover.md](pg-failover.md)、`deploy/docker-compose.pg-ha.yml` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 文档 | [pg-failover.md](pg-failover.md)；[fault-drills.md](fault-drills.md) / [slo.md](slo.md) 挂链 |
+| 脚本 | `tools/pg_failover_drill.py`（检查清单 / opt-in compose / baseline·verify） |
+| CI | 进程内死连接模拟切换窗口（不启真实主从） |
+| 不在本片 | Patroni/CloudNativePG/PITR；多副本容量压测；zhparser |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

@@ -30,6 +30,7 @@
 | **M7h** MCP 客户端兼容 | 完成 | cf36e0b |
 | **M7i** 故障演练（12.2） | 完成 | dbb4a25 |
 | **M7j** consumer-kit 断言签名示例 | 完成 | 33aab1a |
+| **M7k** PostgreSQL 切换与审计零丢失 | 完成 | （本片） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -85,6 +86,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `tests/` | 按里程碑命名 `test_m{N}_*.py`；共用夹具 `iam_seed.py`、`m2_fixtures.py`（发布一个读类 Tool）、`m3_world.py`（不经数据库直接构造签名快照的数据面 World）；`test_m7_client_compat.py`（MCP 三客户端画像冒烟） |
 | `docs/ops/client-compat.md` | MCP 客户端兼容矩阵与 Inspector 联调步骤 |
 | `docs/ops/fault-drills.md` | 故障演练矩阵（12.2）与自动化对照 |
+| `docs/ops/pg-failover.md` | PostgreSQL 主从切换本地演练（opt-in compose `pg-ha`） |
 | `spikes/adr0003/` | 工作流引擎选型 spike（不进入产品代码） |
 
 ## 5. 约定与踩过的坑（务必遵守）
@@ -133,7 +135,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = 横向 / zhparser 等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = 容量压测 / zhparser / 横向**）
 
 - **M7a（已完成）**：MCP `io.modelcontextprotocol/tasks`、`aip.get_run_status`、Workflow 作 MCP 异步 Tool、`tasks/get`（task_id=run_id）。
 - **M7b（已完成）**：MCP elicitation / MRTR `input_required` 确认通道（`via=mcp`）；迁移 0014。
@@ -145,6 +147,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **M7h（已完成）**：MCP 客户端兼容（`docs/ops/client-compat.md` + 官方 SDK / Inspector HTTP / 桌面 legacy 三画像冒烟，双协议）。
 - **M7i（已完成）**：故障演练对照 12.2（`docs/ops/fault-drills.md` + Valkey/OpenBao/无控制面调用冒烟；审计 spool 沿用 M2）。
 - **M7j（已完成）**：`sdk/consumer-kit` 断言签名示例（Python / TS + Java / .NET 模板；CI 挂 Python/TS）。
-- **M7 其余 / 横向（当前下一步）**：PostgreSQL 主从切换实测、多副本容量压测；可选 zhparser 物化检索索引；G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
+- **M7k（已完成）**：PostgreSQL 切换窗口审计零丢失（`test_m7_pg_failover.py` + [pg-failover.md](pg-failover.md) / opt-in `pg-ha`）；生产 Patroni 仍横向。
+- **M7 其余 / 横向（当前下一步）**：多副本容量压测；可选 zhparser 物化检索索引；G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

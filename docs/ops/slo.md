@@ -47,4 +47,12 @@ architecture.md 第 1 章的初始目标：平台自身附加延迟 P95 ≤ 100m
 ## 6. 尚未覆盖
 
 - 真实下游（专线到分公司系统）的端到端延迟与熔断表现：在接入首个生产只读系统时测量。
-- 多进程 / 多副本下的线性扩展、PostgreSQL 主从切换期间的错误率：随 M7 故障演练完成。
+- 多进程 / 多副本下的线性扩展：随容量压测完成。
+
+## 7. PostgreSQL 切换与审计（M7k）
+
+| 项 | 结论 | 证据 |
+| --- | --- | --- |
+| 切换窗口审计零丢失 | spool 续写 + ship 幂等恢复；链可 verify | `tests/test_m7_pg_failover.py`；[pg-failover.md](pg-failover.md) |
+| 本地主从 | opt-in compose profile `pg-ha`；默认 `dev.py up` 仍为单节点 | `deploy/docker-compose.pg-ha.yml` |
+| 生产自动切换 / PITR | 未在本仓库落地 | architecture 12.1（Patroni / CloudNativePG）；横向 |
