@@ -27,8 +27,54 @@ class InstallCheckIn(BaseModel):
     env: str = Field(default="test", pattern="^(test|staging|prod)$")
 
 
+class SkillTextFileIn(BaseModel):
+    path: str = Field(max_length=256)
+    content: str = Field(max_length=512_000)
+
+
+class SkillAssetFileIn(BaseModel):
+    path: str = Field(max_length=256)
+    content_base64: str = Field(max_length=1_500_000)
+
+
+class SkillSourceIn(BaseModel):
+    """在线创建 Skill：只允许指令型内容（architecture.md 6.2、10.4），脚本后缀在组装时硬拒。"""
+
+    name: str = Field(min_length=2, max_length=64)
+    description: str = Field(min_length=10, max_length=1024)
+    license: str | None = Field(default=None, max_length=200)
+    compatibility: str | None = Field(default=None, max_length=500)
+    allowed_tools: list[str] = Field(default_factory=list, max_length=50)
+    body: str = Field(default="", max_length=200_000)
+    tools: list[str] = Field(default_factory=list, max_length=100)
+    references: list[SkillTextFileIn] = Field(default_factory=list, max_length=50)
+    assets: list[SkillAssetFileIn] = Field(default_factory=list, max_length=20)
+
+
 def router() -> APIRouter:
     r = APIRouter()
+
+    @r.get(
+        f"{V}/versions/{{id}}/skill-source",
+        tags=["skill"],
+        operation_id="getSkillSource",
+        response_model=out.SkillSource,
+    )
+    async def get_source(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.SkillSource:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.SkillSource.model_validate(await skill.load_source(conn, id))
+
+    @r.put(
+        f"{V}/versions/{{id}}/skill-source",
+        tags=["skill"],
+        operation_id="saveSkillSource",
+        response_model=out.SkillSourceSaved,
+    )
+    async def save_source(id: uuid.UUID, body: SkillSourceIn, actor: ActorDep, db: DbDep) -> out.SkillSourceSaved:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.SkillSourceSaved.model_validate(
+                await skill.save_source(conn, actor, id, body.model_dump(), key=platform_key())
+            )
 
     @r.post(
         f"{V}/versions/{{id}}/skill-package",

@@ -43,8 +43,8 @@ describe("控制台外壳", () => {
     expect(session.get()).toBe("s-1");
     expect(calls.find((c) => c.path === "/auth/login" && (c.body as { totp: string }).totp === "123456")?.body)
       .toEqual({ login_name: "alice", password: "correct-horse-battery", totp: "123456" });
-    // 5 个顶层菜单（含分发与 Skill）+ 3 个分组标题 + 5 个分组内菜单（含资产目录）
-    expect(screen.getAllByRole("menuitem")).toHaveLength(13);
+    // 5 个顶层菜单（含分发与 Skill）+ 3 个分组标题 + 6 个分组内菜单（含 LLM 配置）
+    expect(screen.getAllByRole("menuitem")).toHaveLength(14);
   });
 
   it("菜单按角色裁剪：审计员只看到风控、审计与组织", async () => {

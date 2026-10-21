@@ -684,6 +684,26 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H23 控制台接入能力补齐与在线创建 Skill — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 编辑器内容 ⇄ 标准 Agent Skills 目录往返（含冒号 / 引号的描述、allowed-tools、references、assets） | 通过 | `test_h23_console_ingest.py::test_source_round_trip` |
+| 脚本后缀、越界路径、非文本 references、多行 frontmatter 被拒 | 通过 | `test_source_rejects` |
+| 在线保存复用 attach_package：签名入库、spec 写回，G0 直接通过 | 通过 | `test_save_source_signs_and_passes_g0` |
+| 保存返回 G0 安全扫描预检；HTTP 读回与脚本拒绝 | 通过 | `test_save_source_http_and_scan` |
+| `GET /connector-instances` 列表 | 通过 | `test_list_connector_instances` |
+| 控制台：连接器实例列表与新建、API 导入预览→落库、Skill 编辑保存与只读预览、Markdown 渲染不出脚本链接 | 通过 | `console/src/pages/ingest.test.tsx` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 后端 | `skill/package.py::build_source_files / read_source`（只产出 SKILL.md、skill.lock.json、references/ 文本、assets/ ≤1MB）；`skill/service.py::save_source / load_source`；frontmatter `allowed-tools` 写入 spec.allowed_tools |
+| API | `GET /api/v1/connector-instances`（listConnectorInstances）；`GET/PUT /api/v1/versions/{id}/skill-source`（getSkillSource / saveSkillSource） |
+| 文档 | `docs/specs/skill-package.md`（目录约定、frontmatter、lock、指令型限制、往返） |
+| 控制台 | 系统连接页加「连接器实例」页签与「API 导入」抽屉（OpenAPI / Postman，先预览再选连接与归属组织落库）；Skill 版本面板「Skill 包」页签（frontmatter 表单、SKILL.md 编辑 + 预览、Tool@版本、references / assets、从已有版本载入、上传 zip 为次要入口）；新建版本 Spec 模板按 tool / skill / workflow / bundle 切换，提示 exposure 含 mcp 即经 /mcp 暴露 |
+| 顺带 | `App.test.tsx` 菜单数随 H10 的 LLM 配置页改为 14；待办页用例超时放宽到 60s |
+| 不在本片 | frontmatter 嵌套 metadata；带脚本 Skill 的审查白名单；Skill 选择评测；控制台走查截图 |
+
 ### H22 响应体 Pydantic（风控 / webhook / Skill）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |

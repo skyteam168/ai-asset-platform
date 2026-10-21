@@ -13,7 +13,7 @@ export function mockApi(route: Route) {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input).replace(/^\/api\/v1/, "");
     const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    const body = init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined;
     calls.push({ method, path: url, body });
     const r = route(method, url, body) ?? { status: 404, body: { code: "NOT_FOUND", detail: "未模拟" } };
     return new Response(r.body === undefined ? null : JSON.stringify(r.body), { status: r.status ?? 200 });

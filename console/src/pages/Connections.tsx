@@ -1,4 +1,4 @@
-import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tag, Typography } from "antd";
+import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { get, post, type Page } from "../api";
@@ -7,6 +7,7 @@ import { matches, OrgName, PageCard, PAGINATION, StateTag, Toolbar, useOrgs } fr
 import { useAction, useLoad } from "../hooks";
 import type { Connection, ConnectionTest } from "../types";
 import { t } from "../i18n";
+import { ConnectorInstancesTab } from "./ConnectorInstances";
 
 /** 传输方式标签：明文与不校验证书醒目标出（architecture.md 9.6）。 */
 export function TransportTag({ c }: { c: Pick<Connection, "scheme" | "tls_mode"> }) {
@@ -24,8 +25,8 @@ export function ConnectionsPage() {
   const [testing, setTesting] = useState<Connection | null>(null);
   const [kw, setKw] = useState("");
   const act = useAction();
-  return (
-    <PageCard>
+  const systems = (
+    <>
       <Toolbar placeholder={t("系统 / 地址 / 环境")} onSearch={setKw}
         actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("登记连接")}</Button>} />
       {conns.error && <Alert type="error" message={conns.error} />}
@@ -52,6 +53,14 @@ export function ConnectionsPage() {
             ),
           },
         ]} />
+    </>
+  );
+  return (
+    <PageCard>
+      <Tabs items={[
+        { key: "systems", label: t("系统连接"), children: systems },
+        { key: "connectors", label: t("连接器实例"), children: <ConnectorInstancesTab connections={conns.data?.items ?? []} /> },
+      ]} />
       <NewConnection open={open} onClose={() => setOpen(false)} onDone={conns.reload} />
       <TestDrawer conn={testing} onClose={() => setTesting(null)} />
     </PageCard>

@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import io
 import json
@@ -41,7 +43,15 @@ def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
         if ":" not in line:
             continue
         key, _, val = line.partition(":")
-        key, val = key.strip(), val.strip().strip("\"'")
+        key, val = key.strip(), val.strip()
+        if val.startswith('"') and val.endswith('"') and len(val) >= 2:
+            # 在线编辑器写出的双引号标量按 JSON 字符串解码（JSON 字符串同时是合法的 YAML 双引号标量）
+            try:
+                val = str(json.loads(val))
+            except json.JSONDecodeError:
+                val = val.strip('"')
+        else:
+            val = val.strip("'")
         if key:
             meta[key] = val
     return meta, body
@@ -125,7 +135,7 @@ def validate_and_describe(files: dict[str, bytes]) -> dict[str, Any]:
     for ref in tools:
         if "@" not in ref or not re.match(r"^[a-z0-9_.]+@\d+\.\d+\.\d+$", ref):
             raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"非法 Tool 引用：{ref}")
-    return {
+    described: dict[str, Any] = {
         "name": name,
         "description": description,
         "namespace": "global",
@@ -135,6 +145,10 @@ def validate_and_describe(files: dict[str, bytes]) -> dict[str, Any]:
         "tools": tools,
         "body_preview": body[:500],
     }
+    if meta.get("allowed-tools"):
+        # Agent Skills 规范：allowed-tools 为空格分隔的列表
+        described["allowed_tools"] = meta["allowed-tools"].split()
+    return described
 
 
 def make_zip(files: dict[str, bytes]) -> bytes:
@@ -158,3 +172,121 @@ def local_verify(root_files: dict[str, bytes], manifest: dict[str, str]) -> list
         if path not in manifest:
             problems.append(f"多余文件：{path}")
     return problems
+
+
+# ---------- 在线编辑：表单内容 ⇄ 标准 Agent Skills 目录 ----------
+
+REFERENCE_SUFFIX = frozenset({".md", ".markdown", ".txt", ".json", ".yaml", ".yml", ".csv"})
+MAX_ASSET_BYTES = 1024 * 1024
+_SEGMENT = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+_PLAIN = re.compile(r"^[^\s\-?:,\[\]{}#&*!|>'\"%@`][^:#\"'\\]*$")
+_SINGLE_LINE_MAX = {"description": 1024, "license": 200, "compatibility": 500}
+
+
+def _scalar(value: str) -> str:
+    """frontmatter 标量：安全时原样输出，否则输出 JSON 双引号字符串（YAML 兼容，parse_frontmatter 可还原）。"""
+    if _PLAIN.match(value) and value == value.strip():
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _check_path(path: str, prefix: str) -> str:
+    parts = path.replace("\\", "/").split("/")
+    if parts[0] != prefix or len(parts) < 2 or not all(_SEGMENT.match(x) for x in parts[1:]):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"非法文件路径：{path}（须位于 {prefix}/ 下）")
+    lower = path.lower()
+    if any(lower.endswith(suf) for suf in BLOCKED_SUFFIX):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"首期不接受带脚本的 Skill：{path}")
+    return "/".join(parts)
+
+
+def build_source_files(source: dict[str, Any]) -> dict[str, bytes]:
+    """把编辑器提交的 frontmatter、正文、Tool 引用与 references/assets 组装为标准目录（path→bytes）。
+
+    只产出指令型 Skill：SKILL.md、可选 skill.lock.json、references/ 文本、assets/ 小附件；不接受脚本。
+    """
+    name = str(source.get("name") or "").strip()
+    if not NAME_RE.match(name):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "name 须为小写字母开头的 2–64 位标识（a-z、0-9、-、_）")
+    fields: list[tuple[str, str]] = [("name", name)]
+    for key in ("description", "license", "compatibility"):
+        val = str(source.get(key) or "").strip()
+        if not val:
+            continue
+        if "\n" in val or "\r" in val:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"{key} 须为单行文本")
+        if len(val) > _SINGLE_LINE_MAX[key]:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"{key} 不能超过 {_SINGLE_LINE_MAX[key]} 个字符")
+        fields.append((key, val))
+    allowed = [str(x).strip() for x in source.get("allowed_tools") or [] if str(x).strip()]
+    if any(re.search(r"\s", x) for x in allowed):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "allowed-tools 的每一项不能包含空白")
+    if allowed:
+        fields.append(("allowed-tools", " ".join(allowed)))
+    front = "\n".join(f"{k}: {_scalar(v)}" for k, v in fields)
+    body = str(source.get("body") or "").strip("\n")
+    files: dict[str, bytes] = {SKILL_MD: f"---\n{front}\n---\n\n{body}\n".encode()}
+    tools = [str(x).strip() for x in source.get("tools") or [] if str(x).strip()]
+    if tools:
+        files[LOCK_FILE] = (json.dumps({"tools": sorted(set(tools))}, ensure_ascii=False, indent=2) + "\n").encode()
+    for ref in source.get("references") or []:
+        path = _check_path(str(ref.get("path") or ""), "references")
+        if not any(path.lower().endswith(suf) for suf in REFERENCE_SUFFIX):
+            raise PlatformError(
+                ErrorCode.INVALID_ARGUMENT, f"references/ 只接受文本文件（md、txt、json、yaml、csv）：{path}"
+            )
+        if path in files:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"文件重复：{path}")
+        files[path] = str(ref.get("content") or "").encode()
+    for asset in source.get("assets") or []:
+        path = _check_path(str(asset.get("path") or ""), "assets")
+        try:
+            data = base64.b64decode(str(asset.get("content_base64") or ""), validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"附件不是合法的 base64：{path}") from e
+        if len(data) > MAX_ASSET_BYTES:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"附件不能超过 1MB：{path}")
+        if path in files:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"文件重复：{path}")
+        files[path] = data
+    return files
+
+
+def read_source(files: dict[str, bytes]) -> dict[str, Any]:
+    """把已入库的包拆回编辑器表单；编辑器不承载的文件放进 warnings（再次保存时不会保留）。"""
+    meta, body = parse_frontmatter(files[SKILL_MD].decode("utf-8"))
+    tools: list[str] = []
+    if LOCK_FILE in files:
+        try:
+            lock = json.loads(files[LOCK_FILE].decode("utf-8"))
+            tools = [str(x) for x in (lock.get("tools") or lock.get("tool_refs") or [])]
+        except (UnicodeDecodeError, json.JSONDecodeError, AttributeError):
+            tools = []
+    references: list[dict[str, str]] = []
+    assets: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for path, data in sorted(files.items()):
+        if path in (SKILL_MD, LOCK_FILE):
+            continue
+        if path.startswith("references/") and any(path.lower().endswith(s) for s in REFERENCE_SUFFIX):
+            try:
+                references.append({"path": path, "content": data.decode("utf-8")})
+                continue
+            except UnicodeDecodeError:
+                pass
+        elif path.startswith("assets/"):
+            assets.append({"path": path, "content_base64": base64.b64encode(data).decode(), "size": len(data)})
+            continue
+        warnings.append(f"编辑器不保留此文件，再次保存会移除：{path}")
+    return {
+        "name": meta.get("name", ""),
+        "description": meta.get("description", ""),
+        "license": meta.get("license") or None,
+        "compatibility": meta.get("compatibility") or None,
+        "allowed_tools": (meta.get("allowed-tools") or "").split(),
+        "body": body,
+        "tools": tools,
+        "references": references,
+        "assets": assets,
+        "warnings": warnings,
+    }

@@ -37,15 +37,22 @@ export function setUnauthorizedHandler(fn: () => void) {
 }
 
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+  return request<T>(method, path, body === undefined ? undefined : JSON.stringify(body), "application/json");
+}
+
+/** multipart 上传（如 Skill zip）；Content-Type 由浏览器带上 boundary。 */
+export function upload<T>(path: string, file: Blob, filename: string, field = "file"): Promise<T> {
+  const form = new FormData();
+  form.append(field, file, filename);
+  return request<T>("POST", path, form);
+}
+
+async function request<T>(method: string, path: string, body?: BodyInit, contentType?: string): Promise<T> {
   const headers: Record<string, string> = { Accept: "application/json" };
   const token = session.get();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  if (body !== undefined && contentType) headers["Content-Type"] = contentType;
+  const res = await fetch(`${BASE}${path}`, { method, headers, body });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
   const data = text ? JSON.parse(text) : undefined;
