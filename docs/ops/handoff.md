@@ -35,7 +35,7 @@
 | **M7m** 发现检索物化 / 中文匹配 | 完成 | 26a888a |
 | **H1** G4 回归与影响分析 | 完成 | af41a15 |
 | **H2** OpenAPI Importer（声明式草稿） | 完成 | 9414150 |
-| **H3** Postman Importer（声明式草稿） | 完成 | （本片提交） |
+| **H3** Postman Importer（声明式草稿） | 完成 | 30cbde4 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
