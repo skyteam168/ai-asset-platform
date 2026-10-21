@@ -11,6 +11,7 @@ python tools/dev.py bootstrap 初始化集团、总部与首个平台管理员�
 python tools/dev.py serve     本地运行控制面(18081)与数据面(18082)
 python tools/dev.py otel-up   启动 OTel Collector / Tempo / Prometheus / Grafana
 python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
+python tools/dev.py k8s-check  kubectl kustomize 构建 base 与 prod overlay
 """
 
 from __future__ import annotations
@@ -216,6 +217,26 @@ def otel_down() -> None:
     run([*COMPOSE_OTEL, "down"])
 
 
+def k8s_check() -> None:
+    """本地校验 deploy/k8s kustomize 构建（需 kubectl；不连接集群）。"""
+    kubectl = shutil.which("kubectl")
+    if kubectl is None:
+        raise SystemExit("需要 kubectl（仅用于 kustomize 构建，无需集群）")
+    for path in (
+        ROOT / "deploy" / "k8s" / "base",
+        ROOT / "deploy" / "k8s" / "overlays" / "prod",
+    ):
+        cmd = [kubectl, "kustomize", str(path)]
+        print("$", " ".join(cmd), flush=True)
+        proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, encoding="utf-8")
+        if proc.returncode != 0:
+            sys.stderr.write(proc.stderr or proc.stdout or "kustomize failed\n")
+            raise SystemExit(proc.returncode)
+        if not proc.stdout.strip():
+            raise SystemExit(f"empty kustomize output: {path}")
+    print("k8s kustomize ok")
+
+
 TASKS = {
     "up": up,
     "down": down,
@@ -228,6 +249,7 @@ TASKS = {
     "serve-otel": lambda: serve(with_otel=True),
     "otel-up": otel_up,
     "otel-down": otel_down,
+    "k8s-check": k8s_check,
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,
 }

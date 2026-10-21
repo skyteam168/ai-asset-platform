@@ -152,8 +152,8 @@
 | 控制台前端（最小页面集） | 已完成，见下节 | - |
 | 控制面响应体 Pydantic 模型 | H15 已覆盖 auth/IAM 核心；其余模块仍多返回 dict | 续做 gates/console/registry 等 |
 | 批量密级提升、启用 by_employee_no 的双人复核 | 仅限平台管理员 | 接入审批引擎（M5） |
-| Kubernetes 清单 | 已编写并通过 YAML 校验，未在真实集群部署 | 首个 staging 集群上线时验证 |
-| CI 工作流 | 已编写，未在 GitHub 上运行 | 推送远端仓库后启用 |
+| Kubernetes 清单 | H16：kustomize + 单测/CI 本地可验；未在真实集群部署 | staging 集群上线时 apply |
+| CI 工作流 | H16：增加 k8s-check；完整 workflow 仍待远端首次跑通 | 推送远端仓库后启用 |
 | 多进程 / 多副本线性扩展 | 只测了单进程 | M7 故障演练与容量测试 |
 
 ## 控制台最小页面集 — 2026-10-20 通过
@@ -683,6 +683,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | Schema | `docs/specs/model-profile.schema.json` |
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
+
+### H16 Kubernetes 清单校验与 CI — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| base / prod kustomize 可构建 | 通过 | `test_h16_k8s.py::test_kustomize_base_and_prod_build`；`dev.py k8s-check` |
+| 数据面 /readyz + 非 root / drop ALL | 通过 | `test_data_plane_fail_closed_readyz_and_security` |
+| 控制面 PDB + Secret 仅引用 | 通过 | `test_control_plane_security_and_pdb`；`test_secret_ref_not_inlined` |
+| prod overlay 环境与副本 | 通过 | `test_prod_overlay_env_and_replicas` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 清单 | `deploy/k8s/base` + `overlays/prod`；控制面 PDB `minAvailable: 1` |
+| 工具 | `dev.py k8s-check`；CI `azure/setup-kubectl` + k8s-check |
+| 文档 | [k8s.md](k8s.md) |
+| 不在本片 | 真实集群部署；Helm；镜像推送流水线 |
 
 ### H15 控制面响应体 Pydantic（auth / IAM 核心）— 2026-10-21
 

@@ -10,6 +10,11 @@ jobs:
       - uses: actions/setup-node@v4
         with: {node-version: "22"}
       - run: uv sync --frozen
+      - name: kubectl（仅 kustomize 构建，不连集群）
+        uses: azure/setup-kubectl@v4
+        with: {version: "v1.31.0"}
+      - name: k8s kustomize
+        run: uv run python tools/dev.py k8s-check
       - name: docs (ADR / JSON Schema / OpenAPI 生成一致性、spectral、链接)
         run: uv run python tools/dev.py docs
       - name: openapi-diff（与主分支比较，禁止破坏性变更）

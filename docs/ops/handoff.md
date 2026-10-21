@@ -48,6 +48,7 @@
 | **H13** OTel Collector 与看板 | 完成 | da80976 |
 | **H14** 审计锚点 WORM | 完成 | 4d02eae |
 | **H15** 响应体 Pydantic（IAM 核心） | 完成 | 4b4e4d2 |
+| **H16** K8s 清单校验与 CI | 完成 | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -106,6 +107,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `docs/ops/pg-failover.md` | PostgreSQL 主从切换本地演练（opt-in compose `pg-ha`） |
 | `docs/ops/search-index.md` | 发现检索物化 search_text；zhparser / pg_trgm 可选路径 |
 | docs/ops/audit-worm.md | 审计锚点 WORM（SeaweedFS put_if_absent） |
+| docs/ops/k8s.md | kustomize base/prod 与本地/CI 校验 |
 | `spikes/adr0003/` | 工作流引擎选型 spike（不进入产品代码） |
 
 ## 5. 约定与踩过的坑（务必遵守）
@@ -154,10 +156,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = K8s/CI 等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = Patroni / zhparser 等**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H15（已完成）**：至 IAM 核心 response_model、审计 WORM、OTel 看板、业务角色、信封加密、控制台 LLM / 评测、G0 PII。
-- **横向（当前下一步）**：其余路由 response_model；K8s/CI；Patroni / zhparser；wf ctx/step 信封深化。
+- **H1–H16（已完成）**：至 K8s kustomize/CI、IAM response_model、审计 WORM、OTel、业务角色、信封、控制台 LLM、G0 PII。
+- **横向（当前下一步）**：其余路由 response_model；Patroni / zhparser；wf ctx/step 信封深化。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
