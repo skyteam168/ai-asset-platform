@@ -14,10 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam import auth, business_roles, consumers, orgs, snapshot, users
+from aip.control_plane.iam import schemas as out
 from aip.control_plane.iam import tables as t
 from aip.control_plane.iam.authz import Actor
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.common.paging import Page
 from aip.libs.tokens.assertion import verify_assertion
 from aip.libs.tokens.keys import platform_key
 from aip.libs.tokens.replay import MemoryReplayStore
@@ -132,7 +134,7 @@ class DebugIn(BaseModel):
     assertion: str
 
 
-def _user_out(row: dict[str, Any], clearance: int) -> dict[str, Any]:
+def _user_out(row: dict[str, Any], clearance: int, *, totp_uri: str | None = None) -> out.User:
     keys = (
         "id",
         "login_name",
@@ -145,16 +147,17 @@ def _user_out(row: dict[str, Any], clearance: int) -> dict[str, Any]:
         "timezone",
         "locale",
     )
-    out = {k: (str(row[k]) if isinstance(row[k], uuid.UUID) else row[k]) for k in keys}
-    out["effective_clearance"] = clearance
-    return out
+    data = {k: (str(row[k]) if isinstance(row[k], uuid.UUID) else row[k]) for k in keys}
+    data["effective_clearance"] = clearance
+    data["totp_provisioning_uri"] = totp_uri
+    return out.User.model_validate(data)
 
 
 def router() -> APIRouter:
     r = APIRouter()
 
-    @r.post(f"{V}/auth/login", tags=["auth"], operation_id="login")
-    async def login(body: LoginIn, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/auth/login", tags=["auth"], operation_id="login", response_model=out.Session)
+    async def login(body: LoginIn, db: DbDep) -> out.Session:
         async with db.tx(DbScope.system()) as conn:
             try:
                 token, expires, user_id = await auth.login(conn, body.login_name, body.password, body.totp)
@@ -164,7 +167,9 @@ def router() -> APIRouter:
                 raise
             u = await users.user_row(conn, user_id)
             clearance = await users.effective_clearance(conn, user_id)
-        return {"session_token": token, "expires_at": expires.isoformat(), "user": _user_out(u, clearance)}
+        return out.Session(
+            session_token=token, expires_at=expires.isoformat(), user=_user_out(u, clearance)
+        )
 
     @r.post(f"{V}/auth/logout", tags=["auth"], operation_id="logout", status_code=204)
     async def logout(db: DbDep, authorization: Annotated[str | None, Header()] = None) -> Response:
@@ -172,23 +177,25 @@ def router() -> APIRouter:
             await auth.logout(conn, _bearer(authorization))
         return Response(status_code=204)
 
-    @r.get(f"{V}/me", tags=["auth"], operation_id="me")
-    async def me(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/me", tags=["auth"], operation_id="me", response_model=out.Me)
+    async def me(actor: ActorDep, db: DbDep) -> out.Me:
         assert actor.user_id is not None
         async with db.tx(actor.db_scope()) as conn:
             u = await users.user_row(conn, actor.user_id)
-            out = _user_out(u, await users.effective_clearance(conn, actor.user_id))
-        out["roles"] = [{"role": g.role, "scope_org_id": str(g.scope_org_id)} for g in actor.roles]
-        return out
+            base = _user_out(u, await users.effective_clearance(conn, actor.user_id))
+        return out.Me(
+            **base.model_dump(),
+            roles=[out.RoleGrant(role=g.role, scope_org_id=str(g.scope_org_id)) for g in actor.roles],
+        )
 
-    @r.get(f"{V}/orgs", tags=["iam"], operation_id="listOrgs")
-    async def list_orgs(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/orgs", tags=["iam"], operation_id="listOrgs", response_model=Page[out.OrgUnit])
+    async def list_orgs(actor: ActorDep, db: DbDep) -> Page[out.OrgUnit]:
         async with db.tx(actor.db_scope()) as conn:
-            items = [o.as_dict() for o in await orgs.list_orgs(conn)]
-        return {"items": items, "next_cursor": None, "has_more": False}
+            items = [out.OrgUnit.model_validate(o.as_dict()) for o in await orgs.list_orgs(conn)]
+        return Page(items=items)
 
-    @r.post(f"{V}/orgs", tags=["iam"], operation_id="createOrg", status_code=201)
-    async def create_org(body: OrgIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/orgs", tags=["iam"], operation_id="createOrg", status_code=201, response_model=out.OrgUnit)
+    async def create_org(body: OrgIn, actor: ActorDep, db: DbDep) -> out.OrgUnit:
         async with db.tx(actor.db_scope()) as conn:
             o = await orgs.create_org(
                 conn,
@@ -201,32 +208,32 @@ def router() -> APIRouter:
                 timezone=body.timezone,
                 locale=body.locale,
             )
-        return o.as_dict()
+        return out.OrgUnit.model_validate(o.as_dict())
 
-    @r.get(f"{V}/orgs/{{id}}", tags=["iam"], operation_id="getOrg")
-    async def get_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/orgs/{{id}}", tags=["iam"], operation_id="getOrg", response_model=out.OrgUnit)
+    async def get_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.OrgUnit:
         async with db.tx(actor.db_scope()) as conn:
-            return (await orgs.get_org(conn, id)).as_dict()
+            return out.OrgUnit.model_validate((await orgs.get_org(conn, id)).as_dict())
 
-    @r.post(f"{V}/orgs/{{id}}/move", tags=["iam"], operation_id="moveOrg")
-    async def move_org(id: uuid.UUID, body: MoveIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/orgs/{{id}}/move", tags=["iam"], operation_id="moveOrg", response_model=out.OrgUnit)
+    async def move_org(id: uuid.UUID, body: MoveIn, actor: ActorDep, db: DbDep) -> out.OrgUnit:
         async with db.tx(actor.db_scope()) as conn:
-            return (await orgs.move_org(conn, actor, id, body.new_parent_id)).as_dict()
+            return out.OrgUnit.model_validate((await orgs.move_org(conn, actor, id, body.new_parent_id)).as_dict())
 
-    @r.post(f"{V}/orgs/{{id}}/disable", tags=["iam"], operation_id="disableOrg")
-    async def disable_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/orgs/{{id}}/disable", tags=["iam"], operation_id="disableOrg", response_model=out.OrgUnit)
+    async def disable_org(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.OrgUnit:
         async with db.tx(actor.db_scope()) as conn:
-            return (await orgs.disable_org(conn, actor, id)).as_dict()
+            return out.OrgUnit.model_validate((await orgs.disable_org(conn, actor, id)).as_dict())
 
-    @r.get(f"{V}/users", tags=["iam"], operation_id="listUsers")
-    async def list_users(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/users", tags=["iam"], operation_id="listUsers", response_model=Page[out.User])
+    async def list_users(actor: ActorDep, db: DbDep) -> Page[out.User]:
         async with db.tx(actor.db_scope()) as conn:
             rows = (await conn.execute(select(t.iam_user).order_by(t.iam_user.c.id).limit(200))).mappings().all()
             items = [_user_out(dict(u), await users.effective_clearance(conn, u["id"])) for u in rows]
-        return {"items": items, "next_cursor": None, "has_more": False}
+        return Page(items=items)
 
-    @r.post(f"{V}/users", tags=["iam"], operation_id="createUser", status_code=201)
-    async def create_user(body: UserIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/users", tags=["iam"], operation_id="createUser", status_code=201, response_model=out.User)
+    async def create_user(body: UserIn, actor: ActorDep, db: DbDep) -> out.User:
         async with db.tx(actor.db_scope()) as conn:
             created = await users.create_user(
                 conn,
@@ -239,38 +246,54 @@ def router() -> APIRouter:
                 email=body.email,
                 login_enabled=body.login_enabled,
             )
-            out = _user_out(await users.user_row(conn, created.id), await users.effective_clearance(conn, created.id))
-        out["totp_provisioning_uri"] = created.totp_provisioning_uri
-        return out
+            return _user_out(
+                await users.user_row(conn, created.id),
+                await users.effective_clearance(conn, created.id),
+                totp_uri=created.totp_provisioning_uri,
+            )
 
-    @r.post(f"{V}/users/import", tags=["iam"], operation_id="importUsers")
-    async def import_users(body: ImportIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(f"{V}/users/import", tags=["iam"], operation_id="importUsers", response_model=out.ImportResult)
+    async def import_users(body: ImportIn, actor: ActorDep, db: DbDep) -> out.ImportResult:
         async with db.tx(actor.db_scope()) as conn:
             res = await users.import_users_csv(conn, actor, body.content, body.dry_run)
-        return {
-            "batch_id": str(res.batch_id),
-            "dry_run": res.dry_run,
-            "created": res.created,
-            "updated": 0,
-            "unchanged": res.unchanged,
-            "errors": res.errors,
-        }
+        return out.ImportResult(
+            batch_id=str(res.batch_id),
+            dry_run=res.dry_run,
+            created=res.created,
+            updated=0,
+            unchanged=res.unchanged,
+            errors=[out.ImportErrorItem.model_validate(e) for e in res.errors],
+        )
 
-    @r.post(f"{V}/users/import/{{id}}/rollback", tags=["iam"], operation_id="rollbackImport")
-    async def rollback_import(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/users/import/{{id}}/rollback",
+        tags=["iam"],
+        operation_id="rollbackImport",
+        response_model=out.ImportRollback,
+    )
+    async def rollback_import(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.ImportRollback:
         async with db.tx(actor.db_scope()) as conn:
-            return {"batch_id": str(id), **await users.rollback_import(conn, actor, id)}
+            result = await users.rollback_import(conn, actor, id)
+        return out.ImportRollback(batch_id=str(id), **result)
 
-    @r.get(f"{V}/users/{{id}}", tags=["iam"], operation_id="getUser")
-    async def get_user(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(f"{V}/users/{{id}}", tags=["iam"], operation_id="getUser", response_model=out.User)
+    async def get_user(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.User:
         async with db.tx(actor.db_scope()) as conn:
             return _user_out(await users.user_row(conn, id), await users.effective_clearance(conn, id))
 
-    @r.post(f"{V}/users/{{id}}/roles", tags=["iam"], operation_id="assignRole", status_code=201)
-    async def assign_role(id: uuid.UUID, body: RoleIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/users/{{id}}/roles",
+        tags=["iam"],
+        operation_id="assignRole",
+        status_code=201,
+        response_model=out.RoleAssignment,
+    )
+    async def assign_role(id: uuid.UUID, body: RoleIn, actor: ActorDep, db: DbDep) -> out.RoleAssignment:
         async with db.tx(actor.db_scope()) as conn:
             rid = await users.assign_role(conn, actor, id, body.role, body.scope_org_id, body.expires_at)
-        return {"id": str(rid), "user_id": str(id), "role": body.role, "scope_org_id": str(body.scope_org_id)}
+        return out.RoleAssignment(
+            id=str(rid), user_id=str(id), role=body.role, scope_org_id=str(body.scope_org_id)
+        )
 
     @r.get(f"{V}/companies/{{id}}/business-roles", tags=["iam"], operation_id="listBusinessRoles")
     async def list_business_roles(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:

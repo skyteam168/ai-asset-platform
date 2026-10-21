@@ -150,7 +150,7 @@
 | 项 | 现状 | 计划 |
 | --- | --- | --- |
 | 控制台前端（最小页面集） | 已完成，见下节 | - |
-| 控制面响应体 Pydantic 模型 | 字段与契约一致，未用响应模型强校验 | 随控制台一起补 |
+| 控制面响应体 Pydantic 模型 | H15 已覆盖 auth/IAM 核心；其余模块仍多返回 dict | 续做 gates/console/registry 等 |
 | 批量密级提升、启用 by_employee_no 的双人复核 | 仅限平台管理员 | 接入审批引擎（M5） |
 | Kubernetes 清单 | 已编写并通过 YAML 校验，未在真实集群部署 | 首个 staging 集群上线时验证 |
 | CI 工作流 | 已编写，未在 GitHub 上运行 | 推送远端仓库后启用 |
@@ -192,7 +192,7 @@ React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（�
 
 | 项 | 现状 | 计划 |
 | --- | --- | --- |
-| 控制面响应体 Pydantic 模型 | 前端类型按契约手写 | 引入响应模型后由 OpenAPI 生成前端类型 |
+| 控制面响应体 Pydantic 模型 | H15 已覆盖 auth/IAM 核心；前端类型仍手写 | 续做其余路由后由 OpenAPI 生成前端类型 |
 
 ## M5 写操作与工作流（P8）— 2026-10-20 通过（含已记录的延后项）
 
@@ -683,6 +683,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | Schema | `docs/specs/model-profile.schema.json` |
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
+
+### H15 控制面响应体 Pydantic（auth / IAM 核心）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| login/me/orgs/users 等挂载 response_model | 通过 | `test_h15_response_models.py` |
+| OpenAPI `Me` / `ImportRollback` 与实现对齐 | 通过 | `gen_openapi.py`；`test_m0_docs` |
+| 既有 IAM 接口行为不变 | 通过 | `test_m1_api.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | `iam/schemas.py`；共用 `libs/common/paging.Page` |
+| 路由 | login、me、orgs CRUD/move/disable、users 列表/创建/详情/导入/回滚/赋权 |
+| 契约 | `/me` → `Me`（含 roles）；rollback → `ImportRollback` |
+| 不在本片 | gates/console/registry 等其余约 85 条路由；前端从 OpenAPI 生成类型 |
 
 ### H14 审计锚点 WORM 归档 — 2026-10-21
 

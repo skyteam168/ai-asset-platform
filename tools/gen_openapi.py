@@ -153,6 +153,27 @@ def control_plane() -> dict[str, Any]:
             "Session": o(
                 {"session_token": S, "expires_at": DT, "user": ref("User")}, ["session_token", "expires_at", "user"]
             ),
+            "RoleGrant": o({"role": S, "scope_org_id": S}, ["role", "scope_org_id"]),
+            "Me": o(
+                {
+                    "id": ID,
+                    "login_name": SN,
+                    "display_name": S,
+                    "employee_no": SN,
+                    "email": SN,
+                    "home_org_id": S,
+                    "login_enabled": B,
+                    "status": {"enum": ["active", "disabled", "left"]},
+                    "effective_clearance": CLEAR,
+                    "timezone": SN,
+                    "locale": SN,
+                    "roles": {"type": "array", "items": ref("RoleGrant")},
+                },
+                ["id", "display_name", "home_org_id", "login_enabled", "status", "roles"],
+            ),
+            "ImportRollback": o(
+                {"batch_id": S, "deleted": INT, "disabled": INT}, ["batch_id", "deleted", "disabled"]
+            ),
             "OrgUnit": o(
                 {
                     "id": ID,
@@ -601,7 +622,7 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/auth/logout": {"post": op("logout", "auth", "注销会话", code="204")},
-        f"{A}/me": {"get": op("me", "auth", "当前用户", res=ref("User"))},
+        f"{A}/me": {"get": op("me", "auth", "当前用户（含生效角色）", res=ref("Me"))},
         f"{A}/orgs": {
             "get": op("listOrgs", "iam", "组织列表（按生效节点范围）", res=page("OrgUnit"), params=LIST),
             "post": op(
@@ -627,7 +648,7 @@ def control_plane() -> dict[str, Any]:
                 "rollbackImport",
                 "iam",
                 "按批次回滚导入（未使用的删除，已使用的停用）",
-                res={"type": "object"},
+                res=ref("ImportRollback"),
                 params=["Id"],
             )
         },

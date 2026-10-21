@@ -80,14 +80,14 @@ paths:
       operationId: me
       tags:
       - auth
-      summary: 当前用户
+      summary: 当前用户（含生效角色）
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
+                $ref: '#/components/schemas/Me'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/orgs:
@@ -289,7 +289,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/ImportRollback'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -2491,6 +2491,81 @@ components:
       - session_token
       - expires_at
       - user
+    RoleGrant:
+      type: object
+      properties:
+        role:
+          type: string
+        scope_org_id:
+          type: string
+      required:
+      - role
+      - scope_org_id
+    Me:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        login_name:
+          type:
+          - string
+          - 'null'
+        display_name:
+          type: string
+        employee_no:
+          type:
+          - string
+          - 'null'
+        email:
+          type:
+          - string
+          - 'null'
+        home_org_id:
+          type: string
+        login_enabled:
+          type: boolean
+        status:
+          enum:
+          - active
+          - disabled
+          - left
+        effective_clearance:
+          type: integer
+          minimum: 1
+          maximum: 4
+        timezone:
+          type:
+          - string
+          - 'null'
+        locale:
+          type:
+          - string
+          - 'null'
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleGrant'
+      required:
+      - id
+      - display_name
+      - home_org_id
+      - login_enabled
+      - status
+      - roles
+    ImportRollback:
+      type: object
+      properties:
+        batch_id:
+          type: string
+        deleted:
+          type: integer
+        disabled:
+          type: integer
+      required:
+      - batch_id
+      - deleted
+      - disabled
     OrgUnit:
       type: object
       properties:
