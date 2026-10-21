@@ -25,7 +25,7 @@
 | **M7c** MCP 发现模式三元工具 | 完成 | 92fdd8a |
 | **M7d** 上游 MCP 连接器 | 完成 | b81acbf |
 | **M7e** Python SDK + LangChain | 完成 | f401279 |
-| **M7f** TypeScript SDK | 完成 | （本片提交） |
+| **M7f** TypeScript SDK | 完成 | bf6568a |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7e 用例；TS SDK 有 vitest；控制台组件测试与端到端在提交前再跑全量。
