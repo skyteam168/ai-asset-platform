@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # TOTP 种子等平台机密的加密：local（Fernet）或 transit（OpenBao Transit 加解密）
     secret_backend: str = Field(default="local", pattern="^(local|transit)$")
     transit_secret_key: str = "aip-secrets"
+    # 执行快照信封加密（architecture.md 12.6）：local 派生 KEK；transit 按公司 Transit 密钥包装 DEK
+    envelope_backend: str = Field(default="local", pattern="^(local|transit)$")
+    transit_company_key_prefix: str = "aip-company-"
     # TOTP 种子加密密钥（Fernet，32 字节 urlsafe base64）。生产来自 OpenBao
     secret_box_key: str = "ZGV2LW9ubHktc2VjcmV0LWJveC1rZXktMzJieXRlcyE="
     # 服务间认证（生产为 mTLS + 短期服务令牌，architecture.md 3.3）；dev 用共享令牌

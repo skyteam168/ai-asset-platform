@@ -42,6 +42,7 @@
 | **H7** 工具选择评测（套件 G2） | 完成 | 45e1f2f |
 | **H8** Importer AI 候选描述 | 完成 | 30e2140 |
 | **H9** G0 PII 辅助发现 | 完成 | e851e05 |
+| **H10** 控制台 LLM / 选择评测 | 完成 | 5d58390 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -147,10 +148,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = 信封加密**）
+## 7. 之后：M7 与横向事项（**当前下一步 = IAM 业务角色等**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H10（已完成）**：至控制台 LLM / 选择评测页；G0 PII 建议。
-- **横向（当前下一步）**：信封加密（H11）；IAM 业务角色；OTel Collector 与看板；备份 WORM；响应体 Pydantic；K8s/CI；Patroni / zhparser。
+- **H1–H11（已完成）**：至执行快照信封加密；控制台 LLM / 选择评测；G0 PII 建议。
+- **横向（当前下一步）**：IAM 业务角色；OTel Collector 与看板；备份 WORM；响应体 Pydantic；K8s/CI；Patroni / zhparser；wf ctx/step 信封深化。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

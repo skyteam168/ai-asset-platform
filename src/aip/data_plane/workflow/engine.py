@@ -38,6 +38,7 @@ from aip.data_plane.runtime import ToolRuntime
 from aip.data_plane.workflow.llm import LlmClient, UnconfiguredLlm
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.crypto.envelope import decrypt_json, encrypt_json, is_envelope
 from aip.libs.workflow import expr
 from aip.libs.workflow.dsl import WRITE_RISKS, assignee_org_path, resolve_args, split_ref, validate
 
@@ -188,9 +189,11 @@ class WorkflowEngine:
                 await conn.execute(
                     self._q(
                         """INSERT INTO exec.wf_run (id, company_id, consumer_id, end_user_id, capability_id, version,
-                             release_id, dsl, principal, input, ctx, current, status, deadline, trace_id, parent_run_id)
+                             release_id, dsl, principal, input, input_ref, ctx, current, status, deadline, trace_id,
+                             parent_run_id)
                            VALUES (:id, :company, :consumer, :user, :cap, :ver, :rel, CAST(:dsl AS jsonb),
-                             CAST(:principal AS jsonb), CAST(:input AS jsonb), CAST(:ctx AS jsonb), :current,
+                             CAST(:principal AS jsonb), CAST(:input AS jsonb), CAST(:input_ref AS jsonb),
+                             CAST(:ctx AS jsonb), :current,
                              'running', :deadline, :trace, :parent)
                            ON CONFLICT (id) DO NOTHING RETURNING id"""
                     ),
@@ -204,7 +207,8 @@ class WorkflowEngine:
                         "rel": release["release_id"],
                         "dsl": _j(dsl),
                         "principal": _j(principal_to_json(principal)),
-                        "input": _j(input_),
+                        "input": _j({}),  # 明文占位（NOT NULL）；真实输入见 input_ref
+                        "input_ref": _j(encrypt_json(principal.consumer_company_id, input_)),
                         "ctx": _j({"input": input_}),
                         "current": dsl["nodes"][0]["id"],
                         "deadline": dl,
@@ -265,14 +269,18 @@ class WorkflowEngine:
                 .mappings()
                 .all()
             )
+        company = str(run["company_id"])
+        result = run["result"]
+        if is_envelope(run.get("result_ref")):
+            result = decrypt_json(company, run["result_ref"])
         return {
             "run_id": run_id,
-            "company_id": str(run["company_id"]),
+            "company_id": company,
             "capability_id": run["capability_id"],
             "version": run["version"],
             "status": run["status"],
             "current": run["current"],
-            "result": run["result"],
+            "result": result,
             "error": run["error"],
             "tainted": run["tainted"],
             "taint_sources": list(run["taint_sources"]),
@@ -905,17 +913,21 @@ class WorkflowEngine:
         error: dict[str, Any] | None = None,
     ) -> None:
         parent: Any = None
+        company = str(run["company_id"])
+        result_ref = encrypt_json(company, result) if result is not None else None
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
-                    "UPDATE exec.wf_run SET status = :s, result = CAST(:r AS jsonb), error = CAST(:e AS jsonb), "
+                    "UPDATE exec.wf_run SET status = :s, result = CAST(:r AS jsonb), result_ref = CAST(:rr AS jsonb), "
+                    "error = CAST(:e AS jsonb), "
                     "ctx = CAST(:ctx AS jsonb), steps_used = :steps, llm_calls = :llm, tokens_used = :tok, "
                     "lease_owner = NULL, lease_until = NULL, wake_at = NULL, updated_at = now() WHERE id = :id"
                 ),
                 {
                     "id": run_id,
                     "s": status,
-                    "r": _j(result),
+                    "r": _j({}) if result is not None else None,  # 明文占位；真实结果见 result_ref
+                    "rr": _j(result_ref),
                     "e": _j(error),
                     "ctx": _j(ctx),
                     "steps": run["steps_used"],

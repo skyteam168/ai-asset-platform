@@ -231,6 +231,8 @@ class PgExecutionStore:
         "args_sha256",
         "status",
         "result",
+        "input_ref",
+        "result_ref",
         "error_code",
         "retry_count",
         "reconcile_status",
@@ -239,15 +241,41 @@ class PgExecutionStore:
         "trace_id",
         "confirmation_id",
     )
+    _JSONB = frozenset({"result", "input_ref", "result_ref"})
 
     def __init__(self, engine: AsyncEngine) -> None:
         self.engine = engine
 
     @staticmethod
     def _params(rec: dict[str, Any]) -> dict[str, Any]:
+        from aip.libs.crypto.envelope import encrypt_json
+
         p = {k: rec.get(k) for k in PgExecutionStore.COLS}
-        p["result"] = json.dumps(rec.get("result"), ensure_ascii=False) if rec.get("result") is not None else None
+        company = rec["company_id"]
+        # 新写入：明文 result 进信封；库内 result 列置空（兼容旧行读路径）
+        if rec.get("result") is not None and not rec.get("result_ref"):
+            p["result_ref"] = encrypt_json(company, rec["result"])
+            p["result"] = None
+        if rec.get("args") is not None and not rec.get("input_ref"):
+            p["input_ref"] = encrypt_json(company, rec["args"])
+        for col in PgExecutionStore._JSONB:
+            val = p.get(col)
+            p[col] = json.dumps(val, ensure_ascii=False) if val is not None else None
         return p
+
+    @staticmethod
+    def _hydrate(row: dict[str, Any]) -> dict[str, Any]:
+        from aip.libs.crypto.envelope import decrypt_json, is_envelope
+
+        out = {k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()}
+        company = out["company_id"]
+        ref = out.get("result_ref")
+        if is_envelope(ref):
+            out["result"] = decrypt_json(company, ref)
+        iref = out.get("input_ref")
+        if is_envelope(iref):
+            out["args"] = decrypt_json(company, iref)
+        return out
 
     async def create(self, rec: dict[str, Any]) -> None:
         async with self.engine.begin() as conn:
@@ -255,7 +283,9 @@ class PgExecutionStore:
             try:
                 async with conn.begin_nested():
                     cols = ", ".join(self.COLS)
-                    vals = ", ".join(f"CAST(:{c} AS jsonb)" if c == "result" else f":{c}" for c in self.COLS)
+                    vals = ", ".join(
+                        f"CAST(:{c} AS jsonb)" if c in self._JSONB else f":{c}" for c in self.COLS
+                    )
                     await conn.execute(
                         # 列名来自常量 COLS，值全部走绑定参数
                         text(f"INSERT INTO exec.tool_execution ({cols}) VALUES ({vals})"),  # noqa: S608
@@ -275,18 +305,20 @@ class PgExecutionStore:
                     .mappings()
                     .one()
                 )
-                raise IdempotencyHit({k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()}) from None
+                raise IdempotencyHit(self._hydrate(dict(row))) from None
 
     async def update(self, rec: dict[str, Any]) -> None:
         async with self.engine.begin() as conn:
             await conn.execute(text("SELECT set_config('app.company_ids', :c, true)"), {"c": rec["company_id"]})
+            p = self._params(rec)
             await conn.execute(
                 text(
                     "UPDATE exec.tool_execution SET status = :status, result = CAST(:result AS jsonb), "
+                    "result_ref = CAST(:result_ref AS jsonb), "
                     "error_code = :error_code, retry_count = :retry_count, reconcile_status = :reconcile_status, "
                     "updated_at = now() WHERE id = :id"
                 ),
-                self._params(rec),
+                p,
             )
 
     async def get(self, execution_id: str) -> dict[str, Any] | None:
@@ -297,7 +329,7 @@ class PgExecutionStore:
                 .mappings()
                 .first()
             )
-        return None if row is None else {k: (str(v) if isinstance(v, uuid.UUID) else v) for k, v in row.items()}
+        return None if row is None else self._hydrate(dict(row))
 
 
 # ---------------- Result Guard ----------------
@@ -511,6 +543,7 @@ class ToolRuntime:
             "agent_profile_id": principal.agent_profile_id,
             "idempotency_key": idempotency_key,
             "args_sha256": hashlib.sha256(canonical_json(args)).hexdigest(),
+            "args": args,
             "status": "running",
             "result": None,
             "error_code": None,

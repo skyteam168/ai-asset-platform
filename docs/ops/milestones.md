@@ -684,6 +684,23 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H11 执行快照信封加密 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| local 加解密往返 | 通过 | `test_h11_envelope.py::test_roundtrip_local` |
+| 跨公司拒绝解密 | 通过 | `test_wrong_company_rejected` |
+| Pg 写入清空明文 result / 读回解密 | 通过 | `test_pg_params_clear_plaintext_result` |
+| 审计不含 args/result 体 | 通过 | `test_audit_excludes_payload_fields` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `libs/crypto/envelope.py`（AES-GCM + local/Transit 包装 DEK） |
+| 配置 | `AIP_ENVELOPE_BACKEND=local\|transit`；`transit_company_key_prefix` |
+| 表 | `exec.tool_execution.input_ref/result_ref`；`exec.wf_run.input_ref/result_ref` |
+| 行为 | Runtime/Workflow 写路径只落信封；读路径解密；审计仍仅哈希与元数据 |
+| 不在本片 | wf_step.output / ctx 全量加密；SeaweedFS 对象存储；密钥吊销销毁演练 |
+
 ### H10 控制台 LLM 与选择评测 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |
