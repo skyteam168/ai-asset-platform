@@ -30,7 +30,7 @@
 | **M7h** MCP 客户端兼容 | 完成 | cf36e0b |
 | **M7i** 故障演练（12.2） | 完成 | dbb4a25 |
 | **M7j** consumer-kit 断言签名示例 | 完成 | 33aab1a |
-| **M7k** PostgreSQL 切换与审计零丢失 | 完成 | （本片） |
+| **M7k** PostgreSQL 切换与审计零丢失 | 完成 | 1efdf31 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
