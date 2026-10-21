@@ -486,6 +486,15 @@ def control_plane() -> dict[str, Any]:
                     "persist": {"type": "boolean", "default": False},
                     "connection_id": SN,
                     "owner_org_id": SN,
+                    "enrich_descriptions": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "经 LLM Gateway 生成候选 description / usage_notes / not_for",
+                    },
+                    "model_profile": {
+                        "type": ["string", "null"],
+                        "description": "enrich_descriptions=true 时必填，name@semver",
+                    },
                 },
                 ["document", "connector_name"],
             ),

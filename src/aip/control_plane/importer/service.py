@@ -13,6 +13,7 @@ from aip.control_plane.iam.authz import Actor
 from aip.control_plane.importer import openapi as oa
 from aip.control_plane.importer import postman as pm
 from aip.control_plane.importer.draft import build_drafts
+from aip.control_plane.importer.enrich import enrich_tools
 from aip.control_plane.registry import service as registry
 from aip.libs.common.errors import ErrorCode, PlatformError
 
@@ -78,6 +79,63 @@ async def _persist_drafts(
     return {"connector_instance_id": str(iid), "drafts": drafts}
 
 
+async def _company_for_enrich(
+    conn: AsyncConnection,
+    actor: Actor,
+    *,
+    connection_id: uuid.UUID | None,
+    owner_org_id: uuid.UUID | None,
+) -> uuid.UUID:
+    if owner_org_id is not None:
+        from aip.control_plane.iam.orgs import get_org
+
+        return (await get_org(conn, owner_org_id)).company_id
+    if connection_id is not None:
+        row = await conn_svc.row(conn, connection_id)
+        return uuid.UUID(str(row["company_id"]))
+    if actor.company_id is not None:
+        return actor.company_id
+    raise PlatformError(
+        ErrorCode.INVALID_ARGUMENT,
+        "enrich_descriptions 需要 company 上下文（提供 owner_org_id / connection_id，或账号归属公司）",
+    )
+
+
+async def _maybe_enrich(
+    conn: AsyncConnection,
+    actor: Actor,
+    *,
+    tools: list[dict[str, Any]],
+    warnings: list[str],
+    enrich_descriptions: bool,
+    model_profile: str | None,
+    connection_id: uuid.UUID | None,
+    owner_org_id: uuid.UUID | None,
+    llm: Any = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    if not enrich_descriptions:
+        return tools, warnings
+    if not model_profile or not str(model_profile).strip():
+        raise PlatformError(
+            ErrorCode.INVALID_ARGUMENT, "enrich_descriptions=true 时必须提供 model_profile（name@semver）"
+        )
+    try:
+        company_id = await _company_for_enrich(
+            conn, actor, connection_id=connection_id, owner_org_id=owner_org_id
+        )
+    except PlatformError as e:
+        warnings = [*warnings, f"跳过 AI 描述：{e.detail}"]
+        return tools, warnings
+    if llm is None:
+        from aip.control_plane.gates.service import _default_selection_llm
+
+        llm = await _default_selection_llm(conn)
+    enriched, extra = await enrich_tools(
+        llm, tools=tools, model_profile=model_profile.strip(), company_id=company_id
+    )
+    return enriched, [*warnings, *extra]
+
+
 async def import_openapi(
     conn: AsyncConnection,
     actor: Actor,
@@ -89,6 +147,9 @@ async def import_openapi(
     persist: bool = False,
     connection_id: uuid.UUID | None = None,
     owner_org_id: uuid.UUID | None = None,
+    enrich_descriptions: bool = False,
+    model_profile: str | None = None,
+    llm: Any = None,
 ) -> dict[str, Any]:
     """解析 OpenAPI，生成声明式 config 与 Tool Spec；可选写入 connector_instance + draft 资产版本。"""
     _require_dev(actor)
@@ -97,6 +158,17 @@ async def import_openapi(
     operations, warnings = oa.parse_operations(doc)
     connector_config, tools = build_drafts(
         doc, operations, connector_name=connector_name, domain=domain, system=system
+    )
+    tools, warnings = await _maybe_enrich(
+        conn,
+        actor,
+        tools=tools,
+        warnings=warnings,
+        enrich_descriptions=enrich_descriptions,
+        model_profile=model_profile,
+        connection_id=connection_id,
+        owner_org_id=owner_org_id,
+        llm=llm,
     )
     out: dict[str, Any] = {
         "connector_config": connector_config,
@@ -129,6 +201,9 @@ async def import_postman(
     persist: bool = False,
     connection_id: uuid.UUID | None = None,
     owner_org_id: uuid.UUID | None = None,
+    enrich_descriptions: bool = False,
+    model_profile: str | None = None,
+    llm: Any = None,
 ) -> dict[str, Any]:
     """解析 Postman Collection，生成声明式 config 与 Tool Spec；可选落库。"""
     _require_dev(actor)
@@ -137,6 +212,17 @@ async def import_postman(
     operations, warnings = pm.parse_operations(doc)
     connector_config, tools = build_drafts(
         {}, operations, connector_name=connector_name, domain=domain, system=system
+    )
+    tools, warnings = await _maybe_enrich(
+        conn,
+        actor,
+        tools=tools,
+        warnings=warnings,
+        enrich_descriptions=enrich_descriptions,
+        model_profile=model_profile,
+        connection_id=connection_id,
+        owner_org_id=owner_org_id,
+        llm=llm,
     )
     out: dict[str, Any] = {
         "connector_config": connector_config,

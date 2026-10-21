@@ -3230,6 +3230,15 @@ components:
           type:
           - string
           - 'null'
+        enrich_descriptions:
+          type: boolean
+          default: false
+          description: 经 LLM Gateway 生成候选 description / usage_notes / not_for
+        model_profile:
+          type:
+          - string
+          - 'null'
+          description: enrich_descriptions=true 时必填，name@semver
       required:
       - document
       - connector_name

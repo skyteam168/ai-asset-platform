@@ -22,6 +22,10 @@ class ImportIn(BaseModel):
     persist: bool = False
     connection_id: uuid.UUID | None = None
     owner_org_id: uuid.UUID | None = None
+    enrich_descriptions: bool = False
+    model_profile: str | None = Field(
+        default=None, description="enrich_descriptions=true 时必填，格式 name@semver"
+    )
 
 
 def router() -> APIRouter:
@@ -40,6 +44,8 @@ def router() -> APIRouter:
                 persist=body.persist,
                 connection_id=body.connection_id,
                 owner_org_id=body.owner_org_id,
+                enrich_descriptions=body.enrich_descriptions,
+                model_profile=body.model_profile,
             )
 
     @r.post(f"{V}/importer/postman", operation_id="importPostman", status_code=200)
@@ -55,6 +61,8 @@ def router() -> APIRouter:
                 persist=body.persist,
                 connection_id=body.connection_id,
                 owner_org_id=body.owner_org_id,
+                enrich_descriptions=body.enrich_descriptions,
+                model_profile=body.model_profile,
             )
 
     return r

@@ -684,6 +684,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H8 Importer AI 候选描述 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| enrich 关闭行为不变 | 通过 | `test_h8_importer_ai_desc.py::test_enrich_off_unchanged` |
+| enrich 改写 description / notes | 通过 | `test_enrich_rewrites_description` |
+| 缺 model_profile → INVALID_ARGUMENT | 通过 | `test_enrich_requires_model_profile` |
+| LLM 拒绝时 fallback 原文 + warning | 通过 | `test_enrich_fallback_on_llm_deny` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `importer/enrich.py`；`import_*` 增 `enrich_descriptions` / `model_profile` |
+| API | `ImporterRequest` 新字段；经 LLM Gateway `complete` |
+| 不在本片 | 控制台润色按钮；Presidio |
+
 ### H7 工具选择评测（套件 G2）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |
