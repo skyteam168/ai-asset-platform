@@ -29,9 +29,10 @@
 | **M7g** A2A 最小出口 | 完成 | 62d5100 |
 | **M7h** MCP 客户端兼容 | 完成 | cf36e0b |
 | **M7i** 故障演练（12.2） | 完成 | dbb4a25 |
+| **M7j** consumer-kit 断言签名示例 | 完成 | （本片） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M7i 用例；TS SDK 有 vitest；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -58,6 +59,8 @@ cd console && npm ci && npm run build && cd ..
 .venv/Scripts/python tools/dev.py docs        # 生成 ADR / JSON Schema / OpenAPI，并要求生成物已提交（git diff 为空）+ spectral + 链接检查
 cd console && npm run typecheck && npm test && npm run build
 cd sdk/typescript && npm ci && npm run typecheck && npm test && npm run build
+cd sdk/consumer-kit/python && uv venv .venv && uv pip install -e ".[dev]" && .venv/Scripts/pytest   # Windows；Linux 用 .venv/bin/pytest
+cd sdk/consumer-kit/typescript && npm ci && npm run typecheck && npm test && npm run build
 cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据读 .aip-data/dev-admin.txt
 ```
 
@@ -74,6 +77,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
 | `src/aip/sdk/` | 官方 Python 消费方 SDK（`Client` / `SdkError`）与可选 LangChain 适配；出站用 httpx，不经 `libs/httpclient` |
 | `sdk/typescript/` | 官方 TypeScript 消费方 SDK（包名 `aip-sdk`：`Client` / `SdkError`）；fetch 可注入，与 Python 同 REST 面 |
+| `sdk/consumer-kit/` | 消费方断言签名示例（Python / TS 可运行；Java / .NET 单文件模板）；不接主 `aip` 依赖 |
 | `migrations/versions/` | Alembic，当前到 0015（upstream_mcp；此前 0014 decided_via=mcp） |
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
@@ -140,7 +144,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **M7g（已完成）**：A2A 1.0 最小出口（`/.well-known/agent-card.json` + `POST /a2a` SendMessage/GetTask；仅 a2a Workflow；task_id=run_id）。
 - **M7h（已完成）**：MCP 客户端兼容（`docs/ops/client-compat.md` + 官方 SDK / Inspector HTTP / 桌面 legacy 三画像冒烟，双协议）。
 - **M7i（已完成）**：故障演练对照 12.2（`docs/ops/fault-drills.md` + Valkey/OpenBao/无控制面调用冒烟；审计 spool 沿用 M2）。
-- **M7 其余（当前下一步）**：PostgreSQL 主从切换实测、多副本容量压测；可选 zhparser 物化检索索引。
-- **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
+- **M7j（已完成）**：`sdk/consumer-kit` 断言签名示例（Python / TS + Java / .NET 模板；CI 挂 Python/TS）。
+- **M7 其余 / 横向（当前下一步）**：PostgreSQL 主从切换实测、多副本容量压测；可选 zhparser 物化检索索引；G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

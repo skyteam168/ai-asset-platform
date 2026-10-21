@@ -1,0 +1,31 @@
+{
+  "name": "aip-consumer-kit",
+  "version": "0.1.0",
+  "description": "AIP consumer assertion signing helpers (architecture.md 10.5)",
+  "type": "module",
+  "main": "./dist/assertion.js",
+  "types": "./dist/assertion.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/assertion.d.ts",
+      "import": "./dist/assertion.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "example:exchange": "tsx examples/exchange-demo.ts"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

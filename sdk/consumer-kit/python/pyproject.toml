@@ -1,0 +1,23 @@
+[project]
+name = "aip-consumer-kit"
+version = "0.1.0"
+description = "AIP consumer assertion signing helpers (architecture.md 10.5)"
+requires-python = ">=3.12"
+dependencies = [
+    "PyJWT[crypto]>=2.10",
+    "cryptography>=43",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/aip_consumer_kit"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

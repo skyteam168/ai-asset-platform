@@ -528,6 +528,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 文档 | [docs/ops/fault-drills.md](fault-drills.md) 对照表与人工演练步骤 |
 | 不在本片 | PostgreSQL 主从切换实测、多副本容量压测、zhparser |
 
+### M7j consumer-kit 断言签名示例 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Python 签发 → 验签自洽 | 通过 | `sdk/consumer-kit/python/tests/test_assertion.py` |
+| TypeScript 签发 → 验签自洽 | 通过 | `sdk/consumer-kit/typescript/src/assertion.test.ts` |
+| Java / .NET claims 模板 | 交付 | `java/AssertionExample.java`、`dotnet/AssertionExample.cs`（无 CI） |
+
+| 部分 | 内容 |
+| --- | --- |
+| 包 | `sdk/consumer-kit`：`aip-consumer-kit`（PyJWT）/ npm `aip-consumer-kit`（jose）；README claims 与安全注意 |
+| 示例 | `exchange_demo.py` / `exchange-demo.ts`：jwt-bearer 换令牌，仅打印 token 前缀 |
+| CI | `.github/workflows/ci.yml` 增加 consumer-kit Python pytest 与 TypeScript typecheck/test/build |
+| 不在本片 | 并入主 `aip` 依赖；Java/.NET CI；控制台断言调试器；PG 主从 / 容量压测 / zhparser |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |
