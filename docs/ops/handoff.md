@@ -24,7 +24,7 @@
 | **M7b** MCP MRTR / elicitation 确认 | 完成 | 98f8017 |
 | **M7c** MCP 发现模式三元工具 | 完成 | 92fdd8a |
 | **M7d** 上游 MCP 连接器 | 完成 | b81acbf |
-| **M7e** Python SDK + LangChain | 完成 | （本片提交） |
+| **M7e** Python SDK + LangChain | 完成 | f401279 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7e 用例；控制台组件测试与端到端在提交前再跑全量。
