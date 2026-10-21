@@ -13,7 +13,9 @@ from pydantic import BaseModel, Field
 from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam.api import ActorDep, DbDep
 from aip.control_plane.risk import service as risk
+from aip.control_plane.webhook import schemas as out
 from aip.control_plane.webhook import service as wh
+from aip.libs.common.paging import Page
 
 V = "/api/v1"
 log = logging.getLogger(__name__)
@@ -31,44 +33,75 @@ class StatusIn(BaseModel):
 def router() -> APIRouter:
     r = APIRouter()
 
-    @r.post(f"{V}/consumers/{{id}}/webhooks", tags=["webhook"], operation_id="createWebhook", status_code=201)
-    async def create(id: uuid.UUID, body: SubscribeIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/consumers/{{id}}/webhooks",
+        tags=["webhook"],
+        operation_id="createWebhook",
+        status_code=201,
+        response_model=out.WebhookCreated,
+    )
+    async def create(id: uuid.UUID, body: SubscribeIn, actor: ActorDep, db: DbDep) -> out.WebhookCreated:
         async with db.tx(actor.db_scope()) as conn:
-            return await wh.create_subscription(
-                conn, actor, consumer_id=id, events=body.events, url=body.url
+            return out.WebhookCreated.model_validate(
+                await wh.create_subscription(conn, actor, consumer_id=id, events=body.events, url=body.url)
             )
 
-    @r.get(f"{V}/consumers/{{id}}/webhooks", tags=["webhook"], operation_id="listWebhooks")
-    async def list_wh(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.get(
+        f"{V}/consumers/{{id}}/webhooks",
+        tags=["webhook"],
+        operation_id="listWebhooks",
+        response_model=Page[out.WebhookEndpoint],
+    )
+    async def list_wh(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.WebhookEndpoint]:
         async with db.tx(actor.db_scope()) as conn:
-            return {"items": await wh.list_endpoints(conn, actor, id)}
+            items = [out.WebhookEndpoint.model_validate(x) for x in await wh.list_endpoints(conn, actor, id)]
+        return Page(items=items)
 
     @r.post(
         f"{V}/webhooks/{{id}}/rotate-secret",
         tags=["webhook"],
         operation_id="rotateWebhookSecret",
+        response_model=out.WebhookSecretRotated,
     )
-    async def rotate(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    async def rotate(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.WebhookSecretRotated:
         async with db.tx(actor.db_scope()) as conn:
-            return await wh.rotate_secret(conn, actor, id)
+            return out.WebhookSecretRotated.model_validate(await wh.rotate_secret(conn, actor, id))
 
-    @r.put(f"{V}/webhooks/{{id}}/status", tags=["webhook"], operation_id="setWebhookStatus")
-    async def set_status(id: uuid.UUID, body: StatusIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.put(
+        f"{V}/webhooks/{{id}}/status",
+        tags=["webhook"],
+        operation_id="setWebhookStatus",
+        response_model=out.WebhookStatus,
+    )
+    async def set_status(id: uuid.UUID, body: StatusIn, actor: ActorDep, db: DbDep) -> out.WebhookStatus:
         async with db.tx(actor.db_scope()) as conn:
             await wh.set_status(conn, actor, id, body.status)
-        return {"id": str(id), "status": body.status}
+        return out.WebhookStatus(id=str(id), status=body.status)
 
-    @r.get(f"{V}/webhooks/{{id}}/deliveries", tags=["webhook"], operation_id="listWebhookDeliveries")
-    async def deliveries(id: uuid.UUID, actor: ActorDep, db: DbDep, limit: int = 50) -> dict[str, Any]:
+    @r.get(
+        f"{V}/webhooks/{{id}}/deliveries",
+        tags=["webhook"],
+        operation_id="listWebhookDeliveries",
+        response_model=Page[out.WebhookDelivery],
+    )
+    async def deliveries(id: uuid.UUID, actor: ActorDep, db: DbDep, limit: int = 50) -> Page[out.WebhookDelivery]:
         async with db.tx(actor.db_scope()) as conn:
-            return {"items": await wh.list_deliveries(conn, actor, id, limit=limit)}
+            items = [
+                out.WebhookDelivery.model_validate(x) for x in await wh.list_deliveries(conn, actor, id, limit=limit)
+            ]
+        return Page(items=items)
 
-    @r.post(f"{V}/webhooks/process", tags=["webhook"], operation_id="processWebhooks")
-    async def process(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+    @r.post(
+        f"{V}/webhooks/process",
+        tags=["webhook"],
+        operation_id="processWebhooks",
+        response_model=out.WebhookProcessResult,
+    )
+    async def process(actor: ActorDep, db: DbDep) -> out.WebhookProcessResult:
         """平台管理员手动触发一次到期投递（演练与排障；平时由后台循环处理）。"""
         actor.require(actor.has("platform_admin"), "只有平台管理员可以手动投递")
         async with db.tx(DbScope.system()) as conn:
-            return {"results": await wh.process_due(conn)}
+            return out.WebhookProcessResult(results=await wh.process_due(conn))
 
     return r
 

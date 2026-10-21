@@ -332,8 +332,115 @@ def control_plane() -> dict[str, Any]:
                     "action": S,
                     "action_result": {"type": "object"},
                     "status": {"enum": ["open", "acknowledged", "resume_requested", "resolved"]},
+                    "note": SN,
+                    "window_start": SN,
+                    "window_end": SN,
+                    "created_at": SN,
+                    "resolved_by": SN,
+                    "resolved_at": SN,
                 },
                 ["id", "rule_code", "status"],
+            ),
+            "RiskResumeRequested": o(
+                {"event_id": ID, "approval_id": ID, "status": S},
+                ["event_id", "approval_id", "status"],
+            ),
+            "RiskScanResult": o(
+                {"created": {"type": "array", "items": ref("RiskEvent")}},
+                ["created"],
+            ),
+            "WebhookCreated": o(
+                {
+                    "subscription_id": ID,
+                    "endpoint_id": ID,
+                    "consumer_id": ID,
+                    "events": {"type": "array", "items": S},
+                    "url": S,
+                    "status": S,
+                    "secret": S,
+                },
+                ["subscription_id", "endpoint_id", "consumer_id", "events", "url", "status", "secret"],
+            ),
+            "WebhookEndpoint": o(
+                {
+                    "id": ID,
+                    "company_id": SN,
+                    "subscription_id": SN,
+                    "consumer_id": SN,
+                    "url": SN,
+                    "status": SN,
+                    "events": {"type": "array", "items": S},
+                    "created_at": SN,
+                    "updated_at": SN,
+                }
+            ),
+            "WebhookSecretRotated": o({"endpoint_id": ID, "secret": S}, ["endpoint_id", "secret"]),
+            "WebhookStatus": o({"id": ID, "status": S}, ["id", "status"]),
+            "WebhookDelivery": o(
+                {
+                    "id": ID,
+                    "endpoint_id": SN,
+                    "company_id": SN,
+                    "event_kind": SN,
+                    "status": SN,
+                    "attempt": {"type": ["integer", "null"]},
+                    "next_attempt_at": SN,
+                    "last_error": SN,
+                    "http_status": {"type": ["integer", "null"]},
+                    "created_at": SN,
+                    "delivered_at": SN,
+                }
+            ),
+            "WebhookProcessResult": o(
+                {"results": {"type": "array", "items": {"type": "object"}}},
+                ["results"],
+            ),
+            "SkillPackageUploaded": o(
+                {
+                    "version_id": ID,
+                    "name": S,
+                    "manifest": {"type": "object"},
+                    "signature": SN,
+                    "content_sha256": SN,
+                    "files": {"type": "array", "items": S},
+                },
+                ["version_id", "name"],
+            ),
+            "SkillCatalogItem": o(
+                {
+                    "name": S,
+                    "version": S,
+                    "description": S,
+                    "namespace": SN,
+                    "state": SN,
+                    "retracted": B,
+                    "channel": SN,
+                    "tools": {"type": "array", "items": S},
+                    "asset_id": SN,
+                    "version_id": SN,
+                },
+                ["name", "version"],
+            ),
+            "SkillManifest": o(
+                {
+                    "version_id": SN,
+                    "manifest": {"type": "object"},
+                    "signature": SN,
+                    "content_sha256": SN,
+                    "retracted": B,
+                    "name": SN,
+                    "version": SN,
+                }
+            ),
+            "SkillInstallCheck": o(
+                {
+                    "name": S,
+                    "version": S,
+                    "retracted": B,
+                    "missing_grants": {"type": "array", "items": S},
+                    "ok": B,
+                },
+                ["name", "version", "ok"],
             ),
             "TodoDecision": o(
                 {"decision": {"enum": ["approve", "reject"]}, "comment": S, "data": {"type": "object"}}, ["decision"]
@@ -1223,12 +1330,12 @@ def control_plane() -> dict[str, Any]:
                 "risk",
                 "熔断恢复：写明修复情况，由另一位数据 Owner 复核（审批 kind=resume）",
                 req=ref("Note"),
-                res={"type": "object"},
+                res=ref("RiskResumeRequested"),
                 params=["Id"],
             )
         },
         f"{A}/risk-scan": {
-            "post": op("runRiskScan", "risk", "手动触发一次风险扫描（平台管理员）", res={"type": "object"})
+            "post": op("runRiskScan", "risk", "手动触发一次风险扫描（平台管理员）", res=ref("RiskScanResult"))
         },
         f"{A}/usage": {
             "get": {
@@ -1254,13 +1361,13 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/consumers/{{id}}/webhooks": {
-            "get": op("listWebhooks", "webhook", "消费方的 webhook 端点", res={"type": "object"}, params=["Id"]),
+            "get": op("listWebhooks", "webhook", "消费方的 webhook 端点", res=page("WebhookEndpoint"), params=["Id"]),
             "post": op(
                 "createWebhook",
                 "webhook",
                 "登记 webhook 订阅（返回一次性明文密钥）",
                 req=o({"events": {"type": "array", "items": S}, "url": S}, ["events", "url"]),
-                res={"type": "object"},
+                res=ref("WebhookCreated"),
                 code="201",
                 params=["Id"],
             ),
@@ -1270,7 +1377,7 @@ def control_plane() -> dict[str, Any]:
                 "rotateWebhookSecret",
                 "webhook",
                 "轮换 webhook 密钥（旧密钥立即失效，新密钥只返回一次）",
-                res={"type": "object"},
+                res=ref("WebhookSecretRotated"),
                 params=["Id"],
             )
         },
@@ -1280,7 +1387,7 @@ def control_plane() -> dict[str, Any]:
                 "webhook",
                 "启用或停用 webhook 端点",
                 req=o({"status": {"enum": ["active", "disabled"]}}, ["status"]),
-                res={"type": "object"},
+                res=ref("WebhookStatus"),
                 params=["Id"],
             )
         },
@@ -1289,7 +1396,7 @@ def control_plane() -> dict[str, Any]:
                 "listWebhookDeliveries",
                 "webhook",
                 "webhook 投递记录",
-                res={"type": "object"},
+                res=page("WebhookDelivery"),
                 params=["Id"],
             )
         },
@@ -1298,7 +1405,7 @@ def control_plane() -> dict[str, Any]:
                 "processWebhooks",
                 "webhook",
                 "手动触发到期 webhook 投递",
-                res={"type": "object"},
+                res=ref("WebhookProcessResult"),
             )
         },
         f"{A}/console/catalog": {
@@ -1315,7 +1422,7 @@ def control_plane() -> dict[str, Any]:
                     "uploadSkillPackage",
                     "skill",
                     "上传 Skill zip 包（签名入库，draft 阶段）",
-                    res={"type": "object"},
+                    res=ref("SkillPackageUploaded"),
                     code="201",
                     params=["Id"],
                 ),
@@ -1331,7 +1438,7 @@ def control_plane() -> dict[str, Any]:
         },
         f"{A}/skills": {
             "get": {
-                **op("listSkills", "skill", "Skill 目录（含撤回标记）", res={"type": "object"}),
+                **op("listSkills", "skill", "Skill 目录（含撤回标记）", res=page("SkillCatalogItem")),
                 "parameters": [
                     {"name": "q", "in": "query", "schema": S},
                     {"name": "channel", "in": "query", "schema": {"enum": ["stable", "beta"]}},
@@ -1341,7 +1448,7 @@ def control_plane() -> dict[str, Any]:
         },
         f"{A}/skills/{{name}}/versions/{{version}}/manifest": {
             "get": {
-                **op("getSkillManifest", "skill", "Skill 文件清单与签名", res={"type": "object"}),
+                **op("getSkillManifest", "skill", "Skill 文件清单与签名", res=ref("SkillManifest")),
                 "parameters": [
                     {"name": "name", "in": "path", "required": True, "schema": S},
                     {"name": "version", "in": "path", "required": True, "schema": S},
@@ -1371,7 +1478,7 @@ def control_plane() -> dict[str, Any]:
                     },
                     ["consumer_id", "name", "version"],
                 ),
-                res={"type": "object"},
+                res=ref("SkillInstallCheck"),
             )
         },
         f"{A}/importer/openapi": {

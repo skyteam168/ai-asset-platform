@@ -1604,7 +1604,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/RiskResumeRequested'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1627,7 +1627,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/RiskScanResult'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/usage:
@@ -1688,6 +1688,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookEndpoint'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1703,7 +1717,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/WebhookCreated'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1736,7 +1750,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/WebhookSecretRotated'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1753,7 +1767,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/WebhookStatus'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1784,6 +1798,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebhookDelivery'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1800,7 +1828,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/WebhookProcessResult'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/console/catalog:
@@ -1830,7 +1858,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/SkillPackageUploaded'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1860,6 +1888,20 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SkillCatalogItem'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1889,7 +1931,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/SkillManifest'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1942,7 +1984,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/SkillInstallCheck'
         default:
           $ref: '#/components/responses/Problem'
       requestBody:
@@ -3011,10 +3053,312 @@ components:
           - acknowledged
           - resume_requested
           - resolved
+        note:
+          type:
+          - string
+          - 'null'
+        window_start:
+          type:
+          - string
+          - 'null'
+        window_end:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+        resolved_by:
+          type:
+          - string
+          - 'null'
+        resolved_at:
+          type:
+          - string
+          - 'null'
       required:
       - id
       - rule_code
       - status
+    RiskResumeRequested:
+      type: object
+      properties:
+        event_id:
+          type: string
+          description: UUIDv7
+        approval_id:
+          type: string
+          description: UUIDv7
+        status:
+          type: string
+      required:
+      - event_id
+      - approval_id
+      - status
+    RiskScanResult:
+      type: object
+      properties:
+        created:
+          type: array
+          items:
+            $ref: '#/components/schemas/RiskEvent'
+      required:
+      - created
+    WebhookCreated:
+      type: object
+      properties:
+        subscription_id:
+          type: string
+          description: UUIDv7
+        endpoint_id:
+          type: string
+          description: UUIDv7
+        consumer_id:
+          type: string
+          description: UUIDv7
+        events:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+        status:
+          type: string
+        secret:
+          type: string
+      required:
+      - subscription_id
+      - endpoint_id
+      - consumer_id
+      - events
+      - url
+      - status
+      - secret
+    WebhookEndpoint:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        company_id:
+          type:
+          - string
+          - 'null'
+        subscription_id:
+          type:
+          - string
+          - 'null'
+        consumer_id:
+          type:
+          - string
+          - 'null'
+        url:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        events:
+          type: array
+          items:
+            type: string
+        created_at:
+          type:
+          - string
+          - 'null'
+        updated_at:
+          type:
+          - string
+          - 'null'
+    WebhookSecretRotated:
+      type: object
+      properties:
+        endpoint_id:
+          type: string
+          description: UUIDv7
+        secret:
+          type: string
+      required:
+      - endpoint_id
+      - secret
+    WebhookStatus:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        status:
+          type: string
+      required:
+      - id
+      - status
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        endpoint_id:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        event_kind:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        attempt:
+          type:
+          - integer
+          - 'null'
+        next_attempt_at:
+          type:
+          - string
+          - 'null'
+        last_error:
+          type:
+          - string
+          - 'null'
+        http_status:
+          type:
+          - integer
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+        delivered_at:
+          type:
+          - string
+          - 'null'
+    WebhookProcessResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            type: object
+      required:
+      - results
+    SkillPackageUploaded:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        manifest:
+          type: object
+        signature:
+          type:
+          - string
+          - 'null'
+        content_sha256:
+          type:
+          - string
+          - 'null'
+        files:
+          type: array
+          items:
+            type: string
+      required:
+      - version_id
+      - name
+    SkillCatalogItem:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        namespace:
+          type:
+          - string
+          - 'null'
+        state:
+          type:
+          - string
+          - 'null'
+        retracted:
+          type: boolean
+        channel:
+          type:
+          - string
+          - 'null'
+        tools:
+          type: array
+          items:
+            type: string
+        asset_id:
+          type:
+          - string
+          - 'null'
+        version_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - name
+      - version
+    SkillManifest:
+      type: object
+      properties:
+        version_id:
+          type:
+          - string
+          - 'null'
+        manifest:
+          type: object
+        signature:
+          type:
+          - string
+          - 'null'
+        content_sha256:
+          type:
+          - string
+          - 'null'
+        retracted:
+          type: boolean
+        name:
+          type:
+          - string
+          - 'null'
+        version:
+          type:
+          - string
+          - 'null'
+    SkillInstallCheck:
+      type: object
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        retracted:
+          type: boolean
+        missing_grants:
+          type: array
+          items:
+            type: string
+        ok:
+          type: boolean
+      required:
+      - name
+      - version
+      - ok
     TodoDecision:
       type: object
       properties:

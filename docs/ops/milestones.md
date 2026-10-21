@@ -684,6 +684,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H22 响应体 Pydantic（风控 / webhook / Skill）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| risk 规则/事件/扫描/恢复挂载模型 | 通过 | 	est_h22_response_models.py；	est_m6_risk.py |
+| webhook 订阅/投递挂载模型 | 通过 | 同上；	est_m6_webhook.py |
+| Skill 上传/目录/清单/安装检查挂载模型 | 通过 | 同上；	est_m6_skill.py |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | 
+isk/schemas.py、webhook/schemas.py、skill/schemas.py |
+| 契约 | listRiskRules/listWebhooks/listSkills 对齐 Page |
+| 不在本片 | todo / LLM / importer；zhparser；human_task.data 信封 |
+
 ### H21 响应体 Pydantic（门禁 / 审批 / 使用申请）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |
