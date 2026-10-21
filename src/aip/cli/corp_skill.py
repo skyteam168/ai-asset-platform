@@ -19,6 +19,28 @@ from aip.control_plane.skill.service import verify_package_bytes
 CONF = pathlib.Path.home() / ".aip" / "corp-skill.json"
 DEFAULT_TARGET = pathlib.Path.home() / ".aip" / "skills"
 
+# architecture.md 10.4：--target 适配表（平台名 → 默认安装根目录）
+TARGET_PRESETS: dict[str, pathlib.Path] = {
+    "generic": DEFAULT_TARGET,
+    "aip": DEFAULT_TARGET,
+    "cursor": pathlib.Path.home() / ".cursor" / "skills",
+    "claude": pathlib.Path.home() / ".claude" / "skills",
+    "claude-desktop": pathlib.Path.home() / ".claude" / "skills",
+}
+
+
+def resolve_target(raw: str | None) -> pathlib.Path:
+    """解析 --target：预设名（cursor/claude/generic）或任意路径。"""
+    if raw is None or raw == "":
+        conf_t = _load_conf().get("target")
+        if isinstance(conf_t, str) and conf_t:
+            return resolve_target(conf_t)
+        return DEFAULT_TARGET
+    key = raw.strip().lower().replace("_", "-")
+    if key in TARGET_PRESETS:
+        return TARGET_PRESETS[key]
+    return pathlib.Path(raw).expanduser()
+
 
 def _load_conf() -> dict[str, Any]:
     if CONF.exists():
@@ -62,7 +84,7 @@ def cmd_search(args: argparse.Namespace) -> None:
 
 
 def cmd_list(args: argparse.Namespace) -> None:
-    target = pathlib.Path(args.target or _load_conf().get("target") or DEFAULT_TARGET)
+    target = resolve_target(args.target)
     if not target.exists():
         print("(本地无已安装 Skill)")
         return
@@ -129,7 +151,7 @@ def cmd_install(args: argparse.Namespace) -> None:
     if problems:
         sys.exit("验签失败：\n  " + "\n  ".join(problems))
     files = pkg.unpack_zip(dl.content)
-    target = pathlib.Path(args.target or conf.get("target") or DEFAULT_TARGET) / name
+    target = resolve_target(args.target) / name
     if target.exists() and not args.force:
         sys.exit(f"目录已存在：{target}（加 --force 覆盖）")
     target.mkdir(parents=True, exist_ok=True)
@@ -206,7 +228,10 @@ def main(argv: list[str] | None = None) -> None:
     login.add_argument("--url", required=True)
     login.add_argument("--token", required=True)
     login.add_argument("--consumer-id")
-    login.add_argument("--target")
+    login.add_argument(
+        "--target",
+        help="安装根目录或预设：generic|cursor|claude（见 TARGET_PRESETS）",
+    )
     login.set_defaults(func=cmd_login)
 
     search = sub.add_parser("search", help="搜索目录")
