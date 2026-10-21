@@ -62,8 +62,10 @@ async def ship(spool: AuditSpool, engine: AsyncEngine, batch: int = 500) -> int:
     return shipped
 
 
-async def anchor(conn: AsyncConnection, key: SigningKey) -> int:
-    """为每个 shard 的当前链头签名并写入 audit_anchor（每小时运行；已锚定的跳过）。"""
+async def anchor(conn: AsyncConnection, key: SigningKey, worm: Any | None = None) -> int:
+    """为每个 shard 的当前链头签名并写入 audit_anchor；可选同步到 WORM 桶（architecture.md 12.4）。"""
+    from aip.libs.storage.worm import sync_anchors
+
     heads = (
         await conn.execute(
             text("SELECT DISTINCT ON (shard_id) shard_id, seq, hash FROM audit.audit_log ORDER BY shard_id, seq DESC")
@@ -79,6 +81,8 @@ async def anchor(conn: AsyncConnection, key: SigningKey) -> int:
             {"s": shard_id, "q": seq, "h": h, "sig": sign_bytes(anchor_message(shard_id, seq, h), key), "kid": key.kid},
         )
         n += res.rowcount or 0
+    if worm is not None:
+        await sync_anchors(conn, worm)
     return n
 
 

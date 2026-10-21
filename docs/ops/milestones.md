@@ -684,6 +684,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H14 审计锚点 WORM 归档 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| put_if_absent 同内容幂等 / 异内容拒绝 | 通过 | `test_h14_worm.py::test_memory_worm_put_if_absent_conflict` |
+| anchor 后同步并可 verify_worm | 通过 | `test_anchor_sync_and_verify` |
+| SeaweedFS S3 往返（可选） | 通过 | `test_seaweedfs_worm_roundtrip` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `libs/storage/s3.py`、`libs/storage/worm.py` |
+| 配置 | `AIP_WORM_ENABLED`（默认 false）、`AIP_WORM_BUCKET`、既有 `AIP_S3_*` |
+| 行为 | `anchor(..., worm=)` → `sync_anchors`；数据面 `ship_audit` 启用时同步 |
+| 文档 | [audit-worm.md](audit-worm.md) |
+| 不在本片 | Object Lock 桶策略；全量 JSONL 归档；控制台校验 UI |
+
 ### H13 OTel Collector 与看板 — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

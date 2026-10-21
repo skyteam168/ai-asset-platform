@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 import uuid
-from typing import Any
+from typing import Any, TypeGuard
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -22,7 +22,7 @@ _ALG = "aes-256-gcm"
 _LOCAL_KEK_CACHE: dict[str, bytes] = {}
 
 
-def is_envelope(obj: Any) -> bool:
+def is_envelope(obj: Any) -> TypeGuard[dict[str, Any]]:
     return isinstance(obj, dict) and obj.get("v") == 1 and "wrapped_dek" in obj and "ciphertext" in obj
 
 

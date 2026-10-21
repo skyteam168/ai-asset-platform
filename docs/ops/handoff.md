@@ -46,6 +46,7 @@
 | **H11** 执行快照信封加密 | 完成 | 2052d62 |
 | **H12** IAM 业务角色 | 完成 | edea91c |
 | **H13** OTel Collector 与看板 | 完成 | da80976 |
+| **H14** 审计锚点 WORM | 完成 | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -90,7 +91,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | --- | --- |
 | `src/aip/control_plane/` | 控制面：`iam/`、`registry/`、`grant/`、`gates/`、`approval/`、`testlab/`、`conn/`、`risk/`（M6a）、`webhook/`（M6b）、`skill/`（M6c 包与目录）、`todo_api.py`、`console_api.py`（含 `/console/catalog`） |
 | `src/aip/data_plane/` | 数据面：`runtime.py`（统一执行链、幂等、确认、配额、对账）、`confirmation.py` / `confirm_api.py`（确认对象与通道）、`workflow/engine.py`（step journal 引擎）、`quota.py`、`mcp_gateway.py`、`a2a_gateway.py`（Agent Card + SendMessage/GetTask）、`oauth.py`、`pdp.py` / `facts.py` |
-| `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
+| `src/aip/libs/` | `httpclient`（唯一允许关闭证书校验的位置）、`tokens`、`audit`（spool、哈希链、锚点）、`storage`（S3 / WORM）、`crypto`（信封）、`workflow`（DSL 校验与 CEL 子集表达式，两个平面共用）、`common`（配置、错误码、web 装配） |
 | `src/aip/sdk/` | 官方 Python 消费方 SDK（`Client` / `SdkError`）与可选 LangChain 适配；出站用 httpx，不经 `libs/httpclient` |
 | `sdk/typescript/` | 官方 TypeScript 消费方 SDK（包名 `aip-sdk`：`Client` / `SdkError`）；fetch 可注入，与 Python 同 REST 面 |
 | `sdk/consumer-kit/` | 消费方断言签名示例（Python / TS 可运行；Java / .NET 单文件模板）；不接主 `aip` 依赖 |
@@ -103,6 +104,7 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `docs/ops/fault-drills.md` | 故障演练矩阵（12.2）与自动化对照 |
 | `docs/ops/pg-failover.md` | PostgreSQL 主从切换本地演练（opt-in compose `pg-ha`） |
 | `docs/ops/search-index.md` | 发现检索物化 search_text；zhparser / pg_trgm 可选路径 |
+| docs/ops/audit-worm.md | 审计锚点 WORM（SeaweedFS put_if_absent） |
 | `spikes/adr0003/` | 工作流引擎选型 spike（不进入产品代码） |
 
 ## 5. 约定与踩过的坑（务必遵守）
@@ -151,10 +153,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = 备份 WORM 等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = 响应体 Pydantic 等**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H13（已完成）**：至 OTel 看板、业务角色、信封加密、控制台 LLM / 评测、G0 PII。
-- **横向（当前下一步）**：备份 WORM；响应体 Pydantic；K8s/CI；Patroni / zhparser；wf ctx/step 信封深化。
+- **H1–H14（已完成）**：至审计锚点 WORM、OTel 看板、业务角色、信封加密、控制台 LLM / 评测、G0 PII。
+- **横向（当前下一步）**：响应体 Pydantic；K8s/CI；Patroni / zhparser；wf ctx/step 信封深化。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

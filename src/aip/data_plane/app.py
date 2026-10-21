@@ -117,6 +117,9 @@ async def pull_snapshots(app: FastAPI, control_plane_url: str, wait_s: float = 2
 async def ship_audit(app: FastAPI, database_url: str) -> None:
     """后台把 spool 写入审计库，并按小时锚定链头（architecture.md 12.4）；审计库不可用时只告警、spool 继续累积。"""
     settings = get_settings()
+    from aip.libs.storage.worm import worm_store_from_settings
+
+    worm = worm_store_from_settings(settings)
     engine = create_async_engine(database_url, pool_pre_ping=True)
     last_anchor = 0.0
     try:
@@ -126,10 +129,12 @@ async def ship_audit(app: FastAPI, database_url: str) -> None:
                 now = time.monotonic()
                 if now - last_anchor >= settings.audit_anchor_interval_s:
                     async with engine.begin() as conn:
-                        await anchor(conn, app.state.auth.key)
+                        await anchor(conn, app.state.auth.key, worm=worm)
                     last_anchor = now
             except (OSError, SQLAlchemyError) as e:
                 log.warning("audit ship failed, spool keeps buffering: %s", type(e).__name__)
+            except RuntimeError as e:
+                log.warning("audit WORM sync failed: %s", e)
             await asyncio.sleep(settings.audit_ship_interval_s)
     finally:
         await engine.dispose()

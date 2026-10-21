@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     opa_url: str = "http://127.0.0.1:58181"
     opa_timeout_s: float = 2.0
     s3_endpoint: str = "http://127.0.0.1:58333"
+    s3_access_key: str = "aip"
+    s3_secret_key: str = "aip-dev-only"
+    s3_region: str = "us-east-1"
+    # 审计锚点 WORM 桶（architecture.md 12.4）；关闭时只写 audit_anchor 表
+    worm_enabled: bool = False
+    worm_bucket: str = "aip-audit-worm"
 
     # 身份（architecture.md 3）
     issuer: str = "https://api.aip.internal"
