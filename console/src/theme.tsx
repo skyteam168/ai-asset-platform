@@ -34,7 +34,10 @@ export const PRESETS: { color: string; label: string }[] = [
 ];
 
 // 两种模式下的表面色（采样自集团知识库中台）
-export const SURFACE: Record<Mode, { layout: string; container: string; sider: string; border: string; tableHead: string; selected: string; hover: string; subtle: string }> = {
+export const SURFACE: Record<Mode, {
+  layout: string; container: string; sider: string; border: string; tableHead: string;
+  selected: string; hover: string; subtle: string; text: string; textSecondary: string;
+}> = {
   light: {
     layout: "#f5f6f8",
     container: "#ffffff",
@@ -44,6 +47,8 @@ export const SURFACE: Record<Mode, { layout: string; container: string; sider: s
     selected: "#eef3fe",
     hover: "#f2f3f5",
     subtle: "#f2f3f5",
+    text: "#1f2329",
+    textSecondary: "#646a73",
   },
   dark: {
     layout: "#121315",
@@ -54,6 +59,8 @@ export const SURFACE: Record<Mode, { layout: string; container: string; sider: s
     selected: "#1c2a4c",
     hover: "#26272b",
     subtle: "#25262a",
+    text: "#e5e6eb",
+    textSecondary: "#a9aeb8",
   },
 };
 

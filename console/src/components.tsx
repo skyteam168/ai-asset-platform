@@ -40,11 +40,7 @@ export function OrgName({ id }: { id: string | null | undefined }) {
 // ---------- 展示 ----------
 
 export function JsonView({ value }: { value: unknown }) {
-  return (
-    <pre style={{ background: "#fafafa", padding: 12, margin: 0, maxHeight: 360, overflow: "auto", fontSize: 12 }}>
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
+  return <pre className="aip-json-view">{JSON.stringify(value, null, 2)}</pre>;
 }
 
 export function Clearance({ level }: { level: number | null | undefined }) {
@@ -92,6 +88,52 @@ export function StateTag({ state }: { state: string }) {
     <Tag color={STATE_COLOR[state] ?? "default"} title={state}>
       {STATE_LABEL[state] ?? state}
     </Tag>
+  );
+}
+
+/** 门禁证据：有 cases 时用表格（避免把「期望失败」误解成门失败）；其余仍走 JSON。 */
+export function GateEvidence({ value }: { value: unknown }) {
+  const evidence = value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+  const cases = Array.isArray(evidence?.cases) ? (evidence.cases as Record<string, unknown>[]) : null;
+  if (!cases?.length) return <JsonView value={value} />;
+  return (
+    <div className="aip-gate-evidence">
+      <table className="aip-gate-cases">
+        <thead>
+          <tr>
+            <th>{t("用例")}</th>
+            <th>{t("类型")}</th>
+            <th>{t("用例结果")}</th>
+            <th>{t("执行状态")}</th>
+            <th>{t("说明")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {cases.map((c, i) => {
+            const passed = Boolean(c.passed);
+            const status = String(c.status ?? "-");
+            const kind = String(c.kind ?? "-");
+            const note =
+              kind === "permission" && passed && status === "failed"
+                ? t("期望被拒绝（权限用例通过）")
+                : String(c.detail || c.error_code || "");
+            return (
+              <tr key={`${String(c.name)}-${i}`}>
+                <td>{String(c.name ?? "-")}</td>
+                <td>{kind}</td>
+                <td><StateTag state={passed ? "passed" : "failed"} /></td>
+                <td><StateTag state={status} /></td>
+                <td className="aip-gate-cases-note">{note || "—"}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <details className="aip-gate-evidence-raw">
+        <summary>{t("原始证据 JSON")}</summary>
+        <JsonView value={value} />
+      </details>
+    </div>
   );
 }
 
