@@ -45,7 +45,7 @@
 | **H10** 控制台 LLM / 选择评测 | 完成 | 5d58390 |
 | **H11** 执行快照信封加密 | 完成 | 2052d62 |
 | **H12** IAM 业务角色 | 完成 | edea91c |
-| **H13** OTel Collector 与看板 | 完成 | TBD |
+| **H13** OTel Collector 与看板 | 完成 | da80976 |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
