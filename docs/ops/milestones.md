@@ -684,6 +684,18 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H24 响应体 Pydantic（Importer）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| importOpenApi / importPostman 挂载 ImporterResult | 通过 | 	est_h24_response_models.py |
+| OpenAPI / Postman / AI 描述导入回归 | 通过 | 	est_h2_importer.py；	est_h3_postman_importer.py；	est_h8_importer_ai_desc.py |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | importer/schemas.py（对齐既有 OpenAPI ImporterResult） |
+| 不在本片 | human_task.data 信封；zhparser |
+
 ### H23 响应体 Pydantic（待办 / LLM）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |
