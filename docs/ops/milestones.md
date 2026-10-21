@@ -500,6 +500,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | Task | `id=run_id`；状态 `TASK_STATE_*`（working / completed / failed / input-required 等） |
 | 不在本片 | streaming、CancelTask、A2A 确认回传、Inspector、故障演练 |
 
+### M7h MCP 客户端兼容冒烟 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| ≥3 客户端画像连通（list + call） | 通过 | `test_m7_client_compat.py`（SDK×2 + Inspector HTTP + Desktop legacy） |
+| 双协议版本 | 通过 | SDK legacy / 2026-07-28；Inspector=现代；Desktop=2025-11-25 |
+| 兼容矩阵文档 | 通过 | [docs/ops/client-compat.md](client-compat.md) |
+
+| 部分 | 内容 |
+| --- | --- |
+| 画像 | 官方 MCP Python SDK；MCP Inspector HTTP 画像；桌面 Agent legacy 画像 |
+| 认证 | 模式 A 平台访问令牌（MCP 禁止复用同一 X-User-Assertion） |
+| 不在本片 | 故障演练（停控制面/Valkey/OpenBao/审计库）、zhparser、多副本压测 |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

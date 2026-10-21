@@ -27,9 +27,10 @@
 | **M7e** Python SDK + LangChain | 完成 | f401279 |
 | **M7f** TypeScript SDK | 完成 | bf6568a |
 | **M7g** A2A 最小出口 | 完成 | 62d5100 |
+| **M7h** MCP 客户端兼容 | 完成 | （本片提交） |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
-测试现状：后端含 M6b–M7g 用例；TS SDK 有 vitest；控制台组件测试与端到端在提交前再跑全量。
+测试现状：后端含 M6b–M7h 用例；TS SDK 有 vitest；控制台组件测试与端到端在提交前再跑全量。
 
 ## 2. 本地运行（Windows 开发机）
 
@@ -76,7 +77,8 @@ cd console && npx playwright test e2e/console.spec.ts   # 需先 serve；凭据�
 | `policies/aip/authz.rego` | OPA 五方交集策略与表驱动测试 |
 | `tools/` | `gen_openapi.py`（OpenAPI 的唯一来源）、`gen_schemas.py`（docs/specs 的唯一来源）、`gen_adrs.py`、`dev.py`、`seed_m5_demo.py`、`dev_login.py` |
 | `console/` | React 18 + Ant Design 5 + Vite；`src/App.tsx`（外壳：分组侧栏、顶栏、页签条）、`src/theme.tsx`（主题 token）、`src/i18n.ts` + `src/locales/`（三语）、`src/pages/*` |
-| `tests/` | 按里程碑命名 `test_m{N}_*.py`；共用夹具 `iam_seed.py`、`m2_fixtures.py`（发布一个读类 Tool）、`m3_world.py`（不经数据库直接构造签名快照的数据面 World） |
+| `tests/` | 按里程碑命名 `test_m{N}_*.py`；共用夹具 `iam_seed.py`、`m2_fixtures.py`（发布一个读类 Tool）、`m3_world.py`（不经数据库直接构造签名快照的数据面 World）；`test_m7_client_compat.py`（MCP 三客户端画像冒烟） |
+| `docs/ops/client-compat.md` | MCP 客户端兼容矩阵与 Inspector 联调步骤 |
 | `spikes/adr0003/` | 工作流引擎选型 spike（不进入产品代码） |
 
 ## 5. 约定与踩过的坑（务必遵守）
@@ -125,7 +127,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = SDK / A2A 等**）
+## 7. 之后：M7 与横向事项（**当前下一步 = 故障演练**）
 
 - **M7a（已完成）**：MCP `io.modelcontextprotocol/tasks`、`aip.get_run_status`、Workflow 作 MCP 异步 Tool、`tasks/get`（task_id=run_id）。
 - **M7b（已完成）**：MCP elicitation / MRTR `input_required` 确认通道（`via=mcp`）；迁移 0014。
@@ -134,7 +136,8 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **M7e（已完成）**：官方 Python SDK（`aip.sdk.Client`：令牌 / 目录 / 调用 / 确认 / Run·Execution）+ LangChain StructuredTool 适配（可选依赖组 `sdk`）。
 - **M7f（已完成）**：官方 TypeScript SDK（`sdk/typescript` / `aip-sdk`，API 对齐 Python Client）；CI 已挂 typecheck / test / build。
 - **M7g（已完成）**：A2A 1.0 最小出口（`/.well-known/agent-card.json` + `POST /a2a` SendMessage/GetTask；仅 a2a Workflow；task_id=run_id）。
-- **M7 其余（当前下一步）**：MCP Inspector + 至少 3 个客户端兼容测试；故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）；可选 zhparser 物化检索索引。（工具注解已在 MCP Gateway 由 risk_level 等生成。）
+- **M7h（已完成）**：MCP 客户端兼容（`docs/ops/client-compat.md` + 官方 SDK / Inspector HTTP / 桌面 legacy 三画像冒烟，双协议）。
+- **M7 其余（当前下一步）**：故障演练（停控制面、Valkey、OpenBao、审计库；PostgreSQL 切换审计零丢失；多副本容量测试）；可选 zhparser 物化检索索引。
 - **横向**：G4 回归与影响分析；工具选择评测；Prism Mock 自动生成；Importer（OpenAPI / Postman 生成声明式 Connector 与 Tool 草稿）；LLM Gateway（模型白名单、token 预算、脱敏）；IAM 业务角色；PII 识别（Presidio）；Run 上下文与执行结果的信封加密；OpenTelemetry 与看板；备份恢复与审计 WORM 归档；控制面响应体 Pydantic 模型；Kubernetes 清单在真实集群验证；CI 在 GitHub 上运行。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
