@@ -86,6 +86,7 @@ async def truncate() -> None:
             "notify.subscription",
             "notify.channel_outbox",
             "registry.skill_package",
+            "registry.skill_script_allowlist",
             "registry.probe_result",
             "registry.contract_drift",
             "registry.gate_result",

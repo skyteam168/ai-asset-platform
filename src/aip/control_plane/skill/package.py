@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import base64
 import binascii
+import fnmatch
 import hashlib
 import io
 import json
 import re
 import zipfile
+from collections.abc import Sequence
 from typing import Any
 
 from aip.libs.common.errors import ErrorCode, PlatformError
@@ -21,9 +23,29 @@ from aip.libs.tokens.signed import sign_bytes, verify_bytes
 
 SKILL_MD = "SKILL.md"
 LOCK_FILE = "skill.lock.json"
-# 首期默认不发带脚本的 Skill（architecture.md 10.4）
+# 默认不发带脚本的 Skill；经白名单审批后可放行登记路径（architecture.md 10.4）
 BLOCKED_SUFFIX = frozenset({".py", ".sh", ".bash", ".ps1", ".js", ".mjs", ".cjs", ".exe", ".bat", ".cmd"})
 NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,63}$")
+PATH_GLOB_RE = re.compile(r"^[A-Za-z0-9_./\-*?\[\]]{1,256}$")
+
+
+def is_blocked_script(path: str) -> bool:
+    lower = path.lower()
+    return any(lower.endswith(suf) for suf in BLOCKED_SUFFIX)
+
+
+def path_allowed_by_globs(path: str, globs: Sequence[str]) -> bool:
+    return any(fnmatch.fnmatch(path, g) for g in globs)
+
+
+def validate_path_glob(glob: str) -> str:
+    g = glob.strip().replace("\\", "/")
+    if not g or ".." in g.split("/") or g.startswith("/") or not PATH_GLOB_RE.match(g):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"非法脚本路径模式：{glob}")
+    lower = g.lower()
+    if not any(suf in lower for suf in BLOCKED_SUFFIX):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"路径模式须指向脚本后缀：{glob}")
+    return g
 
 
 def parse_frontmatter(text: str) -> tuple[dict[str, str], str]:
@@ -79,8 +101,17 @@ def _flatten_root(paths: list[str]) -> list[str]:
     return paths
 
 
-def unpack_zip(raw: bytes) -> dict[str, bytes]:
-    """解压 zip 为 path→bytes；拒绝路径穿越、绝对路径与脚本后缀。"""
+def unpack_zip(
+    raw: bytes,
+    *,
+    allowed_globs: Sequence[str] = (),
+    check_scripts: bool = True,
+) -> dict[str, bytes]:
+    """解压 zip 为 path→bytes；拒绝路径穿越与绝对路径。
+
+    check_scripts=True（入库默认）时拒绝常见脚本后缀，除非 path 命中已审批的 allowed_globs。
+    读取已入库包时设 check_scripts=False。
+    """
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
     except zipfile.BadZipFile as e:
@@ -102,10 +133,8 @@ def unpack_zip(raw: bytes) -> dict[str, bytes]:
     for path, data in zip(flat_paths, (d for _, d in entries), strict=True):
         if not path:
             continue
-        lower = path.lower()
-        for suf in BLOCKED_SUFFIX:
-            if lower.endswith(suf):
-                raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"首期不接受带脚本的 Skill：{path}")
+        if check_scripts and is_blocked_script(path) and not path_allowed_by_globs(path, allowed_globs):
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"未在白名单中的脚本 Skill 路径：{path}")
         files[path] = data
     if SKILL_MD not in files:
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "Skill 包必须包含 SKILL.md")
