@@ -8,6 +8,7 @@ import type { Approval, Connection, Me, Role } from "../types";
 import { ApprovalsPage } from "./Approvals";
 import { AuditPage } from "./Audit";
 import { TransportTag } from "./Connections";
+import { LlmConfigPage } from "./LlmConfig";
 
 const me = (role: Role): Me => ({
   id: "u1", login_name: "a", display_name: "A", home_org_id: "o1", effective_clearance: 3, roles: [{ role, scope_org_id: "o1" }],
@@ -87,6 +88,38 @@ describe("审批页", () => {
     await user.type(screen.getByLabelText("意见"), "缺少权限用例");
     await user.click(ok());
     await waitFor(() => expect(calls.find((c) => c.method === "POST")?.body).toEqual({ decision: "reject", comment: "缺少权限用例" }));
+  });
+});
+
+describe("LLM 配置页", () => {
+  it("平台管理员可保存白名单与预算", async () => {
+    session.set("s");
+    const company = { id: "c1", code: "VN01", name: "越南", type: "company", parent_id: null, status: "active" };
+    const calls = mockApi((method, path) => {
+      if (path === "/me") return { body: me("platform_admin") };
+      if (path === "/orgs") return page([company]);
+      if (path === "/companies/c1/llm-allowlist") {
+        return method === "PUT" ? { body: { company_id: "c1", names: ["gpt-4o-mini"] } } : { body: { company_id: "c1", names: [] } };
+      }
+      if (path === "/companies/c1/llm-budget") {
+        return method === "PUT" ? { body: { company_id: "c1", daily_tokens: 1000 } } : { body: { company_id: "c1", daily_tokens: 0 } };
+      }
+      if (path === "/companies/c1/llm-usage") {
+        return { body: { company_id: "c1", usage_date: "2026-10-21", tokens_used: 10, daily_tokens: 0 } };
+      }
+      return method === "GET" ? page([]) : undefined;
+    });
+    render(wrap(<OrgProvider><LlmConfigPage /></OrgProvider>));
+    expect(await screen.findByText(/当日用量/)).toBeInTheDocument();
+    const user = userEvent.setup();
+    const box = await screen.findByLabelText(/模型白名单/);
+    fireEvent.change(box, { target: { value: "gpt-4o-mini" } });
+    fireEvent.change(screen.getByLabelText(/日 token 预算/), { target: { value: "1000" } });
+    await user.click(screen.getByRole("button", { name: /^保\s*存$/ }));
+    await waitFor(() => {
+      expect(calls.some((c) => c.method === "PUT" && c.path === "/companies/c1/llm-allowlist")).toBe(true);
+      expect(calls.some((c) => c.method === "PUT" && c.path === "/companies/c1/llm-budget")).toBe(true);
+    });
   });
 });
 

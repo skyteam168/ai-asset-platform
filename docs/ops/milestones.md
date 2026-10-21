@@ -684,6 +684,20 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H10 控制台 LLM 与选择评测 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| LLM 配置页保存白名单/预算 | 通过 | `pages.test.tsx`「LLM 配置页」 |
+| 套件版本「选择评测」编辑 | 通过 | `Assets.tsx` SelectionEvalEditor → PUT selection-eval |
+| i18n en/vi 覆盖 | 通过 | `i18n.test.tsx` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 页面 | `/llm`「LLM 配置」（platform_admin）；资产版本 Tab「选择评测」（bundle） |
+| API | 复用 H6/H7：`llm-allowlist` / `llm-budget` / `llm-usage`、`selection-eval` |
+| 不在本片 | Importer 润色按钮；Skill 选择评测 UI |
+
 ### H9 G0 Presidio / 规则辅助 PII — 2026-10-21
 
 | 验收项 | 结果 | 证据 |

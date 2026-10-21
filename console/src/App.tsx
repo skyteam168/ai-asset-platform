@@ -26,6 +26,7 @@ import {
   SearchOutlined,
   SettingOutlined,
   SunOutlined,
+  ExperimentOutlined,
 } from "@ant-design/icons";
 import { AutoComplete, Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import type { MenuProps } from "antd";
@@ -55,6 +56,7 @@ const OrgsPage = page(() => import("./pages/Orgs"), "OrgsPage");
 const RiskPage = page(() => import("./pages/Risk"), "RiskPage");
 const RunsPage = page(() => import("./pages/Runs"), "RunsPage");
 const DistributionPage = page(() => import("./pages/Distribution"), "DistributionPage");
+const LlmConfigPage = page(() => import("./pages/LlmConfig"), "LlmConfigPage");
 
 type Group = "access" | "governance" | "system";
 
@@ -91,6 +93,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "asset_developer", "data_owner"], group: "access" },
   { path: "/risk", label: t("风控与计量"), icon: <AlertOutlined />, element: <RiskPage />,
     roles: ["platform_admin", "data_owner", "auditor", "company_admin"], group: "governance" },
+  { path: "/llm", label: t("LLM 配置"), icon: <ExperimentOutlined />, element: <LlmConfigPage />,
+    roles: ["platform_admin"], group: "governance" },
   { path: "/audit", label: t("审计"), icon: <AuditOutlined />, element: <AuditPage />,
     roles: ["platform_admin", "auditor", "company_admin"], group: "governance" },
   { path: "/orgs", label: t("组织与用户"), icon: <ApartmentOutlined />, element: <OrgsPage />,

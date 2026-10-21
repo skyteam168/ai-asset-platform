@@ -1,5 +1,5 @@
 import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Table, Tabs, Tag, Typography } from "antd";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
@@ -77,7 +77,9 @@ function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => v
               { title: t("内容哈希"), dataIndex: "content_hash", render: (v: string) => <Typography.Text code>{v.slice(0, 19)}…</Typography.Text> },
               { title: t("创建"), dataIndex: "created_at", render: (v: string) => v.slice(0, 16).replace("T", " ") },
             ]} />
-          {versionId && <VersionPanel key={versionId} versionId={versionId} onChanged={versions.reload} />}
+          {versionId && (
+            <VersionPanel key={versionId} versionId={versionId} assetType={asset.type} onChanged={versions.reload} />
+          )}
           <NewVersion asset={asset} open={newOpen} onClose={() => setNewOpen(false)} onDone={versions.reload} />
         </>
       )}
@@ -115,7 +117,15 @@ function NewVersion(p: { asset: Asset; open: boolean; onClose: () => void; onDon
   );
 }
 
-function VersionPanel({ versionId, onChanged }: { versionId: string; onChanged: () => void }) {
+function VersionPanel({
+  versionId,
+  assetType,
+  onChanged,
+}: {
+  versionId: string;
+  assetType: string;
+  onChanged: () => void;
+}) {
   const detail = useLoad(() => get<VersionDetail>(`/versions/${versionId}`), [versionId]);
   const gates = useLoad(() => get<{ items: GateRecord[] }>(`/versions/${versionId}/gates`), [versionId]);
   const { has } = useAuth();
@@ -126,6 +136,26 @@ function VersionPanel({ versionId, onChanged }: { versionId: string; onChanged: 
   if (!v) return detail.error ? <Alert type="error" message={detail.error} /> : null;
   const dev = has("platform_admin", "asset_developer");
   const step = Math.max(LIFECYCLE.indexOf(v.state), 0);
+  const tabs = [
+    { key: "gates", label: t("门禁记录"), children: (
+      <Table<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
+        expandable={{ expandedRowRender: (r) => <JsonView value={r.evidence} /> }}
+        columns={[
+          { title: t("门"), dataIndex: "gate" },
+          { title: t("结果"), dataIndex: "status", render: (s) => <StateTag state={s} /> },
+          { title: t("时间"), dataIndex: "created_at", render: (v: string) => v.slice(0, 19).replace("T", " ") },
+        ]} />) },
+    { key: "cases", label: t("门禁用例（{0}）", [v.test_cases.length]), children: <Cases v={v} editable={dev && v.state === "draft"} onDone={refresh} /> },
+    { key: "acceptance", label: t("验收单"), children: <Acceptance v={v} editable={v.state === "draft"} onDone={refresh} /> },
+    ...(assetType === "bundle"
+      ? [{
+          key: "selection-eval",
+          label: t("选择评测"),
+          children: <SelectionEvalEditor versionId={versionId} editable={dev && v.state === "draft"} />,
+        }]
+      : []),
+    { key: "spec", label: "Spec", children: <JsonView value={v.spec} /> },
+  ];
   return (
     <Card size="small" style={{ marginTop: 16 }} title={t("版本 {0}", [v.semver])} extra={<StateTag state={v.state} />}>
       <Steps size="small" current={step} status={v.state === "suspended" ? "error" : undefined}
@@ -133,10 +163,28 @@ function VersionPanel({ versionId, onChanged }: { versionId: string; onChanged: 
       <Space style={{ marginBottom: 12 }} wrap>
         {dev && v.state === "draft" && (
           <Button type="primary" onClick={async () => {
-            const r = await act(() => post<{ passed: boolean; problems: string[] }>(`/versions/${versionId}/submit`));
+            const r = await act(() => post<{ passed: boolean; problems: string[]; pii_suggestions?: { field: string; kind: string }[] }>(
+              `/versions/${versionId}/submit`));
             if (r) {
-              Modal[r.passed ? "success" : "error"]({ title: r.passed ? t("G0 通过，进入 testing") : t("G0 未通过"),
-                content: r.problems.map((x) => <div key={x}>· {x}</div>) });
+              const pii = r.pii_suggestions?.length
+                ? (
+                  <>
+                    <div style={{ marginTop: 8 }}>{t("PII 建议（请确认后写入 Spec.pii_fields）")}</div>
+                    {r.pii_suggestions.map((s) => (
+                      <div key={`${s.field}-${s.kind}`}>· {s.field}（{s.kind}）</div>
+                    ))}
+                  </>
+                )
+                : null;
+              Modal[r.passed ? "success" : "error"]({
+                title: r.passed ? t("G0 通过，进入 testing") : t("G0 未通过"),
+                content: (
+                  <>
+                    {r.problems.map((x) => <div key={x}>· {x}</div>)}
+                    {pii}
+                  </>
+                ),
+              });
               refresh();
             }
           }}>{t("提交（G0 静态检查）")}</Button>
@@ -156,20 +204,82 @@ function VersionPanel({ versionId, onChanged }: { versionId: string; onChanged: 
           description={labResult.cases.map((c) => (
             <div key={c.name}>{c.passed ? "✔" : "✘"} {c.name}（{c.status}）{c.detail && `：${c.detail}`}</div>))} />
       )}
-      <Tabs items={[
-        { key: "gates", label: t("门禁记录"), children: (
-          <Table<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
-            expandable={{ expandedRowRender: (r) => <JsonView value={r.evidence} /> }}
-            columns={[
-              { title: t("门"), dataIndex: "gate" },
-              { title: t("结果"), dataIndex: "status", render: (s) => <StateTag state={s} /> },
-              { title: t("时间"), dataIndex: "created_at", render: (v: string) => v.slice(0, 19).replace("T", " ") },
-            ]} />) },
-        { key: "cases", label: t("门禁用例（{0}）", [v.test_cases.length]), children: <Cases v={v} editable={dev && v.state === "draft"} onDone={refresh} /> },
-        { key: "acceptance", label: t("验收单"), children: <Acceptance v={v} editable={v.state === "draft"} onDone={refresh} /> },
-        { key: "spec", label: "Spec", children: <JsonView value={v.spec} /> },
-      ]} />
+      <Tabs items={tabs} />
     </Card>
+  );
+}
+
+interface SelectionEvalCase {
+  name: string;
+  question: string;
+  expect_capability_id: string | null;
+}
+
+interface SelectionEval {
+  version_id: string;
+  model_profiles: string[];
+  cases: SelectionEvalCase[];
+}
+
+function SelectionEvalEditor({ versionId, editable }: { versionId: string; editable: boolean }) {
+  const data = useLoad(() => get<SelectionEval>(`/versions/${versionId}/selection-eval`), [versionId]);
+  const act = useAction();
+  const [form] = Form.useForm();
+  useEffect(() => {
+    if (data.data) {
+      form.setFieldsValue({
+        model_profiles: (data.data.model_profiles ?? []).join("\n"),
+        cases_json: JSON.stringify(data.data.cases ?? [], null, 2),
+      });
+    }
+  }, [data.data, form]);
+  if (data.error) return <Alert type="error" message={data.error} />;
+  if (!editable) {
+    return data.data ? <JsonView value={data.data} /> : <Alert type="info" message={t("尚未配置选择评测")} />;
+  }
+  return (
+    <Form
+      form={form}
+      layout="vertical"
+      onFinish={async (v) => {
+        let cases: SelectionEvalCase[];
+        try {
+          cases = parseJson(v.cases_json) as SelectionEvalCase[];
+          if (!Array.isArray(cases)) throw new Error("not array");
+        } catch {
+          Modal.error({ title: t("用例 JSON 无效") });
+          return;
+        }
+        const model_profiles = String(v.model_profiles ?? "")
+          .split("\n")
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+        if (await act(
+          () => put(`/versions/${versionId}/selection-eval`, { model_profiles, cases }),
+          t("已保存选择评测"),
+        )) {
+          data.reload();
+        }
+      }}
+    >
+      <Alert
+        type="info"
+        showIcon
+        style={{ marginBottom: 12 }}
+        message={t("套件 G2 要求至少 20 条用例、1–2 个 model_profile（name@semver）")}
+      />
+      <Form.Item name="model_profiles" label={t("评测模型（每行一个 name@semver）")} rules={[{ required: true }]}>
+        <Input.TextArea rows={2} placeholder="gpt-4o-mini@1.0.0" />
+      </Form.Item>
+      <Form.Item
+        name="cases_json"
+        label={t("评测用例（JSON 数组：name / question / expect_capability_id）")}
+        rules={[{ required: true }, jsonRule]}
+      >
+        <JsonInput rows={12} />
+      </Form.Item>
+      <Button type="primary" htmlType="submit">{t("保存选择评测")}</Button>
+    </Form>
   );
 }
 
