@@ -509,6 +509,16 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["connector_config", "tools", "warnings"],
             ),
+            "PrismMock": o(
+                {
+                    "id": ID,
+                    "base_url": S,
+                    "container_name": S,
+                    "expires_at": DT,
+                    "ready_url": S,
+                },
+                ["id", "base_url", "container_name", "expires_at"],
+            ),
         }
     )
     A = "/api/v1"
@@ -1038,6 +1048,45 @@ def control_plane() -> dict[str, Any]:
                 req=ref("ImporterRequest"),
                 res=ref("ImporterResult"),
             )
+        },
+        f"{A}/prism-mocks": {
+            "post": op(
+                "createPrismMock",
+                "testlab",
+                "按 OpenAPI 3.x 自动拉起 Prism Mock（需本机 Docker；进程内会话）",
+                req=o(
+                    {
+                        "document": {"type": "string", "minLength": 1},
+                        "ttl_seconds": {
+                            "type": "integer",
+                            "minimum": 60,
+                            "maximum": 7200,
+                            "default": 1800,
+                        },
+                        "ready_path": SN,
+                    },
+                    ["document"],
+                ),
+                res=ref("PrismMock"),
+                code="201",
+            )
+        },
+        f"{A}/prism-mocks/{{id}}": {
+            "get": op(
+                "getPrismMock",
+                "testlab",
+                "查询 Prism Mock 会话",
+                res=ref("PrismMock"),
+                params=["Id"],
+            ),
+            "delete": op(
+                "deletePrismMock",
+                "testlab",
+                "停止并删除 Prism Mock",
+                res=None,
+                code="204",
+                params=["Id"],
+            ),
         },
         f"{A}/grant-ceilings/{{id}}/quota": {
             "put": op(

@@ -22,6 +22,7 @@ tags:
 - name: risk
 - name: skill
 - name: snapshot
+- name: testlab
 - name: webhook
 paths:
   /healthz:
@@ -1841,6 +1842,71 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ImporterRequest'
+  /api/v1/prism-mocks:
+    post:
+      operationId: createPrismMock
+      tags:
+      - testlab
+      summary: 按 OpenAPI 3.x 自动拉起 Prism Mock（需本机 Docker；进程内会话）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrismMock'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                document:
+                  type: string
+                  minLength: 1
+                ttl_seconds:
+                  type: integer
+                  minimum: 60
+                  maximum: 7200
+                  default: 1800
+                ready_path:
+                  type:
+                  - string
+                  - 'null'
+              required:
+              - document
+  /api/v1/prism-mocks/{id}:
+    get:
+      operationId: getPrismMock
+      tags:
+      - testlab
+      summary: 查询 Prism Mock 会话
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrismMock'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    delete:
+      operationId: deletePrismMock
+      tags:
+      - testlab
+      summary: 停止并删除 Prism Mock
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/grant-ceilings/{id}/quota:
     put:
       operationId: setCeilingQuota
@@ -3066,3 +3132,23 @@ components:
       - connector_config
       - tools
       - warnings
+    PrismMock:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        base_url:
+          type: string
+        container_name:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        ready_url:
+          type: string
+      required:
+      - id
+      - base_url
+      - container_name
+      - expires_at

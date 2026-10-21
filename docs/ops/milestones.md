@@ -633,6 +633,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 金标 | `tests/contracts/mes-vn01.postman_collection.json` |
 | 不在本片 | Environment 合并；GraphQL/form-data；AI 描述；控制台 UI |
 
+### H4 Prism Mock 自动生成 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| mes-vn01 OpenAPI 起 Mock 可探测 | 通过 | `test_h4_prism_mock.py::test_start_mock_mes_vn01` |
+| API create/get/delete | 通过 | `test_prism_mock_http_routes` |
+| 无 docker → PRECONDITION_FAILED | 通过 | `test_no_docker_precondition` |
+| G1 fixture 改用库 | 通过 | `test_G1_declarative_connector_against_prism_mock` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `testlab/prism.py`、`mock_service.py`、`mock_api.py` |
+| API | `POST/GET/DELETE /api/v1/prism-mocks`（进程内会话 + TTL） |
+| 金标 | `tests/contracts/mes-vn01.openapi.yaml` |
+| 不在本片 | 录制回放；run_cases 改写连接；多实例共享；控制台 UI |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |

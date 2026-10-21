@@ -5,14 +5,9 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import pathlib
-import shutil
-import socket
-import subprocess
-import time
 from collections.abc import Iterator
 from typing import Any
 
-import httpx
 import jsonschema
 import pytest
 from sqlalchemy import update
@@ -23,6 +18,7 @@ from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam.authz import Actor
 from aip.control_plane.registry import service as registry
 from aip.control_plane.registry import snapshot as release_snapshot
+from aip.control_plane.testlab import prism as prism_lib
 from aip.data_plane.runtime import PgExecutionStore
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import utcnow
@@ -325,50 +321,16 @@ async def test_kb_connector_search(tmp_path: pathlib.Path) -> None:
 # ---------------- G1 契约测试：声明式 Connector 对 Prism Mock ----------------
 
 
-def _free_port() -> int:
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return int(s.getsockname()[1])
-
-
 @pytest.fixture(scope="module")
 def prism() -> Iterator[str]:
-    if shutil.which("docker") is None:
+    if not prism_lib.docker_available():
         pytest.skip("docker not available")
-    port = _free_port()
-    spec_dir = ROOT / "tests" / "contracts"
-    name = f"aip-prism-{port}"
-    subprocess.run(
-        [
-            "docker",
-            "run",
-            "-d",
-            "--rm",
-            "--name",
-            name,
-            "-p",
-            f"127.0.0.1:{port}:4010",
-            "-v",
-            f"{spec_dir}:/specs",
-            "stoplight/prism:5.12.0",
-            "mock",
-            "-h",
-            "0.0.0.0",
-            "/specs/mes-vn01.openapi.yaml",
-        ],
-        check=True,
-        capture_output=True,
-    )
-    url = f"http://127.0.0.1:{port}"
-    deadline = time.time() + 30
-    while time.time() < deadline:
-        try:
-            if httpx.get(f"{url}/api/v2/workorders?plant=F001", timeout=1).status_code == 200:
-                break
-        except httpx.HTTPError:
-            time.sleep(0.5)
-    yield url
-    subprocess.run(["docker", "rm", "-f", name], capture_output=True, check=False)
+    document = (ROOT / "tests" / "contracts" / "mes-vn01.openapi.yaml").read_text(encoding="utf-8")
+    session = prism_lib.start_mock(document)
+    try:
+        yield session.base_url
+    finally:
+        prism_lib.stop_mock(session)
 
 
 async def test_G1_declarative_connector_against_prism_mock(prism: str, tmp_path: pathlib.Path) -> None:
