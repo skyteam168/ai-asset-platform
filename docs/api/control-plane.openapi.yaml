@@ -729,7 +729,7 @@ paths:
       operationId: runTests
       tags:
       - release
-      summary: Test Lab 执行 G1 / G2
+      summary: Test Lab 执行 G1–G4
       responses:
         '200':
           description: OK
@@ -747,6 +747,23 @@ paths:
       tags:
       - release
       summary: 门禁记录
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/versions/{id}/impact:
+    get:
+      operationId: listVersionImpact
+      tags:
+      - release
+      summary: G4 依赖影响：列出需回归的上层资产
       responses:
         '200':
           description: OK

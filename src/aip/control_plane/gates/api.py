@@ -143,6 +143,14 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return {"items": await gates.gate_history(conn, id)}
 
+    @r.get(f"{V}/versions/{{id}}/impact", tags=["release"], operation_id="listVersionImpact")
+    async def impact(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """G4 影响面：因本版本变更需回归的上层资产（architecture.md 6.4）。"""
+        from aip.control_plane.gates.impact import list_impact
+
+        async with db.tx(actor.db_scope()) as conn:
+            return {"version_id": str(id), "items": await list_impact(conn, id)}
+
     @r.post(f"{V}/versions/{{id}}/canary", tags=["release"], operation_id="startCanary", status_code=201)
     async def canary(id: uuid.UUID, body: RolloutIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:

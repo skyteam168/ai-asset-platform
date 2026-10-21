@@ -224,7 +224,7 @@ async def test_read_tool_from_draft_to_active(db: Database, seeded: Seed) -> Non
         )
         snap = await release_snapshot.publish(conn, KEY)
     assert await _state(db, vid) == "active"
-    assert [g for g, s in history if s == "passed"] == ["G0", "G1", "G2", "G3", "G5", "G6", "G7", "G8"]
+    assert [g for g, s in history if s == "passed"] == ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"]
     assert sheet["signed_by"] == p.bo.user_id and sheet["results"]["samples"] == 20
     assert snap is not None
     active = [r for r in snap["payload"]["releases"] if r["capability_id"] == "production.mes.query_work_orders"]

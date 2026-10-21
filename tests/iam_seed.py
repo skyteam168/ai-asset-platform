@@ -88,6 +88,12 @@ async def truncate() -> None:
             "registry.skill_package",
             "registry.probe_result",
             "registry.contract_drift",
+            "registry.gate_result",
+            "registry.test_case",
+            "registry.acceptance_sheet",
+            "approval.approval_decision",
+            "approval.approval_request",
+            "approval.delegate",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
     finally:

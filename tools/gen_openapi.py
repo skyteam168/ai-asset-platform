@@ -638,11 +638,21 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/versions/{{id}}/run-tests": {
-            "post": op("runTests", "release", "Test Lab 执行 G1 / G2", res={"type": "object"}, params=["Id"])
+            "post": op("runTests", "release", "Test Lab 执行 G1–G4", res={"type": "object"}, params=["Id"])
         },
         f"{A}/versions/{{id}}/gates": {
             "get": op("gateHistory", "release", "门禁记录", res={"type": "object"}, params=["Id"])
         },
+        f"{A}/versions/{{id}}/impact": {
+            "get": op(
+                "listVersionImpact",
+                "release",
+                "G4 依赖影响：列出需回归的上层资产",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+
         f"{A}/versions/{{id}}/canary": {
             "post": op(
                 "startCanary",

@@ -1,7 +1,8 @@
 """质量门禁流水线（architecture.md 7.1）：状态迁移只能由门禁结果驱动。
 
-Draft --G0--> Testing --G1/G2--> InReview --G5 签字 + G6 审批--> Approved --G7 灰度--> Canary --G8--> Active
+Draft --G0--> Testing --G1/G2/G3/G4--> InReview --G5 签字 + G6 审批--> Approved --G7 灰度--> Canary --G8--> Active
 快速通道（只读、L1/L2、无 PII）：G6 单人审批。write / danger：G6 双人复核。
+G4：依赖变更列出上层资产并做组合引用回归（architecture.md 6.4 / 7.1）。
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from aip.connectors.credentials import SecretStore
 from aip.control_plane.approval import service as approval
 from aip.control_plane.conn import service as conn_service
+from aip.control_plane.gates.impact import list_impact
 from aip.control_plane.iam import snapshot as iam_snapshot
 from aip.control_plane.iam.authz import Actor
 from aip.control_plane.registry import service as registry
@@ -236,7 +238,7 @@ def _fast_track(spec: dict[str, Any], classification: int) -> bool:
 async def run_lab(
     conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, *, secrets: SecretStore, resolver: Any = None
 ) -> dict[str, Any]:
-    """G1 契约 + G2 功能与权限；通过则 testing → in_review 并发起 G5 / G6 审批，失败退回 draft。"""
+    """G1–G3 后跑 G4 影响回归；全部通过则 testing → in_review 并发起 G5 / G6，失败退回 draft。"""
     v = await registry.version_row(conn, version_id)
     actor.require(actor.has("asset_developer") or actor.has("platform_admin"))
     if v["state"] != "testing":
@@ -267,8 +269,41 @@ async def run_lab(
     if not (report.g1_passed and report.g2_passed and report.g3_passed):
         await registry.transition(conn, actor, version_id, "draft", "G1/G2/G3 failed")
         return {"passed": False, **report.evidence()}
-    await registry.transition(conn, actor, version_id, "in_review", "G1/G2/G3 passed")
-    return {"passed": True, **(await _open_reviews(conn, v, a)), **report.evidence()}
+    g4 = await run_g4(conn, actor, v)
+    if not g4["passed"]:
+        await registry.transition(conn, actor, version_id, "draft", "G4 failed")
+        return {"passed": False, **report.evidence(), **g4}
+    await registry.transition(conn, actor, version_id, "in_review", "G1–G4 passed")
+    return {"passed": True, **(await _open_reviews(conn, v, a)), **report.evidence(), **g4}
+
+
+async def run_g4(conn: AsyncConnection, actor: Actor, v: dict[str, Any]) -> dict[str, Any]:
+    """G4：列出上层影响，并对每个上层版本做组合引用可发布检查。"""
+    impacted = await list_impact(conn, v["id"])
+    failed: list[dict[str, Any]] = []
+    checked: list[dict[str, Any]] = []
+    for item in impacted:
+        refs = list(item.get("refs") or [])
+        if item["asset_type"] == "tool":
+            # connector_package 影响的 Tool：自身须仍可发布
+            state = item["state"]
+            ok = state in registry.RELEASABLE
+            detail = {"version_id": item["version_id"], "state": state, "ok": ok}
+            checked.append(detail)
+            if not ok:
+                failed.append({**item, "reason": "tool_not_releasable"})
+            continue
+        tools = await _tool_versions(conn, refs)
+        states = {r: (tools.get(split_ref(r)) or {}).get("state", "missing") for r in refs}
+        ok = all(s in registry.RELEASABLE for s in states.values()) if refs else True
+        detail = {"version_id": item["version_id"], "tool_versions": states, "ok": ok}
+        checked.append(detail)
+        if not ok:
+            failed.append({**item, "reason": "referenced_tools_not_releasable", "tool_versions": states})
+    passed = not failed
+    evidence = {"impacted": impacted, "checked": checked, "failed": failed}
+    await _record(conn, actor, v, "G4", passed, evidence)
+    return {"passed": passed, "g4": evidence}
 
 
 async def _open_reviews(conn: AsyncConnection, v: dict[str, Any], a: dict[str, Any]) -> dict[str, str]:
@@ -377,8 +412,12 @@ async def _composition_lab(
     if not ok:
         await registry.transition(conn, actor, v["id"], "draft", "referenced tools not released")
         return {"passed": False, **evidence}
-    await registry.transition(conn, actor, v["id"], "in_review", "composition gates passed")
-    return {"passed": True, **(await _open_reviews(conn, v, a)), **evidence}
+    g4 = await run_g4(conn, actor, v)  # 组合资产无上层时 impacted=[]，G4 通过
+    if not g4["passed"]:
+        await registry.transition(conn, actor, v["id"], "draft", "G4 failed")
+        return {"passed": False, **evidence, **g4}
+    await registry.transition(conn, actor, v["id"], "in_review", "composition gates + G4 passed")
+    return {"passed": True, **(await _open_reviews(conn, v, a)), **evidence, **g4}
 
 
 async def decide(

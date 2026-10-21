@@ -586,6 +586,21 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 文档 | [search-index.md](search-index.md)：alpine 现状；zhparser / pg_trgm 生产路径 |
 | 不在本片 | 换默认 PG 镜像；库内 FTS 表与迁移；G4 / 横向 |
 
+### H1 G4 回归与影响分析 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Tool 无上层时 G4 空影响并通过 | 通过 | `test_h1_g4_impact.py::test_tool_without_dependents_g4_empty` |
+| Bundle 引用列入 impact，钉住可发布版本时 G4 通过 | 通过 | `test_bundle_impact_listed_and_g4_passes` |
+| 上层钉住未发布版本时 G4 失败回 draft | 通过 | `test_g4_fails_when_parent_pins_unreleased_version` |
+| GET /versions/{id}/impact | 通过 | OpenAPI `listVersionImpact` + 单测 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `gates/impact.py`（反向依赖）；`run_lab` 在 G1–G3 后跑 G4 |
+| API | `GET /api/v1/versions/{id}/impact` |
+| 不在本片 | 上层完整 Test Lab 重跑；控制台影响图；Importer / OTel |
+
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 
 | 部分 | 内容 |
