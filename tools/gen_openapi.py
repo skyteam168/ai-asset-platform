@@ -445,6 +445,71 @@ def control_plane() -> dict[str, Any]:
             "TodoDecision": o(
                 {"decision": {"enum": ["approve", "reject"]}, "comment": S, "data": {"type": "object"}}, ["decision"]
             ),
+            "TodoConfirmation": o(
+                {
+                    "id": ID,
+                    "company_id": SN,
+                    "kind": SN,
+                    "capability_id": SN,
+                    "version": SN,
+                    "consumer_id": SN,
+                    "end_user_id": SN,
+                    "summary": SN,
+                    "approver_role": SN,
+                    "status": SN,
+                    "expires_at": SN,
+                    "decided_by": SN,
+                    "decided_via": SN,
+                    "decided_at": SN,
+                    "execution_id": SN,
+                    "run_id": SN,
+                    "args_sha256": SN,
+                    "created_at": SN,
+                },
+                ["id"],
+            ),
+            "TodoTask": o(
+                {
+                    "id": ID,
+                    "kind": SN,
+                    "summary": SN,
+                    "company_id": SN,
+                    "assignee_user_id": SN,
+                    "assignee_role": SN,
+                    "assignee_org_id": SN,
+                    "deadline": SN,
+                    "status": SN,
+                    "run_id": SN,
+                },
+                ["id"],
+            ),
+            "TodoList": o(
+                {
+                    "confirmations": {"type": "array", "items": ref("TodoConfirmation")},
+                    "tasks": {"type": "array", "items": ref("TodoTask")},
+                },
+                ["confirmations", "tasks"],
+            ),
+            "TodoDecideResult": {
+                "type": "object",
+                "properties": {"status": SN, "id": SN},
+                "additionalProperties": True,
+            },
+            "RunConsoleView": {
+                "type": "object",
+                "properties": {
+                    "run_id": SN,
+                    "company_id": SN,
+                    "status": SN,
+                    "result": {},
+                    "error": {},
+                    "tainted": {"type": ["boolean", "null"]},
+                    "pending_tasks": {"type": "array", "items": {"type": "object"}},
+                    "steps": {"type": "array", "items": {"type": "object"}},
+                    "trace_id": SN,
+                },
+                "additionalProperties": True,
+            },
             "Consumer": o(
                 {
                     "id": ID,
@@ -1596,13 +1661,7 @@ def control_plane() -> dict[str, Any]:
                 "listTodo",
                 "approval",
                 "我的待办：可处理的调用确认（审批 / 本人确认）与 Workflow 人工任务",
-                res={
-                    "type": "object",
-                    "properties": {
-                        "confirmations": {"type": "array", "items": {"type": "object"}},
-                        "tasks": {"type": "array", "items": {"type": "object"}},
-                    },
-                },
+                res=ref("TodoList"),
             )
         },
         f"{A}/todo/confirmations/{{id}}/decide": {
@@ -1611,7 +1670,7 @@ def control_plane() -> dict[str, Any]:
                 "approval",
                 "处理调用确认（approval 需具备 approver_role 且不是被代表用户；user_confirm 只能本人）",
                 req=ref("TodoDecision"),
-                res={"type": "object"},
+                res=ref("TodoDecideResult"),
                 params=["Id"],
             )
         },
@@ -1621,12 +1680,14 @@ def control_plane() -> dict[str, Any]:
                 "approval",
                 "处理 Workflow 人工任务（确认、审批、补录）",
                 req=ref("TodoDecision"),
-                res={"type": "object"},
+                res=ref("TodoDecideResult"),
                 params=["Id"],
             )
         },
         f"{A}/runs/{{id}}": {
-            "get": op("getRunConsole", "approval", "控制台查看 Workflow Run", res={"type": "object"}, params=["Id"])
+            "get": op(
+                "getRunConsole", "approval", "控制台查看 Workflow Run", res=ref("RunConsoleView"), params=["Id"]
+            )
         },
         f"{A}/audit-logs": {
             "get": {

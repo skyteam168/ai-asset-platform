@@ -684,6 +684,19 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H23 响应体 Pydantic（待办 / LLM）— 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| listTodo / decide / getRunConsole 挂载模型 | 通过 | 	est_h23_response_models.py；	est_m5_gates_todo.py |
+| LLM 白名单 / 预算 / 用量挂载模型 | 通过 | 同上；	est_h6_llm_gateway.py |
+| OpenAPI TodoList / RunConsoleView / Llm* | 通过 | gen_openapi.py |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模型 | 	odo_schemas.py、llm/schemas.py |
+| 不在本片 | importer；zhparser；human_task.data 信封 |
+
 ### H22 响应体 Pydantic（风控 / webhook / Skill）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |

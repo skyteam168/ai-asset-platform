@@ -17,6 +17,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from aip.control_plane import todo_schemas as out
 from aip.control_plane.approval import service as approval
 from aip.control_plane.db import Database, DbScope
 from aip.control_plane.iam.api import ActorDep
@@ -111,8 +112,8 @@ def router() -> APIRouter:
         database: Database = request.app.state.db
         return database
 
-    @r.get(f"{V}/todo", tags=["approval"], operation_id="listTodo")
-    async def todo(request: Request, actor: ActorDep) -> dict[str, Any]:
+    @r.get(f"{V}/todo", tags=["approval"], operation_id="listTodo", response_model=out.TodoList)
+    async def todo(request: Request, actor: ActorDep) -> out.TodoList:
         """我的待办：可处理的确认（审批 / 本人确认）与 Workflow 人工任务。"""
         companies = None if actor.is_global else sorted({str(g.scope_company_id) for g in actor.roles})
         data = await dp(request).call("POST", "/todo", {"company_ids": companies})
@@ -123,20 +124,33 @@ def router() -> APIRouter:
             confirmations += [c for c in mine["confirmations"] if can_confirm(actor, c)]
         async with db(request).tx(DbScope.system()) as conn:
             tasks = [t for t in data["tasks"] if await can_handle_task_with_delegate(conn, actor, t)]
-        return {"confirmations": confirmations, "tasks": tasks}
+        return out.TodoList.model_validate({"confirmations": confirmations, "tasks": tasks})
 
-    @r.post(f"{V}/todo/confirmations/{{id}}/decide", tags=["approval"], operation_id="decideConfirmation")
-    async def decide_confirmation(id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep) -> Any:
+    @r.post(
+        f"{V}/todo/confirmations/{{id}}/decide",
+        tags=["approval"],
+        operation_id="decideConfirmation",
+        response_model=out.TodoDecideResult,
+    )
+    async def decide_confirmation(
+        id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep
+    ) -> out.TodoDecideResult:
         c = await dp(request).call("GET", f"/confirmations/{id}")
         actor.require(can_confirm(actor, c), "无权处理该确认（需具备审批角色，且不能确认自己发起的调用）")
-        return await dp(request).call(
+        data = await dp(request).call(
             "POST",
             f"/confirmations/{id}/decide",
             {"decision": body.decision, "user_id": str(actor.user_id), "comment": body.comment},
         )
+        return out.TodoDecideResult.model_validate(data)
 
-    @r.post(f"{V}/todo/tasks/{{id}}/decide", tags=["approval"], operation_id="decideTask")
-    async def decide_task(id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep) -> Any:
+    @r.post(
+        f"{V}/todo/tasks/{{id}}/decide",
+        tags=["approval"],
+        operation_id="decideTask",
+        response_model=out.TodoDecideResult,
+    )
+    async def decide_task(id: uuid.UUID, body: DecisionIn, request: Request, actor: ActorDep) -> out.TodoDecideResult:
         t = await dp(request).call("GET", f"/tasks/{id}")
         async with db(request).tx(DbScope.system()) as conn:
             ok = await can_handle_task_with_delegate(conn, actor, t)
@@ -148,7 +162,7 @@ def router() -> APIRouter:
             and str(actor.user_id) != str(t["assignee_user_id"])
         ):
             on_behalf = str(t["assignee_user_id"])
-        return await dp(request).call(
+        data = await dp(request).call(
             "POST",
             f"/tasks/{id}/decide",
             {
@@ -159,9 +173,15 @@ def router() -> APIRouter:
                 "on_behalf_of": on_behalf,
             },
         )
+        return out.TodoDecideResult.model_validate(data)
 
-    @r.get(f"{V}/runs/{{id}}", tags=["approval"], operation_id="getRunConsole")
-    async def run_view(id: uuid.UUID, request: Request, actor: ActorDep) -> Any:
+    @r.get(
+        f"{V}/runs/{{id}}",
+        tags=["approval"],
+        operation_id="getRunConsole",
+        response_model=out.RunConsoleView,
+    )
+    async def run_view(id: uuid.UUID, request: Request, actor: ActorDep) -> out.RunConsoleView:
         view = await dp(request).call("GET", f"/runs/{id}")
         if not actor.is_global:
             companies = {str(g.scope_company_id) for g in actor.roles}
@@ -172,6 +192,6 @@ def router() -> APIRouter:
                         task_ok = True
                         break
             actor.require(task_ok or view["company_id"] in companies, "无权查看该 Run")
-        return view
+        return out.RunConsoleView.model_validate(view)
 
     return r

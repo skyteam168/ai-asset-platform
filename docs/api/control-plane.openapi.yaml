@@ -2246,16 +2246,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  confirmations:
-                    type: array
-                    items:
-                      type: object
-                  tasks:
-                    type: array
-                    items:
-                      type: object
+                $ref: '#/components/schemas/TodoList'
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/todo/confirmations/{id}/decide:
@@ -2270,7 +2261,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/TodoDecideResult'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -2293,7 +2284,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/TodoDecideResult'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -2316,7 +2307,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/RunConsoleView'
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -3372,6 +3363,186 @@ components:
           type: object
       required:
       - decision
+    TodoConfirmation:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        company_id:
+          type:
+          - string
+          - 'null'
+        kind:
+          type:
+          - string
+          - 'null'
+        capability_id:
+          type:
+          - string
+          - 'null'
+        version:
+          type:
+          - string
+          - 'null'
+        consumer_id:
+          type:
+          - string
+          - 'null'
+        end_user_id:
+          type:
+          - string
+          - 'null'
+        summary:
+          type:
+          - string
+          - 'null'
+        approver_role:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        expires_at:
+          type:
+          - string
+          - 'null'
+        decided_by:
+          type:
+          - string
+          - 'null'
+        decided_via:
+          type:
+          - string
+          - 'null'
+        decided_at:
+          type:
+          - string
+          - 'null'
+        execution_id:
+          type:
+          - string
+          - 'null'
+        run_id:
+          type:
+          - string
+          - 'null'
+        args_sha256:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+    TodoTask:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        kind:
+          type:
+          - string
+          - 'null'
+        summary:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        assignee_user_id:
+          type:
+          - string
+          - 'null'
+        assignee_role:
+          type:
+          - string
+          - 'null'
+        assignee_org_id:
+          type:
+          - string
+          - 'null'
+        deadline:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        run_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+    TodoList:
+      type: object
+      properties:
+        confirmations:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodoConfirmation'
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TodoTask'
+      required:
+      - confirmations
+      - tasks
+    TodoDecideResult:
+      type: object
+      properties:
+        status:
+          type:
+          - string
+          - 'null'
+        id:
+          type:
+          - string
+          - 'null'
+      additionalProperties: true
+    RunConsoleView:
+      type: object
+      properties:
+        run_id:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        result: {}
+        error: {}
+        tainted:
+          type:
+          - boolean
+          - 'null'
+        pending_tasks:
+          type: array
+          items:
+            type: object
+        steps:
+          type: array
+          items:
+            type: object
+        trace_id:
+          type:
+          - string
+          - 'null'
+      additionalProperties: true
     Consumer:
       type: object
       properties:
