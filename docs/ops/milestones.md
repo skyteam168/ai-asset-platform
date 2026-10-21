@@ -684,12 +684,26 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | API | `GET/PUT .../llm-allowlist`、`.../llm-budget`、`GET .../llm-usage`（platform_admin） |
 | 不在本片 | 工具选择评测；Presidio；信封加密存对象存储；Importer AI 描述；控制台 LLM 页 |
 
+### H25 human_task.data 信封 — 2026-10-21
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| seal/hydrate 往返 | 通过 | tests/test_h25_human_task_envelope.py |
+| 列 data_ref 存在 | 通过 | 同上；迁移 0022 |
+| M5 工作流回归 | 通过 | tests/test_m5_workflow.py |
+
+| 部分 | 内容 |
+| --- | --- |
+| 迁移 | exec / exec_sandbox.human_task.data_ref |
+| 引擎 | 建任务与决定时密封；读取解封；旧行兼容明文 |
+| 不在本片 | zhparser；对象存储落盘 |
+
 ### H24 响应体 Pydantic（Importer）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |
 | --- | --- | --- |
-| importOpenApi / importPostman 挂载 ImporterResult | 通过 | 	est_h24_response_models.py |
-| OpenAPI / Postman / AI 描述导入回归 | 通过 | 	est_h2_importer.py；	est_h3_postman_importer.py；	est_h8_importer_ai_desc.py |
+| importOpenApi / importPostman 挂载 ImporterResult | 通过 | `test_h24_response_models.py` |
+| OpenAPI / Postman / AI 描述导入回归 | 通过 | `test_h2_importer.py`；`test_h3_postman_importer.py`；`test_h8_importer_ai_desc.py` |
 
 | 部分 | 内容 |
 | --- | --- |
@@ -700,22 +714,22 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 
 | 验收项 | 结果 | 证据 |
 | --- | --- | --- |
-| listTodo / decide / getRunConsole 挂载模型 | 通过 | 	est_h23_response_models.py；	est_m5_gates_todo.py |
-| LLM 白名单 / 预算 / 用量挂载模型 | 通过 | 同上；	est_h6_llm_gateway.py |
+| listTodo / decide / getRunConsole 挂载模型 | 通过 | `test_h23_response_models.py`；`test_m5_gates_todo.py` |
+| LLM 白名单 / 预算 / 用量挂载模型 | 通过 | 同上；`test_h6_llm_gateway.py` |
 | OpenAPI TodoList / RunConsoleView / Llm* | 通过 | gen_openapi.py |
 
 | 部分 | 内容 |
 | --- | --- |
-| 模型 | 	odo_schemas.py、llm/schemas.py |
+| 模型 | `todo_schemas.py`、`llm/schemas.py` |
 | 不在本片 | importer；zhparser；human_task.data 信封 |
 
 ### H22 响应体 Pydantic（风控 / webhook / Skill）— 2026-10-21
 
 | 验收项 | 结果 | 证据 |
 | --- | --- | --- |
-| risk 规则/事件/扫描/恢复挂载模型 | 通过 | 	est_h22_response_models.py；	est_m6_risk.py |
-| webhook 订阅/投递挂载模型 | 通过 | 同上；	est_m6_webhook.py |
-| Skill 上传/目录/清单/安装检查挂载模型 | 通过 | 同上；	est_m6_skill.py |
+| risk 规则/事件/扫描/恢复挂载模型 | 通过 | `test_h22_response_models.py`；`test_m6_risk.py` |
+| webhook 订阅/投递挂载模型 | 通过 | 同上；`test_m6_webhook.py` |
+| Skill 上传/目录/清单/安装检查挂载模型 | 通过 | 同上；`test_m6_skill.py` |
 
 | 部分 | 内容 |
 | --- | --- |
@@ -728,8 +742,8 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 
 | 验收项 | 结果 | 证据 |
 | --- | --- | --- |
-| 门禁用例/提交/Lab/灰度/影响挂载模型 | 通过 | 	est_h21_response_models.py |
-| 审批待办与决定、使用申请、复核挂载模型 | 通过 | 同上；	est_m4_gates.py / e2e |
+| 门禁用例/提交/Lab/灰度/影响挂载模型 | 通过 | `test_h21_response_models.py` |
+| 审批待办与决定、使用申请、复核挂载模型 | 通过 | 同上；`test_m4_gates.py / e2e |
 | OpenAPI ApprovalPending / GateSubmitResult 等 | 通过 | gen_openapi.py；decide → ApprovalDecision |
 
 | 部分 | 内容 |
@@ -742,8 +756,8 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 
 | 验收项 | 结果 | 证据 |
 | --- | --- | --- |
-| 连接 CRUD/测试/信任草案挂载模型 | 通过 | 	est_h20_response_models.py |
-| 控制台版本/上限/用量/审计/目录挂载模型 | 通过 | 同上；	est_m4_console_api.py |
+| 连接 CRUD/测试/信任草案挂载模型 | 通过 | `test_h20_response_models.py` |
+| 控制台版本/上限/用量/审计/目录挂载模型 | 通过 | 同上；`test_m4_console_api.py` |
 | OpenAPI 登记 Console* / Connection* | 通过 | gen_openapi.py；control-plane.openapi.yaml |
 
 | 部分 | 内容 |

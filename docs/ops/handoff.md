@@ -57,6 +57,7 @@
 | **H22** 响应体 Pydantic（风控/webhook/Skill） | 完成 | 62323e0 |
 | **H23** 响应体 Pydantic（待办/LLM） | 完成 | 7f8ae10 |
 | **H24** 响应体 Pydantic（Importer） | 完成 | ff1ecff |
+| **H25** human_task.data 信封 | 完成 | PENDING |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -165,10 +166,10 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = human_task.data 信封 / zhparser**）
+## 7. 之后：M7 与横向事项（**当前下一步 = zhparser 镜像（可选）/ 压测巩固**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
-- **H1–H24（已完成）**：至 Importer、待办/LLM、风控/webhook/Skill、门禁、控制台/连接、消费方/资产 response_model、wf 信封、pg_trgm/CNPG、K8s CI、IAM、WORM、OTel、业务角色、G0 PII。
-- **横向（当前下一步）**：human_task.data 信封；zhparser 镜像（可选）。
+- **H1–H25（已完成）**：至 human_task 信封、Importer、待办/LLM、风控/webhook/Skill、门禁、控制台/连接、消费方/资产 response_model、wf 信封、pg_trgm/CNPG、K8s CI、IAM、WORM、OTel、业务角色、G0 PII。
+- **横向（当前下一步）**：zhparser 镜像（可选）；压测巩固。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。

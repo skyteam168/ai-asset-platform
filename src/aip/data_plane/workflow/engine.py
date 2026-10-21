@@ -104,6 +104,25 @@ def _seal_output(company_id: str, output: Any) -> tuple[str | None, str]:
     return None, _j(encrypt_json(company_id, output))
 
 
+def _seal_data(company_id: str, data: dict[str, Any] | None) -> tuple[str, str]:
+    """返回 (明文占位 JSON, data_ref JSON)。"""
+    return _j({}), _j(encrypt_json(company_id, data or {}))
+
+
+def _hydrate_task(task: dict[str, Any] | None) -> dict[str, Any] | None:
+    """解封 human_task.data；兼容仅有明文列的旧行。"""
+    if task is None:
+        return None
+    out = _str(task)
+    company = str(out["company_id"])
+    dref = out.get("data_ref")
+    if is_envelope(dref):
+        out["data"] = decrypt_json(company, dref)
+    elif out.get("data") is None:
+        out["data"] = {}
+    return out
+
+
 @dataclass
 class Next:
     target: str
@@ -352,7 +371,7 @@ class WorkflowEngine:
                 .mappings()
                 .first()
             )
-        return _str(m) if m else None
+        return _hydrate_task(dict(m) if m else None)
 
     async def _task_id_for_node(self, run_id: str, node_id: str) -> str | None:
         async with self._tx() as conn:
@@ -372,7 +391,12 @@ class WorkflowEngine:
             params["c"] = company_ids
         async with self._tx() as conn:
             rows = (await conn.execute(self._q(sql + " ORDER BY created_at LIMIT 500"), params)).mappings().all()
-        return [_str(r) for r in rows]
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            item = _hydrate_task(dict(r))
+            if item is not None:
+                out.append(item)
+        return out
 
     async def decide_task(
         self,
@@ -399,19 +423,22 @@ class WorkflowEngine:
             if errs:
                 raise PlatformError(ErrorCode.INVALID_ARGUMENT, errs[0].message)
         by = f"user:{user_id}" + (f" for:{on_behalf_of}" if on_behalf_of and on_behalf_of != user_id else "")
+        merged = {**(t.get("data") or {}), "submitted": data or {}, "comment": comment}
+        data_plain, data_ref = _seal_data(str(t["company_id"]), merged)
         async with self._tx() as conn:
             ok = (
                 await conn.execute(
                     self._q(
                         "UPDATE exec.human_task SET status = :s, decided_by = :by, decided_at = now(), "
-                        "data = COALESCE(data, '{}'::jsonb) || CAST(:data AS jsonb) "
+                        "data = CAST(:data AS jsonb), data_ref = CAST(:data_ref AS jsonb) "
                         "WHERE id = :id AND status = 'pending' AND deadline > now() RETURNING run_id"
                     ),
                     {
                         "id": task_id,
                         "s": status,
                         "by": by,
-                        "data": _j({"submitted": data or {}, "comment": comment}),
+                        "data": data_plain,
+                        "data_ref": data_ref,
                     },
                 )
             ).first()
@@ -1269,20 +1296,22 @@ class WorkflowEngine:
         if isinstance(run_deadline, str):
             run_deadline = dt.datetime.fromisoformat(run_deadline)
         deadline = min(_now() + dt.timedelta(seconds=timeout_s), run_deadline)
+        company = str(run["company_id"])
+        data_plain, data_ref = _seal_data(company, data)
         async with self._tx() as conn:
             await conn.execute(
                 self._q(
                     """INSERT INTO exec.human_task (id, run_id, node_id, company_id, kind, assignee, assignee_user_id,
-                         assignee_role, assignee_org_id, summary, status, deadline, data)
+                         assignee_role, assignee_org_id, summary, status, deadline, data, data_ref)
                        VALUES (:tid, :run, :n, :company, :kind, :assignee, :uid, :role, :org, :summary, 'pending',
-                               :deadline, CAST(:data AS jsonb))
+                               :deadline, CAST(:data AS jsonb), CAST(:data_ref AS jsonb))
                        ON CONFLICT (run_id, node_id) DO NOTHING"""
                 ),
                 {
                     "tid": str(uuid.uuid4()),
                     "run": str(run["id"]),
                     "n": node_id,
-                    "company": str(run["company_id"]),
+                    "company": company,
                     "kind": kind,
                     "assignee": assignee,
                     "uid": user_id,
@@ -1290,7 +1319,8 @@ class WorkflowEngine:
                     "org": org,
                     "summary": summary[:500],
                     "deadline": deadline,
-                    "data": _j(data or {}),
+                    "data": data_plain,
+                    "data_ref": data_ref,
                 },
             )
             # 待办通知进 outbox（邮件通道；IM 有配置时由 flush 投递）
