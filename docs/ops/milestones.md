@@ -370,7 +370,7 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | --- | --- | --- |
 | 本切片测试 | 6 通过 | `test_m6_workflow_nodes.py`（5）+ `test_m6_notify.py`（1） |
 
-仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、上游 MCP、SDK、A2A、故障演练。
+仍未完成（交 M7 / 横向）：IAM 业务角色、LLM Gateway、信封加密、SDK、A2A、故障演练。
 
 ### M7a MCP tasks 与 get_run_status — 2026-10-20
 
@@ -432,6 +432,24 @@ ADR-0003 先做 spike（[对比记录](spike-adr-0003-workflow-engine.md)），�
 | 其他验收 | 结果 | 证据 |
 | --- | --- | --- |
 | 本切片测试 | 4 通过 | `test_m7_discovery.py` |
+
+### M7d 上游 MCP 连接器 — 2026-10-21
+
+| 验收项 | 结果 | 证据（tests/） |
+| --- | --- | --- |
+| 钉住哈希后可调用上游 tools/call | 通过 | `test_m7_upstream_mcp.py::test_upstream_mcp_invoke_and_rug_pull` |
+| 上游改描述（rug pull）拒绝执行 | 通过 | 同上 |
+| 清单哈希与顺序无关 | 通过 | `test_tools_manifest_hash_stable` |
+
+| 部分 | 内容 |
+| --- | --- |
+| Connector | `kind=upstream_mcp`：`tools_manifest_hash` + 调用前 `tools/list` 复核；出站经 `ctx.http()` |
+| 迁移 0015 | `conn.upstream_mcp_source`；`connector_instance.kind` 含 `upstream_mcp` |
+| 约定 | 导入的 Tool Spec 应标 `untrusted_output=True`（ADR-0014） |
+
+| 其他验收 | 结果 | 证据 |
+| --- | --- | --- |
+| 本切片测试 | 2 通过 | `test_m7_upstream_mcp.py` |
 
 ### 控制台界面改版（与集团知识库中台统一风格）— 2026-10-20
 

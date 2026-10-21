@@ -35,7 +35,7 @@ class ConnectionIn(BaseModel):
 
 class ConnectorIn(BaseModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
-    kind: Literal["declarative", "kb", "mock"]
+    kind: Literal["declarative", "kb", "mock", "upstream_mcp"]
     system_connection_id: uuid.UUID | None = None
     config: dict[str, Any] = Field(default_factory=dict)
     concurrency: int = Field(default=8, ge=1, le=256)

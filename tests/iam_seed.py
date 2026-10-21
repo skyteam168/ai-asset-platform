@@ -68,6 +68,7 @@ async def truncate() -> None:
             "audit.audit_anchor",
             "audit.audit_log",
             "conn.connector_instance",
+            "conn.upstream_mcp_source",
             "conn.connection_test_run",
             "conn.system_connection",
             "exec.tool_execution",

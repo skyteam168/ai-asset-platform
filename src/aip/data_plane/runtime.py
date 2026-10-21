@@ -26,6 +26,7 @@ from aip.connectors.base import Connector, ExecContext
 from aip.connectors.credentials import CredentialManager, SecretStore
 from aip.connectors.declarative import DeclarativeConnector, kb_connector
 from aip.connectors.mock import MockConnector
+from aip.connectors.upstream_mcp import UpstreamMcpConnector
 from aip.data_plane.confirmation import (
     ConfirmationStore,
     MemoryConfirmationStore,
@@ -161,6 +162,8 @@ class ConnectorRegistry:
                 connector = MockConnector(c["name"], c["config"])
             elif c["kind"] == "kb":
                 connector = kb_connector(c["name"], c["config"], creds)
+            elif c["kind"] == "upstream_mcp":
+                connector = UpstreamMcpConnector(c["name"], c["config"], creds)
             else:
                 connector = DeclarativeConnector(c["name"], c["config"], creds)
             prev = old.get(c["name"])
