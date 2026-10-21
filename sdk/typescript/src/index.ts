@@ -9,4 +9,6 @@ export type {
   JsonObject,
   FetchLike,
 } from "./client.js";
+export { SkillRegistryClient } from "./skills.js";
+export type { SkillRegistryClientOptions } from "./skills.js";
 export { SdkError } from "./errors.js";
