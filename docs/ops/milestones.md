@@ -1138,6 +1138,19 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | --- | --- |
 | 不在本片 | 真装 Langfuse；真集群 PITR |
 
+### O4 接入管道看板 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `ops-summary.pipeline`  totals / by_company | 通过 | `test_o4_access_pipeline.py` |
+| 新建 draft Tool 计入草稿 | 通过 | 同测例 |
+| 运营概览展示接入管道 | 通过 | `OpsDashboard.tsx`；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `console_pipeline.py`；OpenAPI `AccessPipeline` |
+| 不在本片 | 下钻过滤；Skill/Workflow；分公司自治发布 |
+
 ### O1–O2 运营向导（真连接点测 + 五步创建）— 2026-10-22
 
 | 验收项 | 结果 | 证据 |
@@ -1150,7 +1163,7 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 部分 | 内容 |
 | --- | --- |
 | 模块 | `importer/try_op.py`；控制台「创建 Tool 向导」 |
-| 不在本片 | O4 接入看板；分公司自治发布 ADR；全新 AI 生成 OpenAPI |
+| 不在本片 | 分公司自治发布 ADR；全新 AI 生成 OpenAPI |
 
 ### H58 pgvector / 成本分摊 / 双机房文档 — 2026-10-22
 

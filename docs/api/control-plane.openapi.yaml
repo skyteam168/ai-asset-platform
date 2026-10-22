@@ -2341,7 +2341,7 @@ paths:
       operationId: consoleOpsSummary
       tags:
       - catalog
-      summary: 运营概览摘要（漂移 / 开放风险）
+      summary: 运营概览摘要（漂移 / 开放风险 / 接入管道）
       responses:
         '200':
           description: OK
@@ -5923,6 +5923,87 @@ components:
           format: date-time
       required:
       - version_id
+    PipelineCounts:
+      type: object
+      properties:
+        draft:
+          type: integer
+        gating:
+          type: integer
+        published:
+          type: integer
+        granted:
+          type: integer
+      required:
+      - draft
+      - gating
+      - published
+      - granted
+    PipelineSystemRow:
+      type: object
+      properties:
+        system_key:
+          type: string
+        draft:
+          type: integer
+        gating:
+          type: integer
+        published:
+          type: integer
+        granted:
+          type: integer
+      required:
+      - system_key
+      - draft
+      - gating
+      - published
+      - granted
+    PipelineCompanyRow:
+      type: object
+      properties:
+        company_id:
+          type: string
+          description: UUIDv7
+        company_code:
+          type: string
+        company_name:
+          type: string
+        draft:
+          type: integer
+        gating:
+          type: integer
+        published:
+          type: integer
+        granted:
+          type: integer
+        by_system:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineSystemRow'
+      required:
+      - company_id
+      - company_code
+      - company_name
+      - draft
+      - gating
+      - published
+      - granted
+      - by_system
+    AccessPipeline:
+      type: object
+      properties:
+        totals:
+          $ref: '#/components/schemas/PipelineCounts'
+        active_connections:
+          type: integer
+        by_company:
+          type: array
+          items:
+            $ref: '#/components/schemas/PipelineCompanyRow'
+      required:
+      - totals
+      - active_connections
+      - by_company
     OpsSummary:
       type: object
       properties:
@@ -5938,11 +6019,14 @@ components:
           type: array
           items:
             type: object
+        pipeline:
+          $ref: '#/components/schemas/AccessPipeline'
       required:
       - active_drifts
       - open_risk_events
       - recent_risk_events
       - drift_items
+      - pipeline
     LlmAllowlist:
       type: object
       properties:

@@ -90,7 +90,7 @@ const GROUPS: Record<Group, { label: string; icon: ReactNode }> = {
 // 菜单按角色裁剪；后端仍会对每个接口做权限与范围检查，这里只影响可见性
 export const SECTIONS: Section[] = [
   { path: "/ops", label: t("运营概览"), icon: <DashboardOutlined />, element: <OpsDashboardPage />,
-    roles: ["platform_admin", "company_admin", "data_owner", "auditor"] },
+    roles: ["platform_admin", "company_admin", "data_owner", "auditor", "asset_developer"] },
   { path: "/approvals", label: t("审批待办"), icon: <CheckSquareOutlined />, element: <ApprovalsPage />,
     roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/assets", label: t("资产与门禁"), icon: <ApiOutlined />, element: <AssetsPage />,

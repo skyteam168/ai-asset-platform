@@ -166,7 +166,7 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | O1 | **完成**（本地 pytest） |
 | O2 | **完成**（控制台五步 + `/wizard`） |
 | O3 | **部分**（落库后 Lab 链接；AI 草稿沿用 H8） |
-| O4 | 待做 |
+| O4 | **完成**（ops-summary.pipeline + 运营概览） |
 
 ---
 
@@ -210,9 +210,13 @@ flowchart LR
 | 本波 | 落库结果区已链「资产与门禁」「Prism Mock」；AI 勾选保留在向导第 4 步 |
 | 不做 | 新的「一键生成 OpenAPI」大模型切片（架构后做项另开） |
 
-### O4 接入看板（后做）
+### O4 接入看板
 
 | 项 | 内容 |
 | --- | --- |
 | 目标 | 按公司/系统看草稿→门禁→发布→Grant 进度 |
-| 不做（本波） | 整页看板；可复用 ops-summary 扩展 |
+| 代码 | `console_pipeline.access_pipeline`；`ops-summary.pipeline`；运营概览「接入管道」 |
+| 规则 | 仅 `type=tool`；每资产计最远阶段（granted > published > gating > draft） |
+| 测例 | `tests/test_o4_access_pipeline.py` |
+| 验收 | `pytest -q tests/test_o4_access_pipeline.py` |
+| 不做 | 独立整页看板；Skill/Workflow 管道；点击下钻到资产列表过滤 |

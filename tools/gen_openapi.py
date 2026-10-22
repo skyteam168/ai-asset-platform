@@ -1148,14 +1148,64 @@ def control_plane() -> dict[str, Any]:
                 ["version_id", "company_id", "capability_id", "reason", "consecutive_failures"],
             ),
             "DriftCleared": o({"version_id": ID, "cleared_at": DT}, ["version_id"]),
+            "PipelineCounts": o(
+                {
+                    "draft": INT,
+                    "gating": INT,
+                    "published": INT,
+                    "granted": INT,
+                },
+                ["draft", "gating", "published", "granted"],
+            ),
+            "PipelineSystemRow": o(
+                {
+                    "system_key": S,
+                    "draft": INT,
+                    "gating": INT,
+                    "published": INT,
+                    "granted": INT,
+                },
+                ["system_key", "draft", "gating", "published", "granted"],
+            ),
+            "PipelineCompanyRow": o(
+                {
+                    "company_id": ID,
+                    "company_code": S,
+                    "company_name": S,
+                    "draft": INT,
+                    "gating": INT,
+                    "published": INT,
+                    "granted": INT,
+                    "by_system": {"type": "array", "items": ref("PipelineSystemRow")},
+                },
+                [
+                    "company_id",
+                    "company_code",
+                    "company_name",
+                    "draft",
+                    "gating",
+                    "published",
+                    "granted",
+                    "by_system",
+                ],
+            ),
+            "AccessPipeline": o(
+                {
+                    "totals": ref("PipelineCounts"),
+                    "active_connections": INT,
+                    "by_company": {"type": "array", "items": ref("PipelineCompanyRow")},
+                },
+                ["totals", "active_connections", "by_company"],
+            ),
             "OpsSummary": o(
                 {
                     "active_drifts": INT,
                     "open_risk_events": INT,
                     "recent_risk_events": {"type": "array", "items": {"type": "object"}},
                     "drift_items": {"type": "array", "items": {"type": "object"}},
+                    "pipeline": ref("AccessPipeline"),
                 },
-                ["active_drifts", "open_risk_events", "recent_risk_events", "drift_items"],
+                ["active_drifts", "open_risk_events", "recent_risk_events", "drift_items", "pipeline"],
             ),
             "LlmAllowlist": o(
                 {"company_id": ID, "names": {"type": "array", "items": S}},
@@ -1901,7 +1951,7 @@ def control_plane() -> dict[str, Any]:
             "get": op(
                 "consoleOpsSummary",
                 "catalog",
-                "运营概览摘要（漂移 / 开放风险）",
+                "运营概览摘要（漂移 / 开放风险 / 接入管道）",
                 res=ref("OpsSummary"),
             )
         },

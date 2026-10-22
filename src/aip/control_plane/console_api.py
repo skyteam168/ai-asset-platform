@@ -346,14 +346,16 @@ def router() -> APIRouter:
 
     @r.get(f"{V}/console/ops-summary", tags=["catalog"], operation_id="consoleOpsSummary")
     async def ops_summary(actor: ActorDep, db: DbDep) -> dict[str, Any]:
-        """运营概览：待办相关计数、活跃漂移、近期风险（H47）。"""
+        """运营概览：漂移 / 风险（H47）+ 接入管道草稿→门禁→发布→Grant（O4）。"""
         actor.require(
             actor.has("platform_admin")
             or actor.has("company_admin")
             or actor.has("data_owner")
-            or actor.has("auditor"),
+            or actor.has("auditor")
+            or actor.has("asset_developer"),
             "需要平台角色",
         )
+        from aip.control_plane import console_pipeline
         from aip.control_plane.probe import service as probe
         from aip.control_plane.risk import service as risk
 
@@ -361,6 +363,8 @@ def router() -> APIRouter:
             drifts = await probe.list_drifts(conn)
             events = await risk.list_events(conn, status="open", limit=20)
             open_risk = len(events)
+            pipeline = await console_pipeline.access_pipeline(conn)
+
         def _ts(v: Any) -> str | None:
             if v is None:
                 return None
@@ -390,6 +394,7 @@ def router() -> APIRouter:
                 }
                 for d in drifts[:20]
             ],
+            "pipeline": pipeline,
         }
 
     return r
