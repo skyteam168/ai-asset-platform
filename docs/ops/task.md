@@ -165,7 +165,7 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | H58 | **完成**（文档 + prod-check） |
 | O1 | **完成**（本地 pytest） |
 | O2 | **完成**（控制台五步 + `/wizard`） |
-| O3 | **部分**（落库后 Lab 链接；AI 草稿沿用 H8） |
+| O3 | **完成**（O3b：AI 生成候选 OpenAPI） |
 | O4 | **完成**（ops-summary.pipeline + 运营概览） |
 
 ---
@@ -202,13 +202,17 @@ flowchart LR
 | 验收 | 控制台 typecheck / i18n；菜单可见 |
 | 不做 | 分公司命名空间发布；Skill/Workflow 专用向导 |
 
-### O3 向导内 AI 草稿 + 一键 Lab
+### O3 / O3b AI 生成候选 OpenAPI + Lab 链接
 
 | 项 | 内容 |
 | --- | --- |
-| 目标 | 确认描述步沿用 LLM Gateway（H8）；落库成功后链到 Prism Mock / 资产门禁 |
-| 本波 | 落库结果区已链「资产与门禁」「Prism Mock」；AI 勾选保留在向导第 4 步 |
-| 不做 | 新的「一键生成 OpenAPI」大模型切片（架构后做项另开） |
+| 目标 | 文字说明 + 表格/截图转写文本 → 经 LLM Gateway 产出候选 OpenAPI，再走预览/点测/落库 |
+| 代码 | `POST /importer/generate-openapi`；`importer/generate.py`；向导「从说明生成」 |
+| 规则 | 只经 Gateway；不解析图片；不自动落库；输出经 OpenAPI 解析校验 |
+| 测例 | `tests/test_o3b_generate_openapi.py`（Mock LLM） |
+| 验收 | `pytest -q tests/test_o3b_generate_openapi.py` |
+| 另有 | 落库后链 Prism / 资产门禁；描述润色沿用 H8 |
+| 不做 | 真模型联调；图片 OCR；自动跳过点测 |
 
 ### O4 接入看板
 

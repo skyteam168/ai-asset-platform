@@ -1138,6 +1138,19 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | --- | --- |
 | 不在本片 | 真装 Langfuse；真集群 PITR |
 
+### O3b AI 生成候选 OpenAPI — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `generate-openapi` → 可 import 预览 | 通过 | `test_o3b_generate_openapi.py` |
+| 附录二进制拒绝 | 通过 | `test_generate_rejects_binary_extra` |
+| 向导「从说明生成」+ 文本上传 | 通过 | `ApiImport.tsx`；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `importer/generate.py`；OpenAPI `ImporterGenerateRequest` |
+| 不在本片 | 真模型；图片 OCR；自动落库 |
+
 ### O4 接入管道看板 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

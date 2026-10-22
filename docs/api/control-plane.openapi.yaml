@@ -2800,6 +2800,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ImporterTryRequest'
+  /api/v1/importer/generate-openapi:
+    post:
+      operationId: generateOpenApi
+      tags:
+      - importer
+      summary: 经 LLM Gateway 生成候选 OpenAPI（须人工预览；附录仅纯文本，不解析图片）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImporterGenerateResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImporterGenerateRequest'
   /api/v1/prism-mocks:
     get:
       operationId: listPrismMocks
@@ -5862,6 +5883,73 @@ components:
       - mode
       - item_count
       - truncated
+    ImporterGenerateRequest:
+      type: object
+      properties:
+        description:
+          type: string
+          minLength: 20
+          maxLength: 20000
+          description: 业务/接口文字说明
+        model_profile:
+          type: string
+          pattern: ^[\w.-]+@\d+\.\d+\.\d+$
+        extras:
+          type: array
+          items:
+            type: string
+            maxLength: 12000
+          maxItems: 8
+          default: []
+          description: 附录纯文本（表格或截图转写）；不解析图片
+        title_hint:
+          type:
+          - string
+          - 'null'
+          maxLength: 200
+        domain_hint:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-z][a-z0-9_]*$
+        system_hint:
+          type:
+          - string
+          - 'null'
+          pattern: ^[a-z][a-z0-9_]*$
+        connection_id:
+          type:
+          - string
+          - 'null'
+        owner_org_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - description
+      - model_profile
+    ImporterGenerateResult:
+      type: object
+      properties:
+        document:
+          type: string
+        format:
+          type: string
+        title:
+          type:
+          - string
+          - 'null'
+        warnings:
+          type: array
+          items:
+            type: string
+        operation_count:
+          type: integer
+      required:
+      - document
+      - format
+      - warnings
+      - operation_count
     PrismMock:
       type: object
       properties:

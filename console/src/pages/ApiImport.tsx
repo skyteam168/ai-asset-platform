@@ -63,7 +63,12 @@ export function ApiImportDrawer(p: {
   const [tryParams, setTryParams] = useState("{}");
   const [tryOut, setTryOut] = useState<TryResult | null>(null);
   const [allowWrite, setAllowWrite] = useState(false);
+  const [genBusy, setGenBusy] = useState(false);
+  const [genDesc, setGenDesc] = useState("");
+  const [genExtras, setGenExtras] = useState<string[]>([]);
+  const [genWarn, setGenWarn] = useState<string[]>([]);
   const enrich = Form.useWatch("enrich_descriptions", form) as boolean | undefined;
+  const modelProfile = Form.useWatch("model_profile", form) as string | undefined;
   const connectionId = Form.useWatch("connection_id", form) as string | undefined;
 
   const step = useMemo(() => {
@@ -121,8 +126,44 @@ export function ApiImportDrawer(p: {
 
   const close = () => {
     setPreview(null); setResult(null); setTryOut(null); setTryOp(null); setTryParams("{}"); setAllowWrite(false);
+    setGenDesc(""); setGenExtras([]); setGenWarn([]);
     p.onClose();
   };
+
+  const runGenerate = async () => {
+    const v = await form.validateFields(["domain", "system", "model_profile"]).catch(() => null);
+    const profile = (form.getFieldValue("model_profile") as string | undefined) || (v as { model_profile?: string } | null)?.model_profile;
+    if (!profile || !/^[\w.-]+@\d+\.\d+\.\d+$/.test(profile)) {
+      form.setFields([{ name: "model_profile", errors: [t("生成候选须填写 model_profile（name@x.y.z）")] }]);
+      return;
+    }
+    if (genDesc.trim().length < 20) {
+      Modal.error({ title: t("业务说明至少 20 字") });
+      return;
+    }
+    setGenBusy(true);
+    const out = await act(() => post<{
+      document: string; format: string; warnings: string[]; operation_count: number; title?: string | null;
+    }>("/importer/generate-openapi", {
+      description: genDesc.trim(),
+      model_profile: profile,
+      extras: genExtras,
+      domain_hint: form.getFieldValue("domain") || undefined,
+      system_hint: form.getFieldValue("system") || undefined,
+      owner_org_id: form.getFieldValue("owner_org_id") || undefined,
+      connection_id: form.getFieldValue("connection_id") || undefined,
+    }));
+    setGenBusy(false);
+    if (!out) return;
+    form.setFieldsValue({ document: out.document, format: "openapi" });
+    setPreview(null); setTryOut(null);
+    setGenWarn(out.warnings ?? []);
+    Modal.success({
+      title: t("已生成候选 OpenAPI"),
+      content: t("解析出 {0} 个 operation，已填入文档框；请继续预览与点测。", [out.operation_count]),
+    });
+  };
+
   const tools = (preview?.tools ?? []) as unknown as Draft[];
   const httpConns = p.connections.filter((c) => c.scheme === "http" || c.scheme === "https");
 
@@ -152,6 +193,62 @@ export function ApiImportDrawer(p: {
             <Input style={{ width: 140 }} placeholder="mes" />
           </Form.Item>
         </Space>
+        <details style={{ marginBottom: 16 }} open={p.embedded}>
+          <summary style={{ cursor: "pointer", marginBottom: 8 }}>{t("从说明生成（AI 候选 OpenAPI）")}</summary>
+          <Alert type="info" showIcon style={{ marginBottom: 12 }}
+            message={t("经 LLM Gateway 生成候选文档，不自动落库；可粘贴表格或截图转写文本作为附录（不解析图片）。")} />
+          <Form.Item label={t("业务说明")} required>
+            <Input.TextArea rows={4} value={genDesc} onChange={(e) => setGenDesc(e.target.value)}
+              placeholder={t("例如：越南 MES 按工厂查询在制工单，返回工单号与计划数量…")} />
+          </Form.Item>
+          <Form.Item label={t("附录文本（表格 / 截图转写）")}
+            extra={(
+              <Upload accept=".txt,.csv,.md,.tsv,.text" showUploadList={false} multiple
+                beforeUpload={async (file) => {
+                  if (!/\.(txt|csv|md|tsv|text)$/i.test(file.name)) {
+                    Modal.error({ title: t("仅支持文本文件（.txt / .csv / .md / .tsv）") });
+                    return false;
+                  }
+                  const text = await file.text();
+                  if (text.includes("\0")) {
+                    Modal.error({ title: t("文件含二进制内容，请只上传表格或截图转写文本") });
+                    return false;
+                  }
+                  setGenExtras((prev) => [...prev, text].slice(0, 8));
+                  return false;
+                }}>
+                <Button size="small">{t("上传文本附录")}</Button>
+              </Upload>
+            )}>
+            <Space direction="vertical" style={{ width: "100%" }}>
+              {genExtras.map((ex, i) => (
+                <Space key={i} align="start" style={{ width: "100%" }}>
+                  <Typography.Text type="secondary" style={{ whiteSpace: "nowrap" }}>#{i + 1}</Typography.Text>
+                  <Input.TextArea rows={2} value={ex} style={{ fontFamily: "Consolas, monospace", fontSize: 12, width: 520 }}
+                    onChange={(e) => setGenExtras((prev) => prev.map((x, j) => (j === i ? e.target.value : x)))} />
+                  <Button size="small" type="link" onClick={() => setGenExtras((prev) => prev.filter((_, j) => j !== i))}>{t("移除")}</Button>
+                </Space>
+              ))}
+              {genExtras.length === 0 && (
+                <Input.TextArea rows={2} placeholder={t("可粘贴接口表格、字段说明或截图 OCR 文本")}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v) { setGenExtras([v]); e.target.value = ""; }
+                  }} />
+              )}
+            </Space>
+          </Form.Item>
+          <Form.Item name="model_profile" label={t("model_profile")}
+            rules={[{ pattern: /^[\w.-]+@\d+\.\d+\.\d+$/, message: "name@x.y.z" }]}>
+            <Input style={{ width: 240 }} placeholder="gpt-4o-mini@1.0.0" />
+          </Form.Item>
+          <Button loading={genBusy} onClick={() => void runGenerate()}>{t("生成 OpenAPI 候选")}</Button>
+          {genWarn.length > 0 && (
+            <Alert type="warning" showIcon style={{ marginTop: 12 }} message={t("生成提示")}
+              description={genWarn.map((w) => <div key={w}>· {w}</div>)} />
+          )}
+        </details>
+
         <Form.Item name="document" label={t("文档（JSON 或 YAML）")} rules={[{ required: true }]}
           extra={(
             <Upload accept=".json,.yaml,.yml" showUploadList={false}
@@ -232,12 +329,10 @@ export function ApiImportDrawer(p: {
             <Typography.Title level={5}>{t("确认描述")}</Typography.Title>
             <Space align="start" wrap>
               <Form.Item name="enrich_descriptions" valuePropName="checked">
-                <Checkbox>{t("经 LLM Gateway 生成候选描述（需人工确认）")}</Checkbox>
+                <Checkbox>{t("经 LLM Gateway 生成候选描述（需人工确认；使用上方 model_profile）")}</Checkbox>
               </Form.Item>
-              {enrich && (
-                <Form.Item name="model_profile" rules={[{ required: true, pattern: /^[\w.-]+@\d+\.\d+\.\d+$/, message: "name@x.y.z" }]}>
-                  <Input style={{ width: 240 }} placeholder="gpt-4o-mini@1.0.0" />
-                </Form.Item>
+              {enrich && !modelProfile && (
+                <Typography.Text type="danger">{t("请先填写 model_profile")}</Typography.Text>
               )}
               <Form.Item name="owner_org_id" label={t("归属组织（缺省为连接所属公司）")} style={{ width: 320 }}>
                 <Select allowClear options={list.filter((o) => o.type !== "group").map((o) => ({ value: o.id, label: `${o.code} · ${o.name}` }))} />

@@ -1124,6 +1124,43 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["ok", "operation", "mode", "item_count", "truncated"],
             ),
+            "ImporterGenerateRequest": o(
+                {
+                    "description": {
+                        "type": "string",
+                        "minLength": 20,
+                        "maxLength": 20000,
+                        "description": "业务/接口文字说明",
+                    },
+                    "model_profile": {
+                        "type": "string",
+                        "pattern": r"^[\w.-]+@\d+\.\d+\.\d+$",
+                    },
+                    "extras": {
+                        "type": "array",
+                        "items": {"type": "string", "maxLength": 12000},
+                        "maxItems": 8,
+                        "default": [],
+                        "description": "附录纯文本（表格或截图转写）；不解析图片",
+                    },
+                    "title_hint": {"type": ["string", "null"], "maxLength": 200},
+                    "domain_hint": {"type": ["string", "null"], "pattern": r"^[a-z][a-z0-9_]*$"},
+                    "system_hint": {"type": ["string", "null"], "pattern": r"^[a-z][a-z0-9_]*$"},
+                    "connection_id": SN,
+                    "owner_org_id": SN,
+                },
+                ["description", "model_profile"],
+            ),
+            "ImporterGenerateResult": o(
+                {
+                    "document": S,
+                    "format": S,
+                    "title": SN,
+                    "warnings": {"type": "array", "items": S},
+                    "operation_count": INT,
+                },
+                ["document", "format", "warnings", "operation_count"],
+            ),
             "PrismMock": o(
                 {
                     "id": ID,
@@ -2146,6 +2183,15 @@ def control_plane() -> dict[str, Any]:
                 "导入预览阶段用已登记系统连接试调声明式 operation（样本截断；写操作须 allow_write）",
                 req=ref("ImporterTryRequest"),
                 res=ref("ImporterTryResult"),
+            )
+        },
+        f"{A}/importer/generate-openapi": {
+            "post": op(
+                "generateOpenApi",
+                "importer",
+                "经 LLM Gateway 生成候选 OpenAPI（须人工预览；附录仅纯文本，不解析图片）",
+                req=ref("ImporterGenerateRequest"),
+                res=ref("ImporterGenerateResult"),
             )
         },
         f"{A}/prism-mocks": {

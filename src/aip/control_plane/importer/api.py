@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
 from aip.control_plane.iam.api import ActorDep, DbDep
+from aip.control_plane.importer import generate as gen
 from aip.control_plane.importer import schemas as out
 from aip.control_plane.importer import service as importer
 from aip.control_plane.importer import try_op
@@ -41,6 +42,21 @@ class TryOperationIn(BaseModel):
         default=False,
         description="写操作须显式 true；仅 sandbox/test 环境连接",
     )
+
+
+class GenerateOpenApiIn(BaseModel):
+    description: str = Field(min_length=20, max_length=20_000, description="业务/接口文字说明")
+    model_profile: str = Field(pattern=r"^[\w.-]+@\d+\.\d+\.\d+$")
+    extras: list[str] = Field(
+        default_factory=list,
+        description="附录纯文本（表格或截图转写）；不解析图片",
+        max_length=8,
+    )
+    title_hint: str | None = Field(default=None, max_length=200)
+    domain_hint: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    system_hint: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    connection_id: uuid.UUID | None = None
+    owner_org_id: uuid.UUID | None = None
 
 
 def _secrets(request: Request) -> SecretStore:
@@ -123,6 +139,29 @@ def router() -> APIRouter:
                     operation=body.operation,
                     params=body.params,
                     allow_write=body.allow_write,
+                )
+            )
+
+    @r.post(
+        f"{V}/importer/generate-openapi",
+        operation_id="generateOpenApi",
+        status_code=200,
+        response_model=out.ImporterGenerateResult,
+    )
+    async def generate_openapi(body: GenerateOpenApiIn, actor: ActorDep, db: DbDep) -> out.ImporterGenerateResult:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.ImporterGenerateResult.model_validate(
+                await gen.generate_openapi(
+                    conn,
+                    actor,
+                    description=body.description,
+                    model_profile=body.model_profile,
+                    extras=list(body.extras),
+                    title_hint=body.title_hint,
+                    domain_hint=body.domain_hint,
+                    system_hint=body.system_hint,
+                    connection_id=body.connection_id,
+                    owner_org_id=body.owner_org_id,
                 )
             )
 

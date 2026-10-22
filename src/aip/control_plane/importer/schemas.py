@@ -39,3 +39,15 @@ class ImporterTryResult(BaseModel):
     truncated: bool = False
     sample: Any = None
     next_cursor: str | None = None
+
+
+class ImporterGenerateResult(BaseModel):
+    """AI 生成的候选 OpenAPI（O3b）；须人工预览后再导入。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    document: str
+    format: str = "openapi"
+    title: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    operation_count: int = 0
