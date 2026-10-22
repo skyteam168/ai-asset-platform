@@ -1138,6 +1138,20 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | --- | --- |
 | 不在本片 | 真装 Langfuse；真集群 PITR |
 
+### O1–O2 运营向导（真连接点测 + 五步创建）— 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `POST /importer/try-operation` 只读 live_read | 通过 | `test_o1_importer_try.py`（本地 HTTP mock） |
+| 写操作须 allow_write + sandbox/test | 通过 | `test_try_write_requires_allow_write` |
+| 控制台五步向导 + `/wizard` | 通过 | `ApiImport.tsx` Steps；`ToolWizardPage`；en/vi/km |
+| OpenAPI | 通过 | `ImporterTryRequest` / `ImporterTryResult` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `importer/try_op.py`；控制台「创建 Tool 向导」 |
+| 不在本片 | O4 接入看板；分公司自治发布 ADR；全新 AI 生成 OpenAPI |
+
 ### H58 pgvector / 成本分摊 / 双机房文档 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

@@ -2779,6 +2779,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ImporterRequest'
+  /api/v1/importer/try-operation:
+    post:
+      operationId: tryImporterOperation
+      tags:
+      - importer
+      summary: 导入预览阶段用已登记系统连接试调声明式 operation（样本截断；写操作须 allow_write）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImporterTryResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImporterTryRequest'
   /api/v1/prism-mocks:
     get:
       operationId: listPrismMocks
@@ -5788,6 +5809,59 @@ components:
       - connector_config
       - tools
       - warnings
+    ImporterTryRequest:
+      type: object
+      properties:
+        connection_id:
+          type: string
+          description: UUIDv7
+        connector_config:
+          type: object
+          description: 含 operations 的声明式配置（通常来自预览结果）
+        operation:
+          type: string
+          minLength: 1
+          maxLength: 128
+        params:
+          type: object
+          additionalProperties: true
+          default: {}
+        allow_write:
+          type: boolean
+          default: false
+          description: 写操作须显式 true；仅 sandbox/test 环境连接
+      required:
+      - connection_id
+      - connector_config
+      - operation
+    ImporterTryResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        operation:
+          type: string
+        mode:
+          type: string
+        connection_env:
+          type:
+          - string
+          - 'null'
+        item_count:
+          type: integer
+        truncated:
+          type: boolean
+        sample: {}
+        next_cursor:
+          type:
+          - string
+          - 'null'
+      required:
+      - ok
+      - operation
+      - mode
+      - item_count
+      - truncated
     PrismMock:
       type: object
       properties:

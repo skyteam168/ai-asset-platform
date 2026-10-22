@@ -1094,6 +1094,36 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["connector_config", "tools", "warnings"],
             ),
+            "ImporterTryRequest": o(
+                {
+                    "connection_id": ID,
+                    "connector_config": {
+                        "type": "object",
+                        "description": "含 operations 的声明式配置（通常来自预览结果）",
+                    },
+                    "operation": {"type": "string", "minLength": 1, "maxLength": 128},
+                    "params": {"type": "object", "additionalProperties": True, "default": {}},
+                    "allow_write": {
+                        "type": "boolean",
+                        "default": False,
+                        "description": "写操作须显式 true；仅 sandbox/test 环境连接",
+                    },
+                },
+                ["connection_id", "connector_config", "operation"],
+            ),
+            "ImporterTryResult": o(
+                {
+                    "ok": B,
+                    "operation": S,
+                    "mode": S,
+                    "connection_env": SN,
+                    "item_count": INT,
+                    "truncated": B,
+                    "sample": {},
+                    "next_cursor": SN,
+                },
+                ["ok", "operation", "mode", "item_count", "truncated"],
+            ),
             "PrismMock": o(
                 {
                     "id": ID,
@@ -2057,6 +2087,15 @@ def control_plane() -> dict[str, Any]:
                 "从 Postman Collection v2.x 生成声明式 Connector 与 Tool 草稿（可选落库）",
                 req=ref("ImporterRequest"),
                 res=ref("ImporterResult"),
+            )
+        },
+        f"{A}/importer/try-operation": {
+            "post": op(
+                "tryImporterOperation",
+                "importer",
+                "导入预览阶段用已登记系统连接试调声明式 operation（样本截断；写操作须 allow_write）",
+                req=ref("ImporterTryRequest"),
+                res=ref("ImporterTryResult"),
             )
         },
         f"{A}/prism-mocks": {

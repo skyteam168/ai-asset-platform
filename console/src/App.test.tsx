@@ -43,8 +43,8 @@ describe("控制台外壳", () => {
     expect(session.get()).toBe("s-1");
     expect(calls.find((c) => c.path === "/auth/login" && (c.body as { totp: string }).totp === "123456")?.body)
       .toEqual({ login_name: "alice", password: "correct-horse-battery", totp: "123456" });
-    // 运营概览 + 资产市场 + Prism + 原有菜单；含 3 个分组标题
-    expect(screen.getAllByRole("menuitem")).toHaveLength(17);
+    // 运营概览 + 创建向导 + 资产市场 + Prism + 原有菜单；含 3 个分组标题
+    expect(screen.getAllByRole("menuitem")).toHaveLength(18);
   });
 
   it("菜单按角色裁剪：审计员只看到运营概览、风控、审计与组织", async () => {

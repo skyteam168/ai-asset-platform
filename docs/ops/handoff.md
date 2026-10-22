@@ -175,7 +175,8 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **H27（已完成）**：顶栏帮助 → 使用说明抽屉（按实际功能分节，中英越）。
 - **H40–H43（已完成）**：压测巩固、zhparser opt-in、生产清单 `prod-check`、Notifier 邮件+通用 IM Webhook。
 - **生产深度执行清单**：[task.md](task.md)（**H40–H58 Wave A/B/C 骨架已完成**）。
-- **当前下一步**：真环境联调（IdP / SMTP / CNPG / k8s 压测）；或架构「后做」新切片（需先对照 architecture.md）。
+- **Wave O（运营向导）**：O1 真连接点测 + O2 五步创建向导已实现（见 task.md / milestones）；O3 深化 / O4 接入看板待做。
+- **当前下一步**：本地验收 O1/O2 后提交；或 O4 接入看板 / 真环境联调（IdP / SMTP / CNPG）。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
 

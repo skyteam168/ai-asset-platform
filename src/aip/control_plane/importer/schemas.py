@@ -24,3 +24,18 @@ class ImporterResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     connector_instance_id: str | None = None
     drafts: list[ImporterDraft] = Field(default_factory=list)
+
+
+class ImporterTryResult(BaseModel):
+    """导入预览真连接试调结果（O1）；样本已截断。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool = True
+    operation: str
+    mode: str
+    connection_env: str | None = None
+    item_count: int = 0
+    truncated: bool = False
+    sample: Any = None
+    next_cursor: str | None = None

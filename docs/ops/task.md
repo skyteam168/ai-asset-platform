@@ -163,3 +163,56 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | H56 | **完成**（骨架；生产 SMTP/飞书另验） |
 | H57 | **完成**（骨架；真 RPC / RPA 另验） |
 | H58 | **完成**（文档 + prod-check） |
+| O1 | **完成**（本地 pytest） |
+| O2 | **完成**（控制台五步 + `/wizard`） |
+| O3 | **部分**（落库后 Lab 链接；AI 草稿沿用 H8） |
+| O4 | 待做 |
+
+---
+
+## Wave O — 运营向导（P0）
+
+依据架构缺口分析：最大杠杆是「运营向导 + 真连接试调 + AI 只产草稿」。  
+分公司自治发布需另开 ADR，不在本波。
+
+```mermaid
+flowchart LR
+  O1[O1 真连接点测] --> O2[O2 五步向导]
+  O2 --> O3[O3 AI/Lab]
+  O3 --> O4[O4 接入看板]
+```
+
+### O1 导入预览真连接点测
+
+| 项 | 内容 |
+| --- | --- |
+| 目标 | 预览阶段即可对单个 operation 走已登记系统连接看真实样本（截断） |
+| 代码 | `POST /api/v1/importer/try-operation`；`importer/try_op.py`；控制台「真连接试」+ 结果面板 |
+| 规则 | 只读 `live_read`；写须 `allow_write` 且连接 env∈{sandbox,test}，mode=`sandbox` |
+| 测例 | `tests/test_o1_importer_try.py` |
+| 验收 | `pytest -q tests/test_o1_importer_try.py` |
+| 不做 | 经 Runtime/PDP 消费路径；全量落库前批量试调 |
+
+### O2 Tool 创建五步向导
+
+| 项 | 内容 |
+| --- | --- |
+| 目标 | 控制台一条路径：文档 → 预览 → 点测 → 确认描述 → 落库 |
+| 代码 | `ApiImportDrawer` 五步；整页入口 `/wizard`「创建 Tool 向导」 |
+| 验收 | 控制台 typecheck / i18n；菜单可见 |
+| 不做 | 分公司命名空间发布；Skill/Workflow 专用向导 |
+
+### O3 向导内 AI 草稿 + 一键 Lab
+
+| 项 | 内容 |
+| --- | --- |
+| 目标 | 确认描述步沿用 LLM Gateway（H8）；落库成功后链到 Prism Mock / 资产门禁 |
+| 本波 | 落库结果区已链「资产与门禁」「Prism Mock」；AI 勾选保留在向导第 4 步 |
+| 不做 | 新的「一键生成 OpenAPI」大模型切片（架构后做项另开） |
+
+### O4 接入看板（后做）
+
+| 项 | 内容 |
+| --- | --- |
+| 目标 | 按公司/系统看草稿→门禁→发布→Grant 进度 |
+| 不做（本波） | 整页看板；可复用 ops-summary 扩展 |

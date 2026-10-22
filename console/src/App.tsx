@@ -31,6 +31,7 @@ import {
   DashboardOutlined,
   ShopOutlined,
   BugOutlined,
+  RocketOutlined,
 } from "@ant-design/icons";
 import { AutoComplete, Avatar, Badge, Button, DatePicker, Dropdown, Form, Input, Layout, Menu, Modal, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
@@ -67,6 +68,7 @@ const LlmConfigPage = page(() => import("./pages/LlmConfig"), "LlmConfigPage");
 const OpsDashboardPage = page(() => import("./pages/OpsDashboard"), "OpsDashboardPage");
 const MarketplacePage = page(() => import("./pages/Marketplace"), "MarketplacePage");
 const PrismMocksPage = page(() => import("./pages/PrismMocks"), "PrismMocksPage");
+const ToolWizardPage = page(() => import("./pages/ToolWizard"), "ToolWizardPage");
 
 type Group = "access" | "governance" | "system";
 
@@ -93,6 +95,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/assets", label: t("资产与门禁"), icon: <ApiOutlined />, element: <AssetsPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
+  { path: "/wizard", label: t("创建 Tool 向导"), icon: <RocketOutlined />, element: <ToolWizardPage />,
+    roles: ["platform_admin", "asset_developer"] },
   { path: "/marketplace", label: t("资产市场"), icon: <ShopOutlined />, element: <MarketplacePage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
   { path: "/catalog", label: t("资产目录"), icon: <BookOutlined />, element: <CatalogPage />,
