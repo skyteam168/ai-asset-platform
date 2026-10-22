@@ -44,3 +44,15 @@
 - 默认栈：`alembic upgrade head`（0026 no-op）+ `pytest -q tests/test_h41_zhparser.py`（zhparser 用例 skip）
 - Opt-in：`tools/dev.py zhparser-up` 后 `pytest -q -m zhparser tests/test_h41_zhparser.py`
 - 其它：`tests/test_m7_search_index.py`、`tests/test_m7_discovery.py`、`tests/test_h17_pg_fts_ha.py`
+
+## 6. pgvector（H58，按需）
+
+架构「之后按需加 pgvector」。本仓库**不**默认安装扩展、不建向量表。
+
+建议路径（staging）：
+
+1. `CREATE EXTENSION vector;`（需镜像含 pgvector）
+2. 物化列与 HNSW/IVFFlat 索引挂在独立表，检索仍先 Principal 过滤
+3. 与 zhparser FTS 并存时，混合排序策略单独 ADR
+
+成本分摊与双机房见 [wave-c-backlog.md](wave-c-backlog.md)。

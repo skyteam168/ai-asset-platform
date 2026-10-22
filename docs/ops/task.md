@@ -121,13 +121,13 @@ flowchart TB
 
 ---
 
-## Wave C — 明确后做（不排期）
+## Wave C — 骨架收口（真环境另验）
 
-| ID | 主题 | 说明 |
-| --- | --- | --- |
-| **H56** | SMTP 生产投递 / 飞书专用协议 | 现有通用 IM Webhook + LogMail 已够本地 |
-| **H57** | 独立 connector worker 池 / RPA | 非首期（architecture 后做） |
-| **H58** | pgvector / 成本分摊 / 双机房 | 架构「后做或按需」 |
+| ID | 主题 | 本仓库交付 | 真环境 |
+| --- | --- | --- | --- |
+| **H56** | SMTP / 飞书 | `SmtpMailChannel` + `FeishuChannel` + Settings | 生产 SMTP / 飞书签名 |
+| **H57** | Connector worker / RPA | `connector_worker` inline\|rpc 骨架 + 文档 | 真 RPC 池；RPA 不做首期 |
+| **H58** | pgvector / 成本分摊 / 双机房 | [wave-c-backlog.md](wave-c-backlog.md) + prod-check | 装扩展 / 报表 / 双活 |
 
 ---
 
@@ -160,4 +160,6 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | H53 | **完成**（骨架；真密钥器另验） |
 | H54 | **完成**（手册+冒烟脚本；无集群 skip） |
 | H55 | **完成**（slo §10 结果表模板） |
-| H56–H58 | 未开始（Wave C） |
+| H56 | **完成**（骨架；生产 SMTP/飞书另验） |
+| H57 | **完成**（骨架；真 RPC / RPA 另验） |
+| H58 | **完成**（文档 + prod-check） |

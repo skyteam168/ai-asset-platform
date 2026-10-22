@@ -94,9 +94,19 @@ class Settings(BaseSettings):
     # Skill 包对象存储（H35）：双写 SeaweedFS + bytea；下载 object 优先
     skill_bucket: str = "aip-skills"
     skill_object_storage: bool = False
-    # Notifier（H43）：通用 IM Webhook；空则只发邮件通道
+    # Notifier（H43 / H56）：通用 IM Webhook / 飞书；SMTP 生产投递（空则 LogMail）
     notify_im_webhook_url: str | None = None
+    notify_feishu_webhook_url: str | None = None
     notify_flush_interval_s: float = Field(default=2.0, ge=0.5, le=60)
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    # Connector worker（H57）：inline=同进程；rpc=独立池（骨架，未接线）
+    connector_worker_mode: str = Field(default="inline", pattern="^(inline|rpc)$")
+    connector_worker_url: str = ""
     # Langfuse（H50）：可选登记，不强制接线
     langfuse_host: str | None = None
     langfuse_public_key: str | None = None

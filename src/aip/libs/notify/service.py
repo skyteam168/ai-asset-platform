@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
+from aip.libs.common.config import Settings
 from aip.libs.common.ids import new_id
 from aip.libs.httpclient import ConnectionConfig, build_client
 from aip.libs.httpclient.config import Scheme
@@ -38,6 +39,86 @@ class LogMailChannel:
 
     async def send(self, recipient: str, subject: str, body: str) -> None:
         log.info("notify.email to=%s subject=%s bytes=%s", recipient, subject, len(body))
+
+
+class SmtpMailChannel:
+    """生产 SMTP（stdlib smtplib，经 asyncio.to_thread；不落明文密码到日志）。"""
+
+    name = "email"
+
+    def __init__(
+        self,
+        *,
+        host: str,
+        port: int = 587,
+        user: str = "",
+        password: str = "",
+        mail_from: str = "",
+        starttls: bool = True,
+    ) -> None:
+        if not host:
+            raise ValueError("smtp host required")
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.mail_from = mail_from or user
+        self.starttls = starttls
+
+    async def send(self, recipient: str, subject: str, body: str) -> None:
+        import asyncio
+        import smtplib
+        from email.message import EmailMessage
+
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = self.mail_from
+        msg["To"] = recipient
+        msg.set_content(body)
+
+        def _send() -> None:
+            with smtplib.SMTP(self.host, self.port, timeout=30) as smtp:
+                if self.starttls:
+                    smtp.starttls()
+                if self.user:
+                    smtp.login(self.user, self.password)
+                smtp.send_message(msg)
+
+        await asyncio.to_thread(_send)
+        log.info("notify.smtp to=%s subject=%s bytes=%s", recipient, subject, len(body))
+
+
+class FeishuChannel:
+    """飞书自定义机器人：msg_type=text（经 httpclient；channel 名仍为 im 以便 outbox 复用）。"""
+
+    name = "im"
+
+    def __init__(self, webhook_url: str) -> None:
+        self.webhook_url = webhook_url
+
+    async def send(self, recipient: str, subject: str, body: str) -> None:
+        parsed = urlparse(self.webhook_url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError("invalid feishu webhook url")
+        base = f"{parsed.scheme}://{parsed.netloc}"
+        path = parsed.path or "/"
+        if parsed.query:
+            path = f"{path}?{parsed.query}"
+        scheme: Scheme = "https" if parsed.scheme == "https" else "http"
+        text_body = f"[{subject}] {body}" if subject else body
+        if recipient:
+            text_body = f"@{recipient} {text_body}"
+        cfg = ConnectionConfig(
+            id="notify-feishu",
+            base_url=base,
+            scheme=scheme,
+            tls_mode="system_ca" if scheme == "https" else None,
+            transport_exception_reason="notify Feishu webhook" if scheme == "http" else None,
+            transport_exception_expires_at=dt.datetime(2099, 1, 1, tzinfo=dt.UTC) if scheme == "http" else None,
+        )
+        async with build_client(cfg) as client:
+            r = await client.post(path, json={"msg_type": "text", "content": {"text": text_body[:4000]}})
+            r.raise_for_status()
 
 
 class ImWebhookChannel:
@@ -149,11 +230,50 @@ async def enqueue_channels(
     return ids
 
 
-def build_notifier(*, im_webhook_url: str | None = None) -> Notifier:
-    channels: list[Channel] = [LogMailChannel()]
-    if im_webhook_url:
+def build_notifier(
+    *,
+    im_webhook_url: str | None = None,
+    feishu_webhook_url: str | None = None,
+    smtp_host: str = "",
+    smtp_port: int = 587,
+    smtp_user: str = "",
+    smtp_password: str = "",
+    smtp_from: str = "",
+    smtp_starttls: bool = True,
+) -> Notifier:
+    """装配通知通道：有 SMTP 主机用 SmtpMail，否则 LogMail；飞书优先于通用 IM Webhook。"""
+    channels: list[Channel] = []
+    if smtp_host:
+        channels.append(
+            SmtpMailChannel(
+                host=smtp_host,
+                port=smtp_port,
+                user=smtp_user,
+                password=smtp_password,
+                mail_from=smtp_from or smtp_user,
+                starttls=smtp_starttls,
+            )
+        )
+    else:
+        channels.append(LogMailChannel())
+    if feishu_webhook_url:
+        channels.append(FeishuChannel(feishu_webhook_url))
+    elif im_webhook_url:
         channels.append(ImWebhookChannel(im_webhook_url))
     return Notifier(channels)
+
+
+def build_notifier_from_settings(settings: Settings) -> Notifier:
+    return build_notifier(
+        im_webhook_url=settings.notify_im_webhook_url,
+        feishu_webhook_url=settings.notify_feishu_webhook_url,
+        smtp_host=settings.smtp_host,
+        smtp_port=settings.smtp_port,
+        smtp_user=settings.smtp_user,
+        smtp_password=settings.smtp_password,
+        smtp_from=settings.smtp_from,
+        smtp_starttls=settings.smtp_starttls,
+    )
 
 
 async def flush_forever(engine: AsyncEngine, notifier: Notifier, interval_s: float) -> None:

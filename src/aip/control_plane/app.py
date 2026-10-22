@@ -31,7 +31,7 @@ from aip.control_plane.webhook.api import deliver_forever, wire_risk_notifier
 from aip.control_plane.webhook.api import router as webhook_router
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
-from aip.libs.notify.service import build_notifier, flush_forever
+from aip.libs.notify.service import build_notifier_from_settings, flush_forever
 
 CONSOLE_DIST = pathlib.Path(__file__).resolve().parents[3] / "console" / "dist"
 
@@ -55,7 +55,7 @@ def create_app(db: Database | None = None) -> FastAPI:
             else None
         )
         delivery = asyncio.create_task(deliver_forever(app.state.db, 5.0))
-        notifier = build_notifier(im_webhook_url=settings.notify_im_webhook_url)
+        notifier = build_notifier_from_settings(settings)
         notify_flush = asyncio.create_task(
             flush_forever(app.state.db.engine, notifier, settings.notify_flush_interval_s)
         )

@@ -174,8 +174,8 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **H1–H27（已完成）**：至 human_task 信封、Importer、待办/LLM、风控/webhook/Skill、门禁、控制台/连接、消费方/资产 response_model、wf 信封、pg_trgm/CNPG、K8s CI、IAM、WORM、OTel、业务角色、G0 PII。
 - **H27（已完成）**：顶栏帮助 → 使用说明抽屉（按实际功能分节，中英越）。
 - **H40–H43（已完成）**：压测巩固、zhparser opt-in、生产清单 `prod-check`、Notifier 邮件+通用 IM Webhook。
-- **生产深度执行清单**：[task.md](task.md)（**H44–H50 Wave A、H51–H55 Wave B 骨架已完成**；Wave C 明确后做）。
-- **当前下一步**：Wave C（SMTP/飞书专用、connector worker/RPA 等）按需；或 Wave B 真环境联调（IdP / kind CNPG / k8s 压测填表）。
+- **生产深度执行清单**：[task.md](task.md)（**H40–H58 Wave A/B/C 骨架已完成**）。
+- **当前下一步**：真环境联调（IdP / SMTP / CNPG / k8s 压测）；或架构「后做」新切片（需先对照 architecture.md）。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
 

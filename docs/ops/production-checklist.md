@@ -42,9 +42,9 @@
 
 ## Notifier 环境变量
 
-- [ ] 邮件通道默认日志（`LogMailChannel`）；生产 SMTP 另议。
-- [ ] IM：`AIP_NOTIFY_IM_WEBHOOK_URL`（通用 Webhook JSON）；`AIP_NOTIFY_FLUSH_INTERVAL_S`（默认 2）。
-- [ ] 本地可用 `POST /api/v1/notify/flush`（platform_admin）触发投递。
+- [ ] 邮件：未配 SMTP 时 `LogMailChannel`；生产设 `AIP_SMTP_HOST` / `AIP_SMTP_PORT` / `AIP_SMTP_USER` / `AIP_SMTP_PASSWORD` / `AIP_SMTP_FROM` / `AIP_SMTP_STARTTLS`。
+- [ ] IM：`AIP_NOTIFY_IM_WEBHOOK_URL`（通用 Webhook JSON）；或飞书 `AIP_NOTIFY_FEISHU_WEBHOOK_URL`（优先）。
+- [ ] `AIP_NOTIFY_FLUSH_INTERVAL_S`（默认 2）；本地可用 `POST /api/v1/notify/flush`（platform_admin）。
 
 ## SLO / 故障演练
 
@@ -70,3 +70,18 @@
 
 - [ ] staging 按 [pg-ha-prod.md](pg-ha-prod.md) 完成 CNPG（或 Patroni）安装与 PITR 恢复演练。
 - [ ] 真集群多副本压测结果写入 [slo.md](slo.md)（Wave B / H55）。
+
+## SMTP / 飞书
+
+- [ ] 生产 SMTP 连通性与发件人域名；密钥进 OpenBao / Secret，不进镜像。
+- [ ] 飞书机器人 Webhook 仅内网或签名校验策略；对照 [wave-c-backlog.md](wave-c-backlog.md) H56。
+
+## Connector worker
+
+- [ ] 默认 `AIP_CONNECTOR_WORKER_MODE=inline`；拆池时用 `rpc` + `AIP_CONNECTOR_WORKER_URL`（见 [connector-worker.md](connector-worker.md)）。
+- [ ] RPA 类连接器首期不做；若启用须独立池且沙箱拒 live 写。
+
+## pgvector / 双机房
+
+- [ ] 需要语义检索时再装 pgvector（见 [search-index.md](search-index.md)）；默认不强制。
+- [ ] 双机房 / 跨机架副本与数据合规由集团策略；平台侧多副本见 K8s base。

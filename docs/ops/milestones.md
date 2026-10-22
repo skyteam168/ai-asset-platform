@@ -1138,6 +1138,40 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | --- | --- |
 | 不在本片 | 真装 Langfuse；真集群 PITR |
 
+### H58 pgvector / 成本分摊 / 双机房文档 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 文档 | 通过 | [wave-c-backlog.md](wave-c-backlog.md)；search-index §6 |
+| prod-check | 通过 | 章节 SMTP/飞书、Connector worker、pgvector/双机房 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真装 pgvector；分摊报表；双活演练 |
+
+### H57 Connector worker / RPA 骨架 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| inline / rpc | 通过 | `libs/connector_worker.py`；`test_h57_connector_worker.py` |
+| 文档 | 通过 | [connector-worker.md](connector-worker.md) |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真 RPC；RPA 连接器 |
+
+### H56 SMTP / 飞书通道 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| SmtpMailChannel | 通过 | Settings `smtp_*`；mock smtplib |
+| FeishuChannel | 通过 | `msg_type=text`；优先于通用 IM |
+| 测例 | 通过 | `test_h56_smtp_feishu.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 生产 SMTP 联调；飞书签名校验 |
+
 ### H55 多副本压测结果表模板 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

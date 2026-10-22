@@ -22,6 +22,9 @@ REQUIRED_SECTIONS = (
     "GenAI / Langfuse",
     "Object Lock / WORM 全量",
     "CNPG / Patroni / PITR 实装",
+    "SMTP / 飞书",
+    "Connector worker",
+    "pgvector / 双机房",
 )
 
 # 清单中引用的 AIP_* 名须能映射到 Settings 字段（或已知别名）
@@ -36,11 +39,14 @@ REQUIRED_ENV_NAMES = (
     "AIP_WORM_ENABLED",
     "AIP_WORM_BUCKET",
     "AIP_NOTIFY_IM_WEBHOOK_URL",
+    "AIP_NOTIFY_FEISHU_WEBHOOK_URL",
     "AIP_NOTIFY_FLUSH_INTERVAL_S",
+    "AIP_SMTP_HOST",
     "AIP_SERVICE_AUTH_MODE",
     "AIP_SERVICE_TOKEN_TTL_S",
     "AIP_SERVICE_MTLS_CA_PEM",
     "AIP_LANGFUSE_HOST",
+    "AIP_CONNECTOR_WORKER_MODE",
 )
 
 
