@@ -4430,6 +4430,18 @@ components:
           type:
           - string
           - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+        owner_org_id:
+          type:
+          - string
+          - 'null'
+        asset_id:
+          type:
+          - string
+          - 'null'
     AssetVersion:
       type: object
       properties:

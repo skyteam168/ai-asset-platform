@@ -428,6 +428,8 @@ export const enUS: Record<string, string> = {
   "连接器": "Connector",
   "最新状态": "Latest state",
   "资产名称 / 类型 / 描述 / 系统": "Name / type / description / system",
+  "无系统（无连接器）": "No system (no connector)",
+  "无匹配资产：可放宽公司或系统筛选": "No matching assets — try clearing company or system filters",
   "已撤回": "Retracted",
   "下载 zip": "Download zip",
   "已开始下载 {0}": "Download started for {0}",

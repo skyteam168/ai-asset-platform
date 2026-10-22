@@ -708,6 +708,9 @@ def control_plane() -> dict[str, Any]:
                     "connector": SN,
                     "system_key": SN,
                     "system_host": SN,
+                    "company_id": SN,
+                    "owner_org_id": SN,
+                    "asset_id": SN,
                 }
             ),
             "AssetVersion": o(

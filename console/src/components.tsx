@@ -1,11 +1,14 @@
-import { Button, Input, Tag, Typography } from "antd";
+import { Button, Input, Select, Tag, Typography } from "antd";
 import type { Rule } from "antd/es/form";
 import type { TablePaginationConfig } from "antd/es/table";
 import React, { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { get, type Page } from "./api";
 import { useLoad } from "./hooks";
-import type { OrgUnit } from "./types";
+import type { Connection, OrgUnit } from "./types";
 import { t } from "./i18n";
+
+/** 无系统连接的资产（Skill 等）在筛选里的哨兵值 */
+export const SYSTEM_NONE = "__none__";
 
 // ---------- 组织字典：把 id 显示成编码与名称 ----------
 
@@ -183,16 +186,18 @@ export function PageCard({ children, style }: { children: React.ReactNode; style
   );
 }
 
-/** 列表页工具栏：关键字筛选 + 查询 + 右侧动作（新建等） */
+/** 列表页工具栏：级联筛选 + 关键字 + 查询 + 右侧动作 */
 export function Toolbar(p: {
   placeholder?: string;
   onSearch?: (keyword: string) => void;
   actions?: React.ReactNode;
   extra?: React.ReactNode;
+  filters?: React.ReactNode;
 }) {
   const [kw, setKw] = useState("");
   return (
     <div className="aip-toolbar">
+      {p.filters}
       {p.onSearch && (
         <>
           <Input className="aip-toolbar-search" allowClear placeholder={p.placeholder} value={kw}
@@ -209,6 +214,71 @@ export function Toolbar(p: {
       {p.extra}
     </div>
   );
+}
+
+/** 公司 → 系统级联筛选（系统选项来自连接表 + 当前列表已出现的 system_key） */
+export function OrgSystemFilter(p: {
+  companyId: string | null;
+  systemKey: string | null;
+  onCompany: (id: string | null) => void;
+  onSystem: (key: string | null) => void;
+  rowSystemKeys?: (string | null | undefined)[];
+}) {
+  const { companies } = useOrgs();
+  const conns = useLoad(() => get<Page<Connection>>("/connections"), []);
+  const systemOptions = useMemo(() => {
+    const keys = new Set<string>();
+    for (const c of conns.data?.items ?? []) {
+      if (!p.companyId || c.company_id === p.companyId) keys.add(c.system_key);
+    }
+    for (const k of p.rowSystemKeys ?? []) {
+      if (k) keys.add(k);
+    }
+    return [...keys].sort().map((k) => ({ value: k, label: k }));
+  }, [conns.data, p.companyId, p.rowSystemKeys]);
+
+  return (
+    <>
+      <Select
+        allowClear
+        showSearch
+        optionFilterProp="label"
+        placeholder={t("公司")}
+        style={{ width: 180 }}
+        value={p.companyId ?? undefined}
+        options={companies.map((c) => ({ value: c.id, label: `${c.code} · ${c.name}` }))}
+        onChange={(v) => {
+          p.onCompany(v ?? null);
+          p.onSystem(null);
+        }}
+      />
+      <Select
+        allowClear
+        showSearch
+        optionFilterProp="label"
+        placeholder={t("系统")}
+        style={{ width: 160 }}
+        value={p.systemKey ?? undefined}
+        options={[
+          { value: SYSTEM_NONE, label: t("无系统（无连接器）") },
+          ...systemOptions,
+        ]}
+        onChange={(v) => p.onSystem(v ?? null)}
+      />
+    </>
+  );
+}
+
+/** 公司 / 系统筛选项与行字段匹配 */
+export function matchOrgSystem(
+  row: { company_id?: string | null; system_key?: string | null },
+  companyId: string | null,
+  systemKey: string | null,
+): boolean {
+  if (companyId && row.company_id !== companyId) return false;
+  if (systemKey === SYSTEM_NONE) return !row.system_key;
+  if (systemKey && row.system_key !== systemKey) return false;
+  return true;
 }
 
 /** 按关键字过滤（任一字段包含即命中，不区分大小写） */

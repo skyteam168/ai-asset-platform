@@ -1,7 +1,7 @@
 import { Alert, Table, Tabs, Tag, Tooltip, Typography } from "antd";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { get } from "../api";
-import { matches, PageCard, PAGINATION, Toolbar } from "../components";
+import { matchOrgSystem, matches, OrgName, OrgSystemFilter, PageCard, PAGINATION, Toolbar } from "../components";
 import { useLoad } from "../hooks";
 import { t } from "../i18n";
 
@@ -17,6 +17,8 @@ interface CatalogTool {
   connector?: string | null;
   system_key?: string | null;
   system_host?: string | null;
+  company_id?: string | null;
+  owner_org_id?: string | null;
 }
 
 interface CatalogBundle {
@@ -73,9 +75,34 @@ function SystemCell({ systemKey, host }: { systemKey?: string | null; host?: str
 export function CatalogPage() {
   const data = useLoad(() => get<CatalogData>("/console/catalog"), []);
   const [kw, setKw] = useState("");
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [systemKey, setSystemKey] = useState<string | null>(null);
+  const items = data.data?.items ?? [];
+  const rowSystemKeys = useMemo(() => items.map((r) => r.system_key), [items]);
+  const filteredTools = useMemo(
+    () =>
+      items.filter(
+        (r) =>
+          matchOrgSystem(r, companyId, systemKey) &&
+          matches(r, kw, ["capability_id", "title", "description", "connector", "system_key", "system_host"]),
+      ),
+    [items, companyId, systemKey, kw],
+  );
   return (
     <PageCard>
-      <Toolbar placeholder={t("能力 / 套件 / 描述 / 连接器 / 系统")} onSearch={setKw} />
+      <Toolbar
+        placeholder={t("能力 / 套件 / 描述 / 连接器 / 系统")}
+        onSearch={setKw}
+        filters={
+          <OrgSystemFilter
+            companyId={companyId}
+            systemKey={systemKey}
+            onCompany={setCompanyId}
+            onSystem={setSystemKey}
+            rowSystemKeys={rowSystemKeys}
+          />
+        }
+      />
       {data.error && <Alert type="error" message={data.error} style={{ marginBottom: 12 }} />}
       <Tabs
         items={[
@@ -87,9 +114,8 @@ export function CatalogPage() {
                 pagination={PAGINATION}
                 rowKey="capability_id"
                 loading={data.loading}
-                dataSource={(data.data?.items ?? []).filter((r) =>
-                  matches(r, kw, ["capability_id", "title", "description", "connector", "system_key", "system_host"]),
-                )}
+                dataSource={filteredTools}
+                locale={{ emptyText: t("无匹配资产：可放宽公司或系统筛选") }}
                 columns={[
                   {
                     title: t("能力"),
@@ -119,6 +145,8 @@ export function CatalogPage() {
                     width: 160,
                     render: (_, r) => <SystemCell systemKey={r.system_key} host={r.system_host} />,
                   },
+                  { title: t("公司"), dataIndex: "company_id", width: 130, render: (v) => <OrgName id={v} /> },
+                  { title: t("归属"), dataIndex: "owner_org_id", width: 140, render: (v) => <OrgName id={v} /> },
                   {
                     title: t("风险"),
                     dataIndex: "risk_level",

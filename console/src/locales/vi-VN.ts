@@ -428,6 +428,8 @@ export const viVN: Record<string, string> = {
   "连接器": "Connector",
   "最新状态": "Trạng thái mới nhất",
   "资产名称 / 类型 / 描述 / 系统": "Tên / loại / mô tả / hệ thống",
+  "无系统（无连接器）": "Không hệ thống (không connector)",
+  "无匹配资产：可放宽公司或系统筛选": "Không có tài sản khớp — hãy nới lọc công ty hoặc hệ thống",
   "已撤回": "Đã thu hồi",
   "下载 zip": "Tải zip",
   "已开始下载 {0}": "Đã bắt đầu tải {0}",

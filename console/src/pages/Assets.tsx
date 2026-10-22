@@ -1,8 +1,11 @@
 import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Table, Tabs, Tag, Tooltip, Typography } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
-import { Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
+import {
+  Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matchOrgSystem, matches, OrgName, OrgSystemFilter,
+  PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs,
+} from "../components";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, GateRecord, ImpactItem, Release, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
@@ -54,18 +57,42 @@ export function AssetsPage() {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Asset | null>(null);
   const [kw, setKw] = useState("");
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [systemKey, setSystemKey] = useState<string | null>(null);
+  const items = assets.data?.items ?? [];
+  const rowSystemKeys = useMemo(() => items.map((a) => a.system_key), [items]);
+  const filtered = useMemo(
+    () =>
+      items.filter(
+        (a) =>
+          matchOrgSystem(a, companyId, systemKey) &&
+          matches(a, kw, ["name", "type", "title", "description", "connector", "system_key", "system_host"]),
+      ),
+    [items, companyId, systemKey, kw],
+  );
   return (
     <PageCard>
-      <Toolbar placeholder={t("资产名称 / 类型 / 描述 / 系统")} onSearch={setKw}
-        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("新建资产")}</Button>} />
+      <Toolbar
+        placeholder={t("资产名称 / 类型 / 描述 / 系统")}
+        onSearch={setKw}
+        filters={
+          <OrgSystemFilter
+            companyId={companyId}
+            systemKey={systemKey}
+            onCompany={setCompanyId}
+            onSystem={setSystemKey}
+            rowSystemKeys={rowSystemKeys}
+          />
+        }
+        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("新建资产")}</Button>}
+      />
       {assets.error && <Alert type="error" message={assets.error} />}
       <Table<Asset>
         pagination={PAGINATION}
         rowKey="id"
         loading={assets.loading}
-        dataSource={(assets.data?.items ?? []).filter((a) =>
-          matches(a, kw, ["name", "type", "title", "description", "connector", "system_key", "system_host"]),
-        )}
+        dataSource={filtered}
+        locale={{ emptyText: t("无匹配资产：可放宽公司或系统筛选") }}
         onRow={(r) => ({ onClick: () => setSelected(r), style: { cursor: "pointer" } })}
         columns={[
           {
@@ -85,6 +112,7 @@ export function AssetsPage() {
             render: (v: string | null | undefined) => v || "—",
           },
           { title: t("系统"), key: "system", width: 150, render: (_, r) => <AssetSystemCell asset={r} /> },
+          { title: t("公司"), dataIndex: "company_id", width: 130, render: (v) => <OrgName id={v} /> },
           { title: t("归属"), dataIndex: "owner_org_id", width: 140, render: (v) => <OrgName id={v} /> },
           { title: t("密级"), dataIndex: "classification", width: 70, render: (v) => <Clearance level={v} /> },
           {

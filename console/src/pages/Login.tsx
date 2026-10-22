@@ -100,10 +100,19 @@ export function LoginPage() {
           {error && <Alert type="error" message={error} showIcon style={{ marginBottom: 16 }} />}
           <Form layout="vertical" size="large" onFinish={submit} requiredMark={false}>
             <Form.Item name="login_name" label={t("用户名")} rules={[{ required: true, message: t("请输入用户名") }]}>
-              <Input prefix={<UserOutlined style={{ opacity: 0.45 }} />} autoComplete="username" autoFocus />
+              <Input
+                prefix={<UserOutlined style={{ opacity: 0.45 }} />}
+                autoComplete="username"
+                autoFocus
+                placeholder={t("请输入用户名")}
+              />
             </Form.Item>
             <Form.Item name="password" label={t("口令")} rules={[{ required: true, message: t("请输入口令") }]}>
-              <Input.Password prefix={<LockOutlined style={{ opacity: 0.45 }} />} autoComplete="current-password" />
+              <Input.Password
+                prefix={<LockOutlined style={{ opacity: 0.45 }} />}
+                autoComplete="current-password"
+                placeholder={t("请输入口令")}
+              />
             </Form.Item>
             <Form.Item
               name="totp"
@@ -115,7 +124,7 @@ export function LoginPage() {
                 inputMode="numeric"
                 maxLength={6}
                 autoComplete="one-time-code"
-                placeholder="000000"
+                placeholder={t("请输入验证器中的 6 位动态码")}
                 style={{ letterSpacing: 4 }}
               />
             </Form.Item>

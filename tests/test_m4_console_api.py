@@ -88,6 +88,9 @@ async def test_assets_and_catalog_list_summary(
     assert tool["connector"] == "mes"
     assert tool["system_key"] == "mes"
     assert tool["system_host"] == "mes.example.internal:8443"
+    assert tool["asset_id"] == str(published.asset_id)
+    assert tool["company_id"]
+    assert tool["owner_org_id"]
 
 
 async def test_versions_list_and_detail(cp: httpx.AsyncClient, seeded: Seed, published: Published) -> None:

@@ -255,12 +255,38 @@ def router() -> APIRouter:
                     cap, _, _ = str(ref).partition("@")
                     if cap:
                         membership.setdefault(cap, []).append(bname)
+            asset_ids: list[uuid.UUID] = []
+            for rel in releases:
+                if rel.get("asset_type") != "tool" or rel.get("status") != "active":
+                    continue
+                aid = rel.get("asset_id")
+                if aid:
+                    try:
+                        asset_ids.append(uuid.UUID(str(aid)))
+                    except ValueError:
+                        pass
+            org_by_asset: dict[str, dict[str, str | None]] = {}
+            if asset_ids:
+                arows = (
+                    await conn.execute(
+                        select(t.asset.c.id, t.asset.c.company_id, t.asset.c.owner_org_id).where(
+                            t.asset.c.id.in_(asset_ids)
+                        )
+                    )
+                ).mappings()
+                for ar in arows:
+                    org_by_asset[str(ar["id"])] = {
+                        "company_id": str(ar["company_id"]) if ar["company_id"] else None,
+                        "owner_org_id": str(ar["owner_org_id"]) if ar["owner_org_id"] else None,
+                    }
             items = []
             for rel in releases:
                 if rel.get("asset_type") != "tool" or rel.get("status") != "active":
                     continue
                 spec = rel.get("spec") or {}
                 sm = summary_from_spec(spec)
+                aid = str(rel["asset_id"]) if rel.get("asset_id") else None
+                org = org_by_asset.get(aid or "") or {}
                 items.append(
                     {
                         "capability_id": rel.get("capability_id"),
@@ -272,6 +298,9 @@ def router() -> APIRouter:
                         "data_classification": spec.get("data_classification") or rel.get("classification"),
                         "bundles": sorted(set(membership.get(rel.get("capability_id", ""), []))),
                         "connector": sm.get("connector"),
+                        "asset_id": aid,
+                        "company_id": org.get("company_id") or rel.get("company_id"),
+                        "owner_org_id": org.get("owner_org_id") or rel.get("owner_org_id"),
                     }
                 )
             items = await attach_system_fields(conn, items)

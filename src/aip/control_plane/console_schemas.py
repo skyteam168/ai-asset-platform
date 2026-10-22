@@ -72,6 +72,9 @@ class CatalogTool(BaseModel):
     connector: str | None = None
     system_key: str | None = None
     system_host: str | None = None
+    company_id: str | None = None
+    owner_org_id: str | None = None
+    asset_id: str | None = None
 
 
 class CatalogBundle(BaseModel):

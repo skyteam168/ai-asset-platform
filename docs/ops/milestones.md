@@ -1126,6 +1126,18 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 能力 | `nike.sample.app_13` / `pc_12` / `app_8` |
 | 不在本片 | 其余 46 个草稿批量上架；写类 Tool；打真机 10.10.131.188 |
 
+### H37 资产列表公司→系统级联筛选 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 资产与门禁 / 资产目录 Toolbar：公司 + 系统筛选 | 通过 | OrgSystemFilter；空态文案 |
+| 目录带 company_id / owner_org_id | 通过 | console_api 按 asset_id 回填；`test_assets_and_catalog_list_summary` |
+| 列展示公司与归属 | 通过 | Assets / Catalog 表格 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 服务端分页过滤；部门树细粒度（先公司维） |
+
 ### H36 控制台运营闭环 A/B/C — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

@@ -86,6 +86,7 @@ export interface Asset {
   type: string;
   name: string;
   owner_org_id: string;
+  company_id?: string | null;
   classification: number;
   latest_semver?: string | null;
   latest_state?: string | null;
