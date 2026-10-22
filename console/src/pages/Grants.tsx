@@ -1,7 +1,7 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs } from "antd";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
-import { get, post, type Page } from "../api";
+import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, OrgName, PageCard, PAGINATION, StateTag, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
@@ -62,8 +62,43 @@ function Ceilings(p: Lookups & { admin: boolean }) {
           { title: t("分公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("资产"), dataIndex: "asset_ids", render: (ids: string[]) => ids.map(p.assetName).join("，") },
           { title: t("密级上限"), dataIndex: "max_classification", render: (v) => <Clearance level={v} /> },
+          {
+            title: t("每日调用配额"),
+            key: "quota",
+            render: (_: unknown, c: Ceiling) => c.quota?.daily_calls != null
+              ? <Typography.Text>{c.quota.daily_calls.toLocaleString()}</Typography.Text>
+              : <Typography.Text type="secondary">{t("无限制")}</Typography.Text>,
+          },
           { title: t("状态"), dataIndex: "status", render: (v) => <StateTag state={v} /> },
+          {
+            title: t("操作"), key: "ops", width: 100,
+            render: (_: unknown, c: Ceiling) => p.admin ? <SetCeilingQuotaButton ceiling={c} onDone={list.reload} /> : null,
+          },
         ]} />
+    </>
+  );
+}
+
+function SetCeilingQuotaButton({ ceiling, onDone }: { ceiling: Ceiling; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [form] = Form.useForm();
+  const act = useAction();
+  return (
+    <>
+      <Button size="small" onClick={() => setOpen(true)}>{t("设配额")}</Button>
+      <Modal open={open} title={t("设置调用配额")} onCancel={() => setOpen(false)} onOk={() => form.submit()} destroyOnClose>
+        <Form form={form} layout="vertical" preserve={false}
+          initialValues={{ daily_calls: ceiling.quota?.daily_calls ?? null }}
+          onFinish={async (v) => {
+            const body: { daily_calls?: number } = {};
+            if (v.daily_calls != null) body.daily_calls = v.daily_calls;
+            if (await act(() => put(`/grant-ceilings/${ceiling.id}/quota`, body), t("配额已更新"))) { setOpen(false); onDone(); }
+          }}>
+          <Form.Item name="daily_calls" label={t("每日调用上限（留空不限制）")}>
+            <InputNumber min={1} style={{ width: "100%" }} placeholder={t("留空不限制")} />
+          </Form.Item>
+        </Form>
+      </Modal>
     </>
   );
 }

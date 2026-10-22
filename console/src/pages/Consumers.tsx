@@ -4,7 +4,7 @@ import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
-import type { Binding, Consumer, User } from "../types";
+import type { Binding, Consumer, CredentialMeta, User } from "../types";
 import { t } from "../i18n";
 
 const POLICY_LABEL = { strict: t("严格绑定"), by_employee_no: t("按工号匹配"), app_only: t("仅应用身份") };
@@ -27,6 +27,11 @@ export function ConsumersPage() {
           { title: t("所属公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("密级上限"), dataIndex: "clearance_cap", render: (v) => <Clearance level={v} /> },
           { title: t("绑定策略"), dataIndex: "bind_policy", render: (v: Consumer["bind_policy"]) => POLICY_LABEL[v] },
+          {
+            title: t("每日调用配额"),
+            key: "quota",
+            render: (_: unknown, c: Consumer) => c.quota?.daily_calls != null ? c.quota.daily_calls.toLocaleString() : t("无限制"),
+          },
           { title: t("状态"), dataIndex: "status", render: (v) => <Tag color={v === "active" ? "green" : "red"}>{v}</Tag> },
         ]} />
       <NewConsumer open={open} onClose={() => setOpen(false)} onDone={consumers.reload} />
@@ -71,6 +76,7 @@ function ConsumerDrawer({ consumer, onClose }: { consumer: Consumer | null; onCl
           <Tabs style={{ marginTop: 12 }} items={[
             { key: "bindings", label: t("用户绑定"), children: <Bindings consumer={consumer} /> },
             { key: "creds", label: t("凭据与公钥"), children: <Credentials consumer={consumer} /> },
+            { key: "quota", label: t("配额"), children: <QuotaTab consumer={consumer} onDone={() => {/* consumers.reload called via prop not needed here */}} /> },
             { key: "webhooks", label: t("Webhook"), children: <Webhooks consumer={consumer} /> },
             { key: "debug", label: t("断言调试器"), children: <AssertionDebugger consumer={consumer} /> },
           ]} />
@@ -114,17 +120,36 @@ function Credentials({ consumer }: { consumer: Consumer }) {
   const act = useAction();
   const [token, setToken] = useState<string | null>(null);
   const [form] = Form.useForm();
+  const credList = useLoad(() => get<Page<CredentialMeta>>(`/consumers/${consumer.id}/credentials`), [consumer.id]);
   if (!has("platform_admin")) return <Alert type="info" message={t("凭据与公钥由平台管理员维护。")} />;
   return (
     <Space direction="vertical" style={{ width: "100%" }}>
       <Button onClick={async () => {
         const r = await act(() => post<{ token: string }>(`/consumers/${consumer.id}/credentials`, { kind: "static_token" }));
-        if (r) setToken(r.token);
+        if (r) { setToken(r.token); credList.reload(); }
       }}>{t("签发静态 API Token（90 天）")}</Button>
       {token && (
         <Alert type="warning" showIcon message={t("只显示这一次，请立即交给消费方保存")}
           description={<Typography.Paragraph copyable code style={{ margin: 0 }}>{token}</Typography.Paragraph>} />
       )}
+      <Table<CredentialMeta> rowKey="id" size="small" loading={credList.loading} pagination={false}
+        dataSource={credList.data?.items ?? []}
+        locale={{ emptyText: t("无凭据") }}
+        columns={[
+          { title: t("类型"), dataIndex: "kind" },
+          { title: t("状态"), dataIndex: "status", render: (v) => <Tag color={v === "active" ? "green" : "default"}>{v}</Tag> },
+          { title: t("创建"), dataIndex: "created_at", render: (v: string) => v.slice(0, 10) },
+          { title: t("到期"), dataIndex: "expires_at", render: (v: string | null) => (v ? v.slice(0, 10) : "-") },
+          {
+            title: t("操作"), key: "ops", width: 80,
+            render: (_, r) => r.status === "active"
+              ? <Button size="small" danger onClick={() => Modal.confirm({
+                  title: t("吊销该凭据？"),
+                  onOk: async () => { if (await act(() => post(`/credentials/${r.id}/revoke`), t("已吊销"))) credList.reload(); },
+                })}>{t("吊销")}</Button>
+              : null,
+          },
+        ]} />
       <Form form={form} layout="vertical" onFinish={async (v) => {
         if (await act(() => post(`/consumers/${consumer.id}/jwks`, parseJson(v.jwk)), t("公钥已登记"))) form.resetFields();
       }}>
@@ -132,6 +157,32 @@ function Credentials({ consumer }: { consumer: Consumer }) {
           <JsonInput rows={5} />
         </Form.Item>
         <Button htmlType="submit">{t("登记公钥")}</Button>
+      </Form>
+    </Space>
+  );
+}
+
+function QuotaTab({ consumer }: { consumer: Consumer; onDone: () => void }) {
+  const [form] = Form.useForm();
+  const act = useAction();
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Alert type="info" showIcon message={t("留空表示不限制；配额按自然日重置。")} style={{ marginBottom: 8 }} />
+      <Form form={form} layout="vertical" style={{ maxWidth: 400 }}
+        initialValues={{ daily_calls: consumer.quota?.daily_calls ?? null, daily_writes: consumer.quota?.daily_writes ?? null }}
+        onFinish={async (v) => {
+          const body: Record<string, number | undefined> = {};
+          if (v.daily_calls != null) body.daily_calls = v.daily_calls;
+          if (v.daily_writes != null) body.daily_writes = v.daily_writes;
+          await act(() => put(`/consumers/${consumer.id}/quota`, body), t("配额已更新"));
+        }}>
+        <Form.Item name="daily_calls" label={t("每日调用上限")}>
+          <InputNumber min={1} style={{ width: "100%" }} placeholder={t("留空不限制")} />
+        </Form.Item>
+        <Form.Item name="daily_writes" label={t("每日写操作上限")}>
+          <InputNumber min={1} style={{ width: "100%" }} placeholder={t("留空不限制")} />
+        </Form.Item>
+        <Button htmlType="submit" type="primary">{t("保存配额")}</Button>
       </Form>
     </Space>
   );

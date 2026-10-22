@@ -4,7 +4,7 @@ import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
-import type { Asset, GateRecord, TestCase, VersionDetail, VersionSummary } from "../types";
+import type { Asset, GateRecord, ImpactItem, Release, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
 import { SkillPackagePanel } from "./SkillEditor";
 
@@ -157,7 +157,7 @@ function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => v
               { title: t("创建"), dataIndex: "created_at", render: (v: string) => v.slice(0, 16).replace("T", " ") },
             ]} />
           {versionId && (
-            <VersionPanel key={versionId} versionId={versionId} assetType={asset.type} onChanged={versions.reload} />
+            <VersionPanel key={versionId} versionId={versionId} assetId={asset.id} assetType={asset.type} onChanged={versions.reload} />
           )}
           <NewVersion asset={asset} open={newOpen} onClose={() => setNewOpen(false)} onDone={versions.reload} />
         </>
@@ -243,23 +243,28 @@ function NewVersion(p: { asset: Asset; open: boolean; onClose: () => void; onDon
 
 function VersionPanel({
   versionId,
+  assetId,
   assetType,
   onChanged,
 }: {
   versionId: string;
+  assetId: string;
   assetType: string;
   onChanged: () => void;
 }) {
   const detail = useLoad(() => get<VersionDetail>(`/versions/${versionId}`), [versionId]);
   const gates = useLoad(() => get<{ items: GateRecord[] }>(`/versions/${versionId}/gates`), [versionId]);
+  const releases = useLoad(() => get<{ items: Release[] }>(`/assets/${assetId}/releases`), [assetId]);
   const { has } = useAuth();
   const act = useAction();
   const [labResult, setLabResult] = useState<{ passed: boolean; cases: { name: string; passed: boolean; detail: string; status: string }[] } | null>(null);
-  const refresh = () => { detail.reload(); gates.reload(); onChanged(); };
+  const refresh = () => { detail.reload(); gates.reload(); onChanged(); releases.reload(); };
   const v = detail.data;
   if (!v) return detail.error ? <Alert type="error" message={detail.error} /> : null;
   const dev = has("platform_admin", "asset_developer");
   const step = Math.max(LIFECYCLE.indexOf(v.state), 0);
+  // find active release for this version that has a prev to roll back to
+  const activeRelease = (releases.data?.items ?? []).find((r) => r.version_id === versionId && r.status === "active" && r.prev_release_id);
   const tabs = [
     { key: "gates", label: t("门禁记录"), children: (
       <Table<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
@@ -294,6 +299,7 @@ function VersionPanel({
           children: <SelectionEvalEditor versionId={versionId} editable={dev && v.state === "draft"} />,
         }]
       : []),
+    { key: "impact", label: t("影响"), children: <ImpactTab versionId={versionId} /> },
     { key: "spec", label: "Spec", children: <JsonView value={v.spec} /> },
   ];
   return (
@@ -337,6 +343,13 @@ function VersionPanel({
         )}
         {has("platform_admin") && v.state === "approved" && <RolloutButton versionId={versionId} kind="canary" onDone={refresh} />}
         {has("platform_admin") && v.state === "canary" && <RolloutButton versionId={versionId} kind="promote" onDone={refresh} />}
+        {has("platform_admin") && activeRelease && (
+          <Button danger onClick={() => Modal.confirm({
+            title: t("一键回滚？"),
+            content: t("将回滚到上一个发布版本，当前灰度或全量版本将下线。"),
+            onOk: async () => { if (await act(() => post(`/releases/${activeRelease.id}/rollback`), t("回滚已发起"))) refresh(); },
+          })}>{t("一键回滚")}</Button>
+        )}
       </Space>
       {labResult && (
         <Alert style={{ marginBottom: 12 }} type={labResult.passed ? "success" : "error"} showIcon
@@ -423,6 +436,26 @@ function SelectionEvalEditor({ versionId, editable }: { versionId: string; edita
   );
 }
 
+// ── Impact Tab ────────────────────────────────────────────────────────────────
+
+function ImpactTab({ versionId }: { versionId: string }) {
+  const impact = useLoad(() => get<{ items: ImpactItem[] }>(`/versions/${versionId}/impact`), [versionId]);
+  return (
+    <>
+      {impact.error && <Alert type="error" message={impact.error} style={{ marginBottom: 8 }} />}
+      <Table<ImpactItem> rowKey="name" size="small" loading={impact.loading} pagination={false}
+        locale={{ emptyText: t("无影响项") }}
+        dataSource={impact.data?.items ?? []}
+        columns={[
+          { title: t("名称"), dataIndex: "name", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+          { title: t("类型"), dataIndex: "asset_type", render: (v: string) => <Tag>{v}</Tag> },
+          { title: t("状态"), dataIndex: "state", render: (v: string) => <StateTag state={v} /> },
+          { title: t("引用"), dataIndex: "refs", render: (v: string[]) => v?.join(", ") || "-" },
+        ]} />
+    </>
+  );
+}
+
 function RolloutButton({ versionId, kind, onDone }: { versionId: string; kind: "canary" | "promote"; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [form] = Form.useForm();
@@ -435,10 +468,11 @@ function RolloutButton({ versionId, kind, onDone }: { versionId: string; kind: "
         <Form form={form} layout="vertical" preserve={false} initialValues={{ env: "test", exposure: ["rest", "mcp"], min_calls: 20 }}
           onFinish={async (v) => {
             const scope = kind === "canary" ? { company_ids: v.company_ids } : { group: true };
-            const r = await act(() => post<{ passed?: boolean; calls?: number; error_rate?: number }>(
+            const r = await act(() => post<{ passed?: boolean; calls?: number; error_rate?: number; release_id?: string }>(
               `/versions/${versionId}/${kind}`, { env: v.env, scope, exposure: v.exposure, min_calls: v.min_calls }));
             if (r) {
               if (kind === "promote" && !r.passed) Modal.warning({ title: t("灰度指标未达标"), content: t("调用 {0} 次，错误率 {1}", [r.calls, r.error_rate]) });
+              if (kind === "canary" && r.release_id) Modal.success({ title: t("灰度发布已创建"), content: t("Release ID：{0}", [r.release_id]) });
               setOpen(false); onDone();
             }
           }}>

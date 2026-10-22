@@ -281,6 +281,17 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return _user_out(await users.user_row(conn, id), await users.effective_clearance(conn, id))
 
+    @r.get(
+        f"{V}/users/{{id}}/roles",
+        tags=["iam"],
+        operation_id="listUserRoles",
+        response_model=Page[out.RoleAssignment],
+    )
+    async def list_user_roles(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.RoleAssignment]:
+        async with db.tx(actor.db_scope()) as conn:
+            items = [out.RoleAssignment.model_validate(x) for x in await users.list_roles_for_user(conn, actor, id)]
+        return Page(items=items)
+
     @r.post(
         f"{V}/users/{{id}}/roles",
         tags=["iam"],
@@ -333,6 +344,22 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             await business_roles.delete(conn, actor, id, code)
         response.status_code = 204
+
+    @r.get(
+        f"{V}/clearance-requests",
+        tags=["iam"],
+        operation_id="listClearanceRequests",
+        response_model=Page[out.ClearanceRequest],
+    )
+    async def list_clearance_requests(
+        actor: ActorDep, db: DbDep, status: str | None = "pending"
+    ) -> Page[out.ClearanceRequest]:
+        async with db.tx(actor.db_scope()) as conn:
+            items = [
+                out.ClearanceRequest.model_validate(x)
+                for x in await users.list_clearance_requests(conn, actor, status=status)
+            ]
+        return Page(items=items)
 
     @r.post(
         f"{V}/clearance-requests",
@@ -401,6 +428,17 @@ def router() -> APIRouter:
             {"id": str(cid), **body.model_dump(mode="json"), "status": "active"}
         )
 
+    @r.get(
+        f"{V}/consumers/{{id}}/credentials",
+        tags=["iam"],
+        operation_id="listCredentials",
+        response_model=Page[out.CredentialMeta],
+    )
+    async def list_credentials(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.CredentialMeta]:
+        async with db.tx(actor.db_scope()) as conn:
+            items = [out.CredentialMeta.model_validate(x) for x in await consumers.list_credentials(conn, actor, id)]
+        return Page(items=items)
+
     @r.post(
         f"{V}/consumers/{{id}}/credentials",
         tags=["iam"],
@@ -414,7 +452,7 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             cred_id, token, expires = await consumers.issue_static_token(conn, actor, id, body.days, body.ip_binding)
         return out.CredentialIssued(
-            id=str(cred_id), kind=body.kind, token=token, expires_at=expires.isoformat()
+            id=str(cred_id), kind=body.kind, token=token, expires_at=expires.isoformat(), status="active"
         )
     @r.post(f"{V}/credentials/{{id}}/revoke", tags=["iam"], operation_id="revokeCredential", status_code=204)
     async def revoke_credential(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:

@@ -40,6 +40,7 @@ export interface Consumer {
   clearance_cap: number;
   bind_policy: "strict" | "by_employee_no" | "app_only";
   status: string;
+  quota?: { daily_calls?: number | null; daily_writes?: number | null } | null;
 }
 
 export interface Binding {
@@ -145,6 +146,7 @@ export interface Ceiling {
   asset_ids: string[];
   max_classification: number;
   status: string;
+  quota?: { daily_calls?: number | null } | null;
 }
 
 export interface Grant {
@@ -232,6 +234,49 @@ export interface ImporterResult {
   warnings: string[];
   connector_instance_id?: string | null;
   drafts?: { asset_id: string; version_id: string; capability_id: string; state: string }[];
+}
+
+export interface CredentialMeta {
+  id: string;
+  kind: string;
+  status: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
+export interface ClearanceRequest {
+  id: string;
+  user_id: string;
+  requested_level: number;
+  reason: string;
+  expires_at: string | null;
+  status: string;
+  created_at: string;
+}
+
+export interface RoleAssignment {
+  id: string;
+  role: string;
+  scope_org_id: string;
+  expires_at: string | null;
+  created_at: string;
+}
+
+export interface Release {
+  id: string;
+  version_id: string;
+  env: string;
+  scope: Record<string, unknown>;
+  status: string;
+  prev_release_id: string | null;
+  created_at: string;
+}
+
+export interface ImpactItem {
+  name: string;
+  asset_type: string;
+  state: string;
+  refs: string[];
 }
 
 export interface SkillSource {

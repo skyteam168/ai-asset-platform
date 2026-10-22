@@ -1,10 +1,11 @@
-import { Alert, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tree, Typography } from "antd";
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tabs, Tree, Typography } from "antd";
+import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, OrgName, PAGINATION, StateTag, useOrgs } from "../components";
 import { useAction, useLoad } from "../hooks";
-import type { OrgUnit, User } from "../types";
+import type { OrgUnit, RoleAssignment, User } from "../types";
 import { t } from "../i18n";
 
 interface TreeNode {
@@ -47,6 +48,7 @@ export function OrgsPage() {
   const [orgOpen, setOrgOpen] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [drawerUser, setDrawerUser] = useState<User | null>(null);
   const [totpUri, setTotpUri] = useState<string | null>(null);
   const act = useAction();
   const tree = useMemo(() => buildTree(list), [list]);
@@ -79,8 +81,9 @@ export function OrgsPage() {
           </Space>)}>
           {users.error && <Alert type="error" message={users.error} />}
           <Table<User> rowKey="id" loading={users.loading} dataSource={shown} pagination={{ ...PAGINATION, defaultPageSize: 15 }}
+            onRow={(r) => ({ onClick: () => setDrawerUser(r), style: { cursor: "pointer" } })}
             columns={[
-              { title: t("姓名"), dataIndex: "display_name" },
+              { title: t("姓名"), dataIndex: "display_name", render: (v) => <Typography.Link>{v}</Typography.Link> },
               { title: t("登录名"), dataIndex: "login_name", render: (v) => v ?? "-" },
               { title: t("工号"), dataIndex: "employee_no", render: (v) => v ?? "-" },
               { title: t("主归属"), dataIndex: "home_org_id", render: (v) => <OrgName id={v} /> },
@@ -98,6 +101,7 @@ export function OrgsPage() {
       <NewUserModal open={userOpen} defaultOrg={selected} onClose={() => setUserOpen(false)}
         onDone={(u) => { users.reload(); if (u.totp_provisioning_uri) setTotpUri(u.totp_provisioning_uri); }} />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onDone={users.reload} />
+      <UserDrawer user={drawerUser} canManage={canManage} orgList={list} onClose={() => setDrawerUser(null)} />
       <Modal open={Boolean(totpUri)} title={t("TOTP 绑定信息（只显示这一次）")} onOk={() => setTotpUri(null)}
         onCancel={() => setTotpUri(null)} cancelButtonProps={{ style: { display: "none" } }}>
         <Alert type="warning" showIcon message={t("请让用户立即导入验证器。关闭后无法再次查看。")} style={{ marginBottom: 12 }} />
@@ -243,6 +247,106 @@ function NewUserModal(p: { open: boolean; defaultOrg: string | null; onClose: ()
         )}
       </Form>
     </Modal>
+  );
+}
+
+// ── UserDrawer ────────────────────────────────────────────────────────────────
+
+const PLATFORM_ROLES = ["platform_admin", "asset_developer", "data_owner", "business_owner", "company_admin", "auditor"];
+
+function UserDrawer({ user, canManage, orgList, onClose }: {
+  user: User | null; canManage: boolean; orgList: OrgUnit[]; onClose: () => void;
+}) {
+  if (!user) return null;
+  return (
+    <Drawer open width={720} title={user.display_name} onClose={onClose} destroyOnClose>
+      <Descriptions size="small" column={2} bordered style={{ marginBottom: 12 }}>
+        <Descriptions.Item label={t("工号")}>{user.employee_no ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label={t("登录名")}>{user.login_name ?? "-"}</Descriptions.Item>
+        <Descriptions.Item label={t("有效密级")}><Clearance level={user.effective_clearance} /></Descriptions.Item>
+        <Descriptions.Item label={t("状态")}><StateTag state={user.status} /></Descriptions.Item>
+      </Descriptions>
+      <Tabs items={[
+        { key: "roles", label: t("角色"), children: <UserRolesTab userId={user.id} canManage={canManage} orgList={orgList} /> },
+        { key: "clearance", label: t("密级申请"), children: <UserClearanceTab userId={user.id} canManage={canManage} /> },
+      ]} />
+    </Drawer>
+  );
+}
+
+function UserRolesTab({ userId, canManage, orgList }: { userId: string; canManage: boolean; orgList: OrgUnit[] }) {
+  const roles = useLoad(() => get<Page<RoleAssignment>>(`/users/${userId}/roles`), [userId]);
+  const [form] = Form.useForm();
+  const act = useAction();
+  const scopeOrgId = Form.useWatch("scope_org_id", form);
+  const selectedOrg = orgList.find((o) => o.id === scopeOrgId);
+  const bizRoles = useLoad(
+    () => (selectedOrg?.type === "company" ? get<Page<{ code: string; name: string }>>(`/companies/${selectedOrg.id}/business-roles`) : Promise.resolve(null)),
+    [selectedOrg?.id],
+  );
+  const roleOptions = [
+    ...PLATFORM_ROLES.map((r) => ({ value: r, label: r })),
+    ...(bizRoles.data?.items ?? []).map((r) => ({ value: r.code, label: `${r.code}（${r.name}）` })),
+  ];
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Table<RoleAssignment> rowKey="id" size="small" loading={roles.loading} pagination={false}
+        dataSource={roles.data?.items ?? []}
+        locale={{ emptyText: t("尚无角色") }}
+        columns={[
+          { title: t("角色"), dataIndex: "role", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+          { title: t("范围组织"), dataIndex: "scope_org_id", render: (v) => <OrgName id={v} /> },
+          { title: t("到期"), dataIndex: "expires_at", render: (v: string | null) => (v ? v.slice(0, 10) : t("永久")) },
+        ]}
+      />
+      {canManage && (
+        <Form form={form} layout="inline" style={{ marginTop: 8 }}
+          onFinish={async (v) => {
+            const body = { role: v.role, scope_org_id: v.scope_org_id, expires_at: v.expires_at ? v.expires_at.toISOString() : undefined };
+            if (await act(() => post(`/users/${userId}/roles`, body), t("已分配角色"))) { form.resetFields(); roles.reload(); }
+          }}>
+          <Form.Item name="role" rules={[{ required: true }]}>
+            <Select placeholder={t("角色")} style={{ width: 200 }} options={roleOptions} showSearch optionFilterProp="label" />
+          </Form.Item>
+          <Form.Item name="scope_org_id" rules={[{ required: true }]}>
+            <Select placeholder={t("范围组织")} style={{ width: 200 }} showSearch optionFilterProp="label"
+              options={orgList.filter((o) => o.status === "active").map((o) => ({ value: o.id, label: `${o.code} · ${o.name}` }))} />
+          </Form.Item>
+          <Form.Item name="expires_at">
+            <DatePicker placeholder={t("到期日（可选）")} disabledDate={(d) => d.isBefore(dayjs())} />
+          </Form.Item>
+          <Button htmlType="submit" type="primary">{t("分配角色")}</Button>
+        </Form>
+      )}
+    </Space>
+  );
+}
+
+function UserClearanceTab({ userId, canManage }: { userId: string; canManage: boolean }) {
+  const [form] = Form.useForm();
+  const act = useAction();
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      <Alert type="info" showIcon message={t("密级申请提交后由数据 Owner 审批；审批结果在「审批待办 → 密级申请」。")} style={{ marginBottom: 8 }} />
+      {canManage && (
+        <Form form={form} layout="vertical" style={{ maxWidth: 480 }}
+          onFinish={async (v) => {
+            const body = { user_id: userId, requested_level: v.requested_level, reason: v.reason, expires_at: v.expires_at ? v.expires_at.toISOString() : undefined };
+            if (await act(() => post("/clearance-requests", body), t("已提交密级申请"))) form.resetFields();
+          }}>
+          <Form.Item name="requested_level" label={t("申请密级")} rules={[{ required: true }]}>
+            <Select options={[1, 2, 3, 4].map((n) => ({ value: n, label: `L${n}` }))} />
+          </Form.Item>
+          <Form.Item name="reason" label={t("申请理由")} rules={[{ required: true, min: 4, message: t("至少 4 个字") }]}>
+            <Input.TextArea rows={3} />
+          </Form.Item>
+          <Form.Item name="expires_at" label={t("到期日（可选）")}>
+            <DatePicker disabledDate={(d) => d.isBefore(dayjs())} />
+          </Form.Item>
+          <Button htmlType="submit" type="primary">{t("提交密级申请")}</Button>
+        </Form>
+      )}
+    </Space>
   );
 }
 

@@ -123,6 +123,29 @@ async def issue_static_token(
     return cred_id, token, expires
 
 
+async def list_credentials(conn: AsyncConnection, actor: Actor, consumer_id: uuid.UUID) -> list[dict[str, Any]]:
+    """凭据元数据列表（不含 token / hash）。"""
+    actor.require(actor.has("platform_admin") or actor.has("company_admin"))
+    await consumer_row(conn, consumer_id)
+    rows = (
+        await conn.execute(
+            select(t.consumer_credential)
+            .where(t.consumer_credential.c.consumer_id == consumer_id)
+            .order_by(t.consumer_credential.c.expires_at.desc())
+            .limit(100)
+        )
+    ).mappings()
+    return [
+        {
+            "id": str(r["id"]),
+            "kind": r["kind"],
+            "status": r["status"],
+            "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+        }
+        for r in rows
+    ]
+
+
 async def revoke_credential(conn: AsyncConnection, actor: Actor, credential_id: uuid.UUID) -> None:
     actor.require(actor.has("platform_admin"))
     row = (

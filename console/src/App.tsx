@@ -7,6 +7,7 @@ import {
   BgColorsOutlined,
   BookOutlined,
   CheckSquareOutlined,
+  TeamOutlined,
   CloudUploadOutlined,
   ClusterOutlined,
   CloseOutlined,
@@ -28,11 +29,13 @@ import {
   SunOutlined,
   ExperimentOutlined,
 } from "@ant-design/icons";
-import { AutoComplete, Avatar, Badge, Button, Dropdown, Input, Layout, Menu, Modal, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { AutoComplete, Avatar, Badge, Button, DatePicker, Dropdown, Form, Input, Layout, Menu, Modal, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import dayjs from "dayjs";
 import type { MenuProps } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { get, type Page } from "./api";
+import { get, post, type Page } from "./api";
+import { useAction, useLoad } from "./hooks";
 import { useAuth } from "./auth";
 import { Logo, Mark, PRODUCT_NAME } from "./brand";
 import { OrgProvider } from "./components";
@@ -362,6 +365,7 @@ function Notifications({ onOpen, enabled }: { onOpen: () => void; enabled: boole
 function UserMenu(p: { name: string; roles: Role[]; clearance: number; onLogout: () => void }) {
   const prefs = useThemePrefs();
   const [themeOpen, setThemeOpen] = useState(false);
+  const [delegateOpen, setDelegateOpen] = useState(false);
   return (
     <>
       <Dropdown
@@ -381,6 +385,7 @@ function UserMenu(p: { name: string; roles: Role[]; clearance: number; onLogout:
         menu={{
           items: [
             { type: "divider" },
+            { key: "delegate", icon: <TeamOutlined />, label: t("审批代理人"), onClick: () => setDelegateOpen(true) },
             { key: "theme", icon: <BgColorsOutlined />, label: t("界面设置"), onClick: () => setThemeOpen(true) },
             { key: "logout", icon: <LogoutOutlined />, label: t("退出"), danger: true, onClick: p.onLogout },
           ],
@@ -395,7 +400,31 @@ function UserMenu(p: { name: string; roles: Role[]; clearance: number; onLogout:
       <Modal open={themeOpen} title={t("界面设置")} footer={null} width={300} onCancel={() => setThemeOpen(false)}>
         <ThemePanel />
       </Modal>
+      <DelegateModal open={delegateOpen} onClose={() => setDelegateOpen(false)} />
     </>
+  );
+}
+
+function DelegateModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [form] = Form.useForm();
+  const act = useAction();
+  const users = useLoad(() => get<Page<{ id: string; display_name: string }>>("/users"), []);
+  return (
+    <Modal open={open} title={t("设置审批代理人")} onCancel={onClose} onOk={() => form.submit()} destroyOnClose>
+      <Form form={form} layout="vertical" preserve={false}
+        onFinish={async (v) => {
+          const body = { delegate_user_id: v.delegate_user_id, valid_to: v.valid_to.toISOString() };
+          if (await act(() => post("/approval-delegates", body), t("代理人已设置"))) { onClose(); form.resetFields(); }
+        }}>
+        <Form.Item name="delegate_user_id" label={t("代理人")} rules={[{ required: true }]}>
+          <Select showSearch optionFilterProp="label" placeholder={t("选择用户")}
+            options={(users.data?.items ?? []).map((u) => ({ value: u.id, label: u.display_name }))} />
+        </Form.Item>
+        <Form.Item name="valid_to" label={t("有效期至（最多 60 天）")} rules={[{ required: true }]}>
+          <DatePicker disabledDate={(d) => d.isBefore(dayjs()) || d.isAfter(dayjs().add(60, "day"))} />
+        </Form.Item>
+      </Form>
+    </Modal>
   );
 }
 

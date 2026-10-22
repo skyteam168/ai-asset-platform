@@ -1126,3 +1126,17 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 能力 | `nike.sample.app_13` / `pc_12` / `app_8` |
 | 不在本片 | 其余 46 个草稿批量上架；写类 Tool；打真机 10.10.131.188 |
 
+### H36 控制台运营闭环 A/B/C — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 用户角色列表 / 赋角色 / 密级申请列表与审批 / 代理人 | 通过 | Orgs UserDrawer；Approvals「密级申请」；UserMenu「审批代理人」；`test_console_ops_list_endpoints` |
+| 消费方配额、凭据列表与吊销、上限配额、资产发布回滚 | 通过 | Consumers / Grants / Assets；`GET …/credentials`；`GET …/assets/{id}/releases` |
+| G4 影响表；Skill 安装前检查与 publish-git | 通过 | Assets「影响」；Distribution 操作列 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 新增 API | `GET /users/{id}/roles`；`GET /clearance-requests`；`GET /consumers/{id}/credentials`；`GET /assets/{id}/releases`；Consumer.quota 出站 |
+| 控制台 | Orgs / Approvals / App / Consumers / Grants / Assets / Distribution + i18n |
+| 不在本片 | Notifier 邮件/IM；运营 Dashboard；契约漂移运维 API；Prism Mock UI |
+

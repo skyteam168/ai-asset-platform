@@ -175,6 +175,69 @@ async def grant_data_scope(
     await emit(conn, "user.data_scope_granted", u["company_id"], user_id, actor.user_id, {"org_id": str(org_id)})
 
 
+async def list_roles_for_user(conn: AsyncConnection, actor: Actor, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    """用户当前角色授予（控制台抽屉展示；不含密钥）。"""
+    u = await user_row(conn, user_id)
+    actor.require(
+        actor.has("platform_admin")
+        or actor.has("company_admin")
+        or actor.has("data_owner")
+        or actor.user_id == user_id
+        or actor.manages_org(u["home_org_id"]),
+        "无权查看该用户角色",
+    )
+    rows = (
+        await conn.execute(select(t.user_role).where(t.user_role.c.user_id == user_id).order_by(t.user_role.c.role))
+    ).mappings()
+    return [
+        {
+            "id": str(r["id"]),
+            "user_id": str(r["user_id"]),
+            "role": r["role"],
+            "scope_org_id": str(r["scope_org_id"]),
+            "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+        }
+        for r in rows
+    ]
+
+
+async def list_clearance_requests(
+    conn: AsyncConnection, actor: Actor, *, status: str | None = "pending"
+) -> list[dict[str, Any]]:
+    """密级申请列表：data_owner 看待审；管理员看所辖；本人看自己的。"""
+    q = select(t.clearance_request).order_by(t.clearance_request.c.id.desc()).limit(200)
+    if status:
+        q = q.where(t.clearance_request.c.status == status)
+    rows = (await conn.execute(q)).mappings()
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        uid = r["user_id"]
+        try:
+            u = await user_row(conn, uid)
+        except PlatformError:
+            continue
+        visible = (
+            actor.has("data_owner")
+            or actor.has("platform_admin")
+            or actor.user_id in (uid, r["requested_by"])
+            or actor.manages_org(u["home_org_id"])
+        )
+        if not visible:
+            continue
+        out.append(
+            {
+                "id": str(r["id"]),
+                "user_id": str(uid),
+                "requested_level": r["requested_level"],
+                "reason": r["reason"],
+                "expires_at": r["expires_at"].isoformat() if r["expires_at"] else None,
+                "status": r["status"],
+                "requested_by": str(r["requested_by"]) if r["requested_by"] else None,
+            }
+        )
+    return out
+
+
 async def request_clearance(
     conn: AsyncConnection, actor: Actor, user_id: uuid.UUID, level: int, reason: str, expires_at: dt.datetime
 ) -> uuid.UUID:

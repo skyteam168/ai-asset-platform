@@ -125,6 +125,20 @@ def router() -> APIRouter:
             row = (await conn.execute(select(t.release).where(t.release.c.id == rid))).mappings().one()
         return _out(dict(row))
 
+    @r.get(f"{V}/assets/{{id}}/releases", tags=["release"], operation_id="listAssetReleases")
+    async def list_asset_releases(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """资产下近期发布（含 active，便于控制台一键回滚）。"""
+        async with db.tx(actor.db_scope()) as conn:
+            rows = (
+                await conn.execute(
+                    select(t.release)
+                    .where(t.release.c.asset_id == id)
+                    .order_by(t.release.c.created_at.desc())
+                    .limit(50)
+                )
+            ).mappings().all()
+        return {"items": [_out(dict(r)) for r in rows]}
+
     @r.post(f"{V}/releases/{{id}}/rollback", tags=["release"], operation_id="rollbackRelease")
     async def rollback_release(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:

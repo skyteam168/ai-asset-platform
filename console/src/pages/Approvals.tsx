@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 import { get, post, type Page } from "../api";
 import { JsonInput, jsonRule, JsonView, PageCard, PAGINATION, parseJson, StateTag } from "../components";
 import { useAction, useLoad } from "../hooks";
-import type { Approval, RunView, Todo, TodoConfirmation, TodoTask } from "../types";
+import type { Approval, ClearanceRequest, RunView, Todo, TodoConfirmation, TodoTask } from "../types";
+import { useAuth } from "../auth";
 import { t } from "../i18n";
 
 const KIND_LABEL: Record<string, string> = { G5: t("业务验收（G5）"), G6: t("安全审核（G6）"), usage: t("使用申请") };
@@ -14,9 +15,11 @@ const time = (v: string | null | undefined) => (v ? v.slice(0, 16).replace("T", 
 export function ApprovalsPage() {
   const items = useLoad(() => get<Page<Approval>>("/approvals"), []);
   const todo = useLoad(() => get<Todo>("/todo"), []);
+  const clearanceReqs = useLoad(() => get<Page<ClearanceRequest>>("/clearance-requests"), []);
   const [current, setCurrent] = useState<Approval | null>(null);
   const confirmations = todo.data?.confirmations ?? [];
   const tasks = todo.data?.tasks ?? [];
+  const { has } = useAuth();
   return (
     <PageCard>
       <Tabs items={[
@@ -49,6 +52,11 @@ export function ApprovalsPage() {
           key: "tasks",
           label: <Badge count={tasks.length} size="small" offset={[8, 0]}>{t("工作流任务")}</Badge>,
           children: <Tasks rows={tasks} loading={todo.loading} error={todo.error} onDone={todo.reload} />,
+        },
+        {
+          key: "clearance",
+          label: <Badge count={clearanceReqs.data?.items.filter((r) => r.status === "pending").length ?? 0} size="small" offset={[8, 0]}>{t("密级申请")}</Badge>,
+          children: <ClearanceRequests list={clearanceReqs} canDecide={has("data_owner", "platform_admin")} onDone={clearanceReqs.reload} />,
         },
       ]} />
       <DecideModal approval={current} onClose={() => setCurrent(null)} onDone={items.reload} />
@@ -181,6 +189,55 @@ function RunDrawer({ id, onClose }: { id: string; onClose: () => void }) {
         </>
       )}
     </Drawer>
+  );
+}
+
+// ── 密级申请 ──────────────────────────────────────────────────────────────────
+
+function ClearanceRequests({ list, canDecide, onDone }: {
+  list: { data: Page<ClearanceRequest> | null; loading: boolean; error: string | null };
+  canDecide: boolean;
+  onDone: () => void;
+}) {
+  const [deciding, setDeciding] = useState<ClearanceRequest | null>(null);
+  const [form] = Form.useForm();
+  const act = useAction();
+  return (
+    <>
+      {list.error && <Alert type="error" message={list.error} style={{ marginBottom: 8 }} />}
+      <Table<ClearanceRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
+        locale={{ emptyText: t("没有密级申请") }}
+        columns={[
+          { title: t("用户"), dataIndex: "user_id", render: (v: string) => <Typography.Text code>{v.slice(0, 8)}</Typography.Text> },
+          { title: t("申请密级"), dataIndex: "requested_level", render: (v: number) => `L${v}` },
+          { title: t("申请理由"), dataIndex: "reason", ellipsis: true },
+          { title: t("到期"), dataIndex: "expires_at", render: (v: string | null) => (v ? v.slice(0, 10) : "-") },
+          { title: t("状态"), dataIndex: "status", render: (v) => <StateTag state={v} /> },
+          {
+            title: t("操作"), key: "ops",
+            render: (_, r) => canDecide && r.status === "pending"
+              ? <Button size="small" type="primary" onClick={() => setDeciding(r)}>{t("审批")}</Button>
+              : null,
+          },
+        ]}
+      />
+      <Modal open={Boolean(deciding)} title={t("审批密级申请")} onCancel={() => setDeciding(null)} onOk={() => form.submit()} destroyOnClose>
+        <Form form={form} layout="vertical" preserve={false} initialValues={{ decision: "approve" }}
+          onFinish={async (v) => {
+            if (!deciding) return;
+            if (await act(() => post(`/clearance-requests/${deciding.id}/decide`, { decision: v.decision, comment: v.comment || undefined }), t("已提交"))) {
+              setDeciding(null); onDone();
+            }
+          }}>
+          <Form.Item name="decision" label={t("结论")}>
+            <Radio.Group options={[{ value: "approve", label: t("批准") }, { value: "reject", label: t("驳回") }]} />
+          </Form.Item>
+          <Form.Item name="comment" label={t("意见")}>
+            <Input.TextArea rows={3} />
+          </Form.Item>
+        </Form>
+      </Modal>
+    </>
   );
 }
 

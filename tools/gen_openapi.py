@@ -286,6 +286,7 @@ def control_plane() -> dict[str, Any]:
                     "reason": S,
                     "expires_at": DT,
                     "status": {"enum": ["pending", "approved", "rejected"]},
+                    "requested_by": SN,
                 },
                 ["user_id", "requested_level", "reason", "expires_at"],
             ),
@@ -633,6 +634,7 @@ def control_plane() -> dict[str, Any]:
                     "bind_policy": {"enum": ["strict", "by_employee_no", "app_only"]},
                     "status": S,
                     "contact": S,
+                    "quota": {"type": "object", "additionalProperties": {"type": "integer"}},
                 },
                 ["client_id", "company_id", "clearance_cap", "bind_policy"],
             ),
@@ -650,7 +652,12 @@ def control_plane() -> dict[str, Any]:
                     "kind": S,
                     "token": {"type": ["string", "null"], "description": "仅创建时返回一次"},
                     "expires_at": DT,
+                    "status": SN,
                 }
+            ),
+            "CredentialMeta": o(
+                {"id": ID, "kind": S, "status": S, "expires_at": SN},
+                ["id", "kind", "status"],
             ),
             "Jwk": o({"kid": S, "kty": S, "crv": S, "x": S, "y": S, "n": S, "e": S, "alg": S}, ["kid", "kty"]),
             "UserBinding": o(
@@ -1152,6 +1159,7 @@ def control_plane() -> dict[str, Any]:
             "patch": op("updateUser", "iam", "修改用户", req=ref("UserCreate"), res=ref("User"), params=["Id"]),
         },
         f"{A}/users/{{id}}/roles": {
+            "get": op("listUserRoles", "iam", "用户角色列表", res=page("RoleAssignment"), params=["Id"]),
             "post": op(
                 "assignRole",
                 "iam",
@@ -1160,7 +1168,7 @@ def control_plane() -> dict[str, Any]:
                 res=ref("RoleAssignment"),
                 code="201",
                 params=["Id"],
-            )
+            ),
         },
         f"{A}/companies/{{id}}/business-roles": {
             "get": op(
@@ -1193,6 +1201,12 @@ def control_plane() -> dict[str, Any]:
             }
         },
         f"{A}/clearance-requests": {
+            "get": op(
+                "listClearanceRequests",
+                "iam",
+                "密级申请列表（默认 pending）",
+                res=page("ClearanceRequest"),
+            ),
             "post": op(
                 "requestClearance",
                 "iam",
@@ -1200,7 +1214,7 @@ def control_plane() -> dict[str, Any]:
                 req=ref("ClearanceRequest"),
                 res=ref("ClearanceRequest"),
                 code="201",
-            )
+            ),
         },
         f"{A}/clearance-requests/{{id}}/decide": {
             "post": op(
@@ -1219,6 +1233,13 @@ def control_plane() -> dict[str, Any]:
             ),
         },
         f"{A}/consumers/{{id}}/credentials": {
+            "get": op(
+                "listCredentials",
+                "iam",
+                "消费方凭据元数据列表（不含明文）",
+                res=page("CredentialMeta"),
+                params=["Id"],
+            ),
             "post": op(
                 "issueCredential",
                 "iam",
@@ -1227,7 +1248,7 @@ def control_plane() -> dict[str, Any]:
                 res=ref("CredentialIssued"),
                 code="201",
                 params=["Id"],
-            )
+            ),
         },
         f"{A}/credentials/{{id}}/revoke": {
             "post": op("revokeCredential", "iam", "吊销凭据", code="204", params=["Id"])
@@ -1394,6 +1415,15 @@ def control_plane() -> dict[str, Any]:
                 code="201",
                 params=["Id"],
             ),
+        },
+        f"{A}/assets/{{id}}/releases": {
+            "get": op(
+                "listAssetReleases",
+                "release",
+                "资产发布列表（含 active，便于回滚）",
+                res={"type": "object"},
+                params=["Id"],
+            )
         },
         f"{A}/versions/{{id}}": {
             "get": op(

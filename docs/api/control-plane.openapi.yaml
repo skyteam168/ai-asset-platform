@@ -355,6 +355,36 @@ paths:
             schema:
               $ref: '#/components/schemas/UserCreate'
   /api/v1/users/{id}/roles:
+    get:
+      operationId: listUserRoles
+      tags:
+      - iam
+      summary: 用户角色列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RoleAssignment'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
     post:
       operationId: assignRole
       tags:
@@ -449,6 +479,34 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
   /api/v1/clearance-requests:
+    get:
+      operationId: listClearanceRequests
+      tags:
+      - iam
+      summary: 密级申请列表（默认 pending）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ClearanceRequest'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
     post:
       operationId: requestClearance
       tags:
@@ -547,6 +605,36 @@ paths:
             schema:
               $ref: '#/components/schemas/Consumer'
   /api/v1/consumers/{id}/credentials:
+    get:
+      operationId: listCredentials
+      tags:
+      - iam
+      summary: 消费方凭据元数据列表（不含明文）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CredentialMeta'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
     post:
       operationId: issueCredential
       tags:
@@ -1060,6 +1148,23 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AssetVersion'
+  /api/v1/assets/{id}/releases:
+    get:
+      operationId: listAssetReleases
+      tags:
+      - release
+      summary: 资产发布列表（含 active，便于回滚）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/versions/{id}:
     get:
       operationId: getVersion
@@ -3129,6 +3234,10 @@ components:
           - pending
           - approved
           - rejected
+        requested_by:
+          type:
+          - string
+          - 'null'
       required:
       - user_id
       - requested_level
@@ -4087,6 +4196,10 @@ components:
           type: string
         contact:
           type: string
+        quota:
+          type: object
+          additionalProperties:
+            type: integer
       required:
       - client_id
       - company_id
@@ -4124,6 +4237,28 @@ components:
         expires_at:
           type: string
           format: date-time
+        status:
+          type:
+          - string
+          - 'null'
+    CredentialMeta:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        kind:
+          type: string
+        status:
+          type: string
+        expires_at:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - kind
+      - status
     Jwk:
       type: object
       properties:

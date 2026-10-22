@@ -79,10 +79,13 @@ class ImportRollback(BaseModel):
 
 
 class RoleAssignment(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: str
     user_id: str
     role: str
     scope_org_id: str
+    expires_at: str | None = None
 
 
 class BusinessRole(BaseModel):
@@ -105,6 +108,7 @@ class Consumer(BaseModel):
     id: str | None = None
     status: str | None = None
     contact: str | None = None
+    quota: dict[str, Any] = Field(default_factory=dict)
 
 
 class CredentialIssued(BaseModel):
@@ -112,6 +116,18 @@ class CredentialIssued(BaseModel):
     kind: str
     expires_at: str
     token: str | None = None
+    status: str | None = None
+
+
+class CredentialMeta(BaseModel):
+    """凭据列表项：不含明文 token。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    kind: str
+    status: str
+    expires_at: str | None = None
 
 
 class UserBinding(BaseModel):
@@ -133,6 +149,7 @@ class ClearanceRequest(BaseModel):
     reason: str | None = None
     expires_at: str | None = None
     status: Literal["pending", "approved", "rejected"] | None = None
+    requested_by: str | None = None
 
 
 class ClearanceDecision(BaseModel):

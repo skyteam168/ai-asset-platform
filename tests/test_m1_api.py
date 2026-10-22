@@ -125,6 +125,43 @@ async def test_http_scope_and_error_contract(cp: httpx.AsyncClient, seeded: Seed
     assert bad.status_code == 400 and bad.json()["code"] == "INVALID_ARGUMENT" and bad.json()["errors"]
 
 
+async def test_console_ops_list_endpoints(cp: httpx.AsyncClient, seeded: Seed) -> None:
+    """控制台运营闭环：角色列表、密级申请列表、凭据元数据、配额字段。"""
+    admin = await login(cp, seeded, "admin")
+    uid = str(seeded.users["vn_admin"])
+    roles = (await cp.get(f"/api/v1/users/{uid}/roles", headers=admin)).json()["items"]
+    assert any(r["role"] == "company_admin" for r in roles)
+
+    await cp.post(
+        "/api/v1/clearance-requests",
+        headers=admin,
+        json={
+            "user_id": str(seeded.users["vn_worker"]),
+            "requested_level": 3,
+            "reason": "岗位需要查看生产工单明细",
+            "expires_at": (dt.datetime.now(dt.UTC) + dt.timedelta(days=30)).isoformat(),
+        },
+    )
+    pending = (await cp.get("/api/v1/clearance-requests", headers=admin)).json()["items"]
+    assert any(p["user_id"] == str(seeded.users["vn_worker"]) and p["status"] == "pending" for p in pending)
+
+    c = await cp.post(
+        "/api/v1/consumers",
+        headers=admin,
+        json={"client_id": f"ops-{secrets.token_hex(3)}", "company_id": str(seeded.vn), "clearance_cap": 2},
+    )
+    assert c.status_code == 201, c.text
+    cid = c.json()["id"]
+    assert (await cp.put(f"/api/v1/consumers/{cid}/quota", headers=admin, json={"daily_calls": 100})).status_code == 200
+    listed = (await cp.get("/api/v1/consumers", headers=admin)).json()["items"]
+    hit = next(x for x in listed if x["id"] == cid)
+    assert hit.get("quota", {}).get("daily_calls") == 100
+    cred = (await cp.post(f"/api/v1/consumers/{cid}/credentials", headers=admin, json={})).json()
+    metas = (await cp.get(f"/api/v1/consumers/{cid}/credentials", headers=admin)).json()["items"]
+    assert any(m["id"] == cred["id"] and m["status"] == "active" and "token" not in m for m in metas)
+    assert (await cp.post(f"/api/v1/credentials/{cred['id']}/revoke", headers=admin)).status_code == 204
+
+
 async def test_clearance_flow_over_http(cp: httpx.AsyncClient, seeded: Seed) -> None:
     vn = await login(cp, seeded, "vn_admin")
     req = await cp.post(
