@@ -1,0 +1,9 @@
+# Opt-in：与 deploy/docker-compose.yml 叠加，替换为带 zhparser 的 PostgreSQL。
+# 用法见 tools/dev.py zhparser-up（首次会重建 postgres 卷以安装扩展）。
+name: aip-dev
+services:
+  postgres:
+    image: aip-postgres-zhparser:16
+    build:
+      context: .
+      dockerfile: Dockerfile.postgres-zhparser

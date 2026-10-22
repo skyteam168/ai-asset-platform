@@ -67,5 +67,5 @@ for num, title, status in rows:
     index.append(f"| [{num}]({slug}) | {title} | {status} |")
 (adr_dir / "README.md").write_text("\n".join(index) + "\n", encoding="utf-8")
 print(f"{len(rows)} ADRs")
-if len(rows) != 25:
-    sys.exit("expected 25 ADRs")
+if len(rows) != 26:
+    sys.exit("expected 26 ADRs")

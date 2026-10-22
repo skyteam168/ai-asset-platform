@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-import secrets
 import uuid
 from typing import Annotated, Any
 
@@ -16,12 +15,12 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from aip.control_plane.conn import service as conn_service
 from aip.control_plane.db import DbScope
 from aip.control_plane.iam import tables as iam_t
-from aip.control_plane.iam.api import DbDep, _bearer
+from aip.control_plane.iam.api import DbDep
 from aip.control_plane.iam.authz import Actor
 from aip.control_plane.iam.events import emit
 from aip.control_plane.registry.service import notify_change
 from aip.libs.common.config import get_settings
-from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.common.errors import PlatformError
 from aip.libs.common.ids import new_id, utcnow
 
 log = logging.getLogger("aip.internal_events")
@@ -153,8 +152,9 @@ def router() -> APIRouter:
     async def ingest(
         body: EventsIn, db: DbDep, authorization: Annotated[str | None, Header()] = None
     ) -> dict[str, Any]:
-        if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
-            raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
+        from aip.libs.serviceauth import require_service_auth
+
+        require_service_auth(authorization)
         results = []
         async with db.tx(DbScope.system()) as conn:
             for ev in body.events:

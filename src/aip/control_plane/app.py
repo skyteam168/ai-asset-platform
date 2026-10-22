@@ -13,11 +13,13 @@ from fastapi.staticfiles import StaticFiles
 from aip.control_plane.conn.api import router as conn_router
 from aip.control_plane.console_api import router as console_router
 from aip.control_plane.db import Database
+from aip.control_plane.drift_api import router as drift_router
 from aip.control_plane.gates.api import router as gates_router
 from aip.control_plane.iam.api import router as iam_router
 from aip.control_plane.importer.api import router as importer_router
 from aip.control_plane.internal_api import router as internal_router
 from aip.control_plane.llm.api import router as llm_router
+from aip.control_plane.notify_api import router as notify_router
 from aip.control_plane.registry.api import router as registry_router
 from aip.control_plane.risk.api import router as risk_router
 from aip.control_plane.risk.api import scan_forever
@@ -29,6 +31,7 @@ from aip.control_plane.webhook.api import deliver_forever, wire_risk_notifier
 from aip.control_plane.webhook.api import router as webhook_router
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
+from aip.libs.notify.service import build_notifier, flush_forever
 
 CONSOLE_DIST = pathlib.Path(__file__).resolve().parents[3] / "console" / "dist"
 
@@ -52,7 +55,12 @@ def create_app(db: Database | None = None) -> FastAPI:
             else None
         )
         delivery = asyncio.create_task(deliver_forever(app.state.db, 5.0))
+        notifier = build_notifier(im_webhook_url=settings.notify_im_webhook_url)
+        notify_flush = asyncio.create_task(
+            flush_forever(app.state.db.engine, notifier, settings.notify_flush_interval_s)
+        )
         yield
+        notify_flush.cancel()
         delivery.cancel()
         if scanner is not None:
             scanner.cancel()
@@ -71,7 +79,9 @@ def create_app(db: Database | None = None) -> FastAPI:
     app.include_router(console_router())
     app.include_router(todo_router())
     app.include_router(risk_router())
+    app.include_router(drift_router())
     app.include_router(webhook_router())
+    app.include_router(notify_router())
     app.include_router(skill_router())
     app.include_router(importer_router())
     app.include_router(llm_router())

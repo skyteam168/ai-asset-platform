@@ -38,13 +38,23 @@ class DataPlane:
     """数据面内部接口客户端；测试可注入 ASGI transport。"""
 
     def __init__(self, base_url: str, token: str, transport: httpx.AsyncBaseTransport | None = None) -> None:
-        self.http = httpx.AsyncClient(
-            base_url=base_url, headers={"Authorization": f"Bearer {token}"}, transport=transport, timeout=30
-        )
+        self._static_token = token
+        self.http = httpx.AsyncClient(base_url=base_url, transport=transport, timeout=30)
 
     async def call(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
+        from aip.libs.serviceauth import bearer_for_outbound
+
         try:
-            r = await self.http.request(method, f"{V}/internal{path}", json=body)
+            token = bearer_for_outbound()
+        except Exception:
+            token = self._static_token
+        try:
+            r = await self.http.request(
+                method,
+                f"{V}/internal{path}",
+                json=body,
+                headers={"Authorization": f"Bearer {token}"},
+            )
         except httpx.HTTPError as e:
             raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "数据面不可达") from e
         data = r.json() if r.content else None

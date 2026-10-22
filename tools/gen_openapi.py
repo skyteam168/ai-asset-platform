@@ -117,6 +117,9 @@ COMMON_COMPONENTS: dict[str, Any] = {
     },
     "parameters": {
         "Id": {"name": "id", "in": "path", "required": True, "schema": S},
+        "Provider": {"name": "provider", "in": "path", "required": True, "schema": S},
+        "ExternalId": {"name": "external_id", "in": "path", "required": True, "schema": S},
+        "VersionId": {"name": "version_id", "in": "path", "required": True, "schema": S},
         "Limit": {
             "name": "limit",
             "in": "query",
@@ -149,6 +152,42 @@ def control_plane() -> dict[str, Any]:
             "LoginRequest": o(
                 {"login_name": S, "password": {"type": "string", "format": "password"}, "totp": SN},
                 ["login_name", "password"],
+            ),
+            "OidcCallbackRequest": o({"id_token": S}, ["id_token"]),
+            "AuthProviderInfo": o({"name": S, "enabled": B}, ["name", "enabled"]),
+            "ExternalLogin": o(
+                {
+                    "provider": S,
+                    "external_id": S,
+                    "user_id": S,
+                    "company_id": SN,
+                    "created_at": {"type": ["string", "null"], "format": "date-time"},
+                },
+                ["provider", "external_id", "user_id"],
+            ),
+            "ExternalLoginBind": o({"provider": S, "external_id": S}, ["provider", "external_id"]),
+            "WebAuthnCredential": o(
+                {
+                    "id": ID,
+                    "credential_id": S,
+                    "nickname": S,
+                    "sign_count": INT,
+                    "created_at": {"type": ["string", "null"], "format": "date-time"},
+                },
+                ["id", "credential_id"],
+            ),
+            "WebAuthnFinishRequest": o(
+                {
+                    "challenge_id": S,
+                    "credential_id": S,
+                    "public_key_cose_b64": S,
+                    "nickname": S,
+                },
+                ["challenge_id", "credential_id", "public_key_cose_b64"],
+            ),
+            "WebAuthnAuthBeginRequest": o({"login_name": S}, ["login_name"]),
+            "WebAuthnAuthFinishRequest": o(
+                {"challenge_id": S, "credential_id": S}, ["challenge_id", "credential_id"]
             ),
             "Session": o(
                 {"session_token": S, "expires_at": DT, "user": ref("User")}, ["session_token", "expires_at", "user"]
@@ -396,6 +435,7 @@ def control_plane() -> dict[str, Any]:
                 {"results": {"type": "array", "items": {"type": "object"}}},
                 ["results"],
             ),
+            "NotifyFlushResult": o({"sent": INT}, ["sent"]),
             "SkillPackageUploaded": o(
                 {
                     "version_id": ID,
@@ -1064,6 +1104,29 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["id", "base_url", "container_name", "expires_at"],
             ),
+            "ContractDrift": o(
+                {
+                    "version_id": ID,
+                    "company_id": ID,
+                    "capability_id": S,
+                    "marked_at": DT,
+                    "reason": S,
+                    "consecutive_failures": INT,
+                    "last_g1_at": DT,
+                    "cleared_at": DT,
+                },
+                ["version_id", "company_id", "capability_id", "reason", "consecutive_failures"],
+            ),
+            "DriftCleared": o({"version_id": ID, "cleared_at": DT}, ["version_id"]),
+            "OpsSummary": o(
+                {
+                    "active_drifts": INT,
+                    "open_risk_events": INT,
+                    "recent_risk_events": {"type": "array", "items": {"type": "object"}},
+                    "drift_items": {"type": "array", "items": {"type": "object"}},
+                },
+                ["active_drifts", "open_risk_events", "recent_risk_events", "drift_items"],
+            ),
             "LlmAllowlist": o(
                 {"company_id": ID, "names": {"type": "array", "items": S}},
                 ["company_id", "names"],
@@ -1122,6 +1185,25 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/auth/logout": {"post": op("logout", "auth", "注销会话", code="204")},
+        f"{A}/auth/providers": {
+            "get": op(
+                "listAuthProviders",
+                "auth",
+                "已登记的登录插件（local / oidc 等）",
+                res=page("AuthProviderInfo"),
+                security=PUBLIC,
+            )
+        },
+        f"{A}/auth/oidc/callback": {
+            "post": op(
+                "oidcCallback",
+                "auth",
+                "OIDC 回调（stub：id_token=stub:<sub>；经 external_login 映射）",
+                req=ref("OidcCallbackRequest"),
+                res=ref("Session"),
+                security=PUBLIC,
+            )
+        },
         f"{A}/me": {"get": op("me", "auth", "当前用户（含生效角色）", res=ref("Me"))},
         f"{A}/orgs": {
             "get": op("listOrgs", "iam", "组织列表（按生效节点范围）", res=page("OrgUnit"), params=LIST),
@@ -1172,6 +1254,82 @@ def control_plane() -> dict[str, Any]:
                 code="201",
                 params=["Id"],
             ),
+        },
+        f"{A}/users/{{id}}/external-logins": {
+            "get": op(
+                "listExternalLogins",
+                "iam",
+                "用户外部登录绑定列表",
+                res=page("ExternalLogin"),
+                params=["Id"],
+            ),
+            "post": op(
+                "bindExternalLogin",
+                "iam",
+                "绑定外部登录主体（OIDC/SAML → iam_user）",
+                req=ref("ExternalLoginBind"),
+                res=ref("ExternalLogin"),
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/users/{{id}}/external-logins/{{provider}}/{{external_id}}": {
+            "delete": op(
+                "unbindExternalLogin",
+                "iam",
+                "解绑外部登录",
+                code="204",
+                params=["Id", "Provider", "ExternalId"],
+            )
+        },
+        f"{A}/users/{{id}}/webauthn/credentials": {
+            "get": op(
+                "listWebAuthnCredentials",
+                "auth",
+                "已登记的 WebAuthn 凭证",
+                res=page("WebAuthnCredential"),
+                params=["Id"],
+            )
+        },
+        f"{A}/users/{{id}}/webauthn/register/begin": {
+            "post": op(
+                "webauthnRegisterBegin",
+                "auth",
+                "开始 WebAuthn 注册（返回 PublicKeyCredentialCreationOptions）",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/users/{{id}}/webauthn/register/finish": {
+            "post": op(
+                "webauthnRegisterFinish",
+                "auth",
+                "完成 WebAuthn 注册（stub 跳过 attestation）",
+                req=ref("WebAuthnFinishRequest"),
+                res=ref("WebAuthnCredential"),
+                code="201",
+                params=["Id"],
+            )
+        },
+        f"{A}/auth/webauthn/authenticate/begin": {
+            "post": op(
+                "webauthnAuthenticateBegin",
+                "auth",
+                "开始 WebAuthn 认证挑战",
+                req=ref("WebAuthnAuthBeginRequest"),
+                res={"type": "object"},
+                security=PUBLIC,
+            )
+        },
+        f"{A}/auth/webauthn/authenticate/finish": {
+            "post": op(
+                "webauthnAuthenticateFinish",
+                "auth",
+                "完成 WebAuthn 认证（stub）",
+                req=ref("WebAuthnAuthFinishRequest"),
+                res={"type": "object"},
+                security=PUBLIC,
+            )
         },
         f"{A}/companies/{{id}}/business-roles": {
             "get": op(
@@ -1693,12 +1851,45 @@ def control_plane() -> dict[str, Any]:
                 res=ref("WebhookProcessResult"),
             )
         },
+        f"{A}/notify/flush": {
+            "post": op(
+                "notifyFlush",
+                "notify",
+                "手动触发通知 outbox 投递（platform_admin）",
+                res=ref("NotifyFlushResult"),
+            )
+        },
         f"{A}/console/catalog": {
             "get": op(
                 "consoleCatalog",
                 "catalog",
                 "控制台资产目录（最新发布快照中的 Tool 与套件）",
                 res=ref("ConsoleCatalog"),
+            )
+        },
+        f"{A}/console/ops-summary": {
+            "get": op(
+                "consoleOpsSummary",
+                "catalog",
+                "运营概览摘要（漂移 / 开放风险）",
+                res=ref("OpsSummary"),
+            )
+        },
+        f"{A}/contract-drifts": {
+            "get": op(
+                "listContractDrifts",
+                "gates",
+                "列出活跃契约漂移",
+                res=page("ContractDrift"),
+            )
+        },
+        f"{A}/contract-drifts/{{version_id}}/clear": {
+            "post": op(
+                "clearContractDrift",
+                "gates",
+                "清除活跃契约漂移（运维确认已处理）",
+                res=ref("DriftCleared"),
+                params=["VersionId"],
             )
         },
         f"{A}/versions/{{id}}/skill-package": {
@@ -1869,6 +2060,12 @@ def control_plane() -> dict[str, Any]:
             )
         },
         f"{A}/prism-mocks": {
+            "get": op(
+                "listPrismMocks",
+                "testlab",
+                "列出本进程 Prism Mock 会话",
+                res=page("PrismMock"),
+            ),
             "post": op(
                 "createPrismMock",
                 "testlab",
@@ -1888,7 +2085,7 @@ def control_plane() -> dict[str, Any]:
                 ),
                 res=ref("PrismMock"),
                 code="201",
-            )
+            ),
         },
         f"{A}/prism-mocks/{{id}}": {
             "get": op(
@@ -2049,15 +2246,39 @@ def data_plane() -> dict[str, Any]:
                 "type": "object",
                 "required": ["grant_type"],
                 "properties": {
-                    "grant_type": {"enum": ["client_credentials", "urn:ietf:params:oauth:grant-type:jwt-bearer"]},
+                    "grant_type": {
+                        "enum": [
+                            "client_credentials",
+                            "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                            "authorization_code",
+                        ]
+                    },
                     "assertion": S,
                     "client_id": S,
                     "client_assertion_type": S,
                     "client_assertion": S,
                     "resource": S,
                     "scope": S,
+                    "code": S,
+                    "redirect_uri": S,
+                    "code_verifier": S,
                 },
             },
+            "AuthorizeStubRequest": o(
+                {
+                    "client_id": S,
+                    "redirect_uri": S,
+                    "code_challenge": S,
+                    "code_challenge_method": {"type": "string", "default": "S256"},
+                    "subject": S,
+                    "resource": SN,
+                },
+                ["client_id", "redirect_uri", "code_challenge", "subject"],
+            ),
+            "AuthorizeStubResponse": o(
+                {"code": S, "expires_in": INT, "redirect_uri": S, "state": SN},
+                ["code", "expires_in", "redirect_uri"],
+            ),
             "TokenResponse": o(
                 {"access_token": S, "token_type": {"const": "Bearer"}, "expires_in": INT, "scope": S},
                 ["access_token", "token_type", "expires_in"],
@@ -2076,6 +2297,9 @@ def data_plane() -> dict[str, Any]:
                     "token_endpoint": S,
                     "jwks_uri": S,
                     "grant_types_supported": {"type": "array", "items": S},
+                    "authorization_endpoint": S,
+                    "code_challenge_methods_supported": {"type": "array", "items": S},
+                    "response_types_supported": {"type": "array", "items": S},
                 },
                 ["issuer", "token_endpoint"],
             ),
@@ -2199,12 +2423,22 @@ def data_plane() -> dict[str, Any]:
                 res={"type": "object"},
             )
         },
+        "/oauth/authorize": {
+            "post": op(
+                "authorizeStub",
+                "oauth",
+                "授权码骨架（PKCE stub；真浏览器同意页后做）",
+                req=ref("AuthorizeStubRequest"),
+                res=ref("AuthorizeStubResponse"),
+                security=PUBLIC,
+            )
+        },
         "/oauth/token": {
             "post": {
                 **op(
                     "token",
                     "oauth",
-                    "client_credentials 与 RFC 7523 jwt-bearer 令牌交换",
+                    "client_credentials、jwt-bearer 与 authorization_code+PKCE 令牌交换",
                     res=ref("TokenResponse"),
                     security=PUBLIC,
                 ),

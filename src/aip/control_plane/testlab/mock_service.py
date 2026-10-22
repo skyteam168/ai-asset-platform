@@ -89,6 +89,14 @@ def delete_mock(actor: Actor, mock_id: uuid.UUID) -> None:
         prism_lib.stop_mock(rec.session)
 
 
+def list_mocks(actor: Actor) -> list[dict[str, Any]]:
+    _require_dev(actor)
+    now = utcnow()
+    with _LOCK:
+        _purge_expired_unlocked(now)
+        return [_public(r) for r in sorted(_SESSIONS.values(), key=lambda x: x.created_at, reverse=True)]
+
+
 def _public(rec: MockRecord) -> dict[str, Any]:
     return {
         "id": str(rec.id),

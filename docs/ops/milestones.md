@@ -1126,6 +1126,169 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 能力 | `nike.sample.app_13` / `pc_12` / `app_8` |
 | 不在本片 | 其余 46 个草稿批量上架；写类 Tool；打真机 10.10.131.188 |
 
+### H50 生产深度收口文档 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 清单新章节 | 通过 | production-checklist：服务间认证 / GenAI / Object Lock / CNPG 实装 |
+| Settings 登记 | 通过 | `langfuse_*`、`service_auth_*`；`test_h50_prod_depth.py` |
+| observability | 通过 | GenAI / Langfuse 节 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真装 Langfuse；真集群 PITR |
+
+### H55 多副本压测结果表模板 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| slo §10 模板 | 通过 | [slo.md](slo.md) 结果表 + loadtest 参数；`test_h55_loadtest_template.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | k8s 4 副本实测填表 |
+
+### H54 CNPG/kind 冒烟 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 手册 + 脚本 | 通过 | [pg-ha-prod.md](pg-ha-prod.md) H54；`tools/cnpg_kind_smoke.py` |
+| 无集群 skip | 通过 | `test_h54_cnpg_smoke.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | staging 装 operator / PITR 恢复自动化 |
+
+### H53 WebAuthn 骨架 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 表 + 挑战 API | 通过 | `0028`；`iam/webauthn.py`；register/authenticate begin/finish |
+| stub 测例 | 通过 | `test_h53_webauthn.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真密钥器 attestation；与本地登录会话合流 |
+
+### H52 authorization_code + PKCE — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| S256 + 授权码 | 通过 | `data_plane/pkce.py`；`POST /oauth/authorize` stub |
+| token 交换 | 通过 | `grant_type=authorization_code`；`test_h52_pkce.py` |
+| 元数据 | 通过 | `grant_types_supported` 含 authorization_code（启用时） |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 浏览器同意页与 redirect |
+
+### H51 OIDC AuthProvider — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| AuthProvider + stub | 通过 | `iam/providers.py`；`AIP_OIDC_*` |
+| external_login | 通过 | 迁移 `0027`；绑定 API；无映射 `USER_NOT_BOUND` |
+| ADR-0005 | 通过 | Accepted；architecture 16.1 同步 |
+| 测例 | 通过 | `test_h51_oidc_auth.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 接 Keycloak / 真 IdP JWKS |
+
+### H49 Prism Mock UI + 错误码 i18n — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 列表 API / 页 | 通过 | `GET /prism-mocks`；`PrismMocksPage` |
+| 错误码展示 | 通过 | `errorCodes.ts` + `describeError` |
+
+### H48 资产市场页 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 控制台节 | 通过 | `/marketplace`；复用 `console/catalog` |
+
+### H47 运营 Dashboard — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| ops-summary API | 通过 | `GET /console/ops-summary`；`test_h47_ops_dashboard.py` |
+| 控制台页 | 通过 | `OpsDashboardPage` |
+
+### H46 契约漂移运维 API — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| list / clear | 通过 | `/contract-drifts`；`test_h46_drift_ops.py` |
+
+### H45 高棉语 km-KH — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 第四语言 | 通过 | `locales/km-KH.ts`；LANGS；i18n 测例 |
+| 渐进翻译 | 通过 | 导航/登录高棉文，其余英文占位 |
+
+### H44 服务间 JWT + 可选 mTLS — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 短期 JWT | 通过 | `libs/serviceauth.py`；`both/jwt/static` |
+| mTLS CA 校验 | 通过 | `service_mtls_ca_pem` + 测例 |
+| 出站 Bearer | 通过 | `todo_api.DataPlane` 用 `bearer_for_outbound` |
+
+### H43 Notifier IM Webhook — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Settings + flush loop | 通过 | `notify_im_webhook_url` / `notify_flush_interval_s`；控制面 `flush_forever` |
+| 双通道入队 | 通过 | `enqueue_channels`；human_task / approval / confirmation |
+| `POST /notify/flush` | 通过 | platform_admin；OpenAPI `notifyFlush` |
+| 测例 | 通过 | `test_h43_notify_im.py`（mock HTTP） |
+| 帮助文案 | 通过 | Help + en-US / vi-VN |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 飞书专用协议；生产 SMTP；完整通知管理页 |
+
+### H42 生产清单 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 清单文档 | 通过 | [production-checklist.md](production-checklist.md) |
+| `dev.py prod-check` | 通过 | kustomize + 章节 + Settings 环境变量对照 |
+| 测例 | 通过 | `test_h42_prod_checklist.py` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真实 K8s/CNPG 部署 |
+
+### H41 zhparser opt-in — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Dockerfile + compose override | 通过 | `deploy/Dockerfile.postgres-zhparser`、`docker-compose.zhparser.yml` |
+| 迁移无扩展 no-op | 通过 | `20261022_0026_zhparser_fts`；默认 alpine migrate |
+| 控制面 `q` + FTS 辅助 | 通过 | `registry/fts.py`；`GET /console/catalog?q=` |
+| 测例 marker | 通过 | `test_h41_zhparser.py`；无扩展 skip |
+| 文档 | 通过 | [search-index.md](search-index.md)；`dev.py zhparser-up` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 默认开发库换镜像；数据面发现改库内 FTS；强制本机构建 zhparser 镜像 |
+
+### H40 压测巩固 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `dev.py loadtest` + `--json-out` | 通过 | 透传 `tools/loadtest.py`；JSON 落盘 |
+| REST 双进程 scaling 冒烟 | 通过 | `test_m7_capacity.py::test_multi_worker_rest_scales_and_no_errors` |
+| MCP 轻量无错误 | 通过 | `test_mcp_smoke_no_errors`（100 请求） |
+| 回归门槛文档 | 通过 | [slo.md](slo.md) §9 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | k8s 真实多副本压测；全量 2000×4 强制进 CI |
+
 ### H39f MySQL 只读引擎 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

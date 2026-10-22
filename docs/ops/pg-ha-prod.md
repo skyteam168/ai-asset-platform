@@ -32,8 +32,24 @@ CNPG + barmanObjectStore 提供 WAL 归档与定时全备；恢复演练在 stag
 | 本地演练 | compose profile `pg-ha`（[pg-failover.md](pg-failover.md)） |
 | 生产 | CNPG / Patroni + 对象存储 PITR（本文件） |
 
+## H54：本地 / CI 冒烟（无集群则 skip）
+
+```bash
+.venv/Scripts/python tools/cnpg_kind_smoke.py
+# 强制要求集群：AIP_CNPG_SMOKE=1 .venv/Scripts/python tools/cnpg_kind_smoke.py
+```
+
+行为：检测 `kubectl` 当前 context 与 CNPG CRD；对 `deploy/k8s/cnpg/cluster.yaml` 做 `kubectl apply --dry-run=client`。无集群时 exit 0 并打印 skip（`AIP_CNPG_SMOKE=1` 时无集群 exit 2）。
+
+### kind / k3d 建议步骤（staging）
+
+1. `kind create cluster --name aip` 或 `k3d cluster create aip`
+2. 按 [CNPG 文档](https://cloudnative-pg.io/documentation/) 安装 operator
+3. 准备 Secret 后 `kubectl apply -f deploy/k8s/cnpg/cluster.yaml`
+4. PITR：确认 `ScheduledBackup` 与对象存储；在**空**命名空间做 Bootstrap from backup 演练
+
 ## 不在本片
 
-- 真实集群安装 operator 与恢复演练
+- 真实集群安装 operator 与恢复演练的自动化
 - Patroni 完整 Helm
 - 把 CNPG 并进默认 kustomize base

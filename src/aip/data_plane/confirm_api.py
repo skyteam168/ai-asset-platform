@@ -41,9 +41,13 @@ class TodoQuery(BaseModel):
 
 
 def require_service(authorization: str | None, token: str) -> None:
+    """接受静态服务令牌或短期服务 JWT（architecture.md 3.3）。"""
+    from aip.libs.serviceauth import require_service_auth
+
     given = authorization[7:].strip() if authorization and authorization.lower().startswith("bearer ") else ""
-    if not secrets.compare_digest(given, token):
-        raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
+    if given and secrets.compare_digest(given, token):
+        return
+    require_service_auth(authorization)
 
 
 def _created(row: dict[str, Any]) -> dt.datetime:

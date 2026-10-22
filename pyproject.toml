@@ -82,6 +82,7 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "infra: needs docker-compose services (python tools/dev.py up)",
     "mysql: needs asyncmy + reachable MySQL (AIP_TEST_MYSQL_URL)",
+    "zhparser: needs postgres image with zhparser (tools/dev.py zhparser-up)",
 ]
 
 [tool.ruff]

@@ -5,17 +5,20 @@ import "dayjs/locale/en";
 import "dayjs/locale/vi";
 import "dayjs/locale/zh-cn";
 import { enUS } from "./locales/en-US";
+import { kmKH } from "./locales/km-KH";
 import { viVN } from "./locales/vi-VN";
 
-export type Lang = "zh-CN" | "en-US" | "vi-VN";
+export type Lang = "zh-CN" | "en-US" | "vi-VN" | "km-KH";
 export const LANGS: { value: Lang; label: string }[] = [
   { value: "zh-CN", label: "简体中文" },
   { value: "en-US", label: "English" },
   { value: "vi-VN", label: "Tiếng Việt" },
+  { value: "km-KH", label: "ភាសាខ្មែរ" },
 ];
 const KEY = "aip.lang";
-const DICTS: Record<Lang, Record<string, string>> = { "zh-CN": {}, "en-US": enUS, "vi-VN": viVN };
-const DAYJS: Record<Lang, string> = { "zh-CN": "zh-cn", "en-US": "en", "vi-VN": "vi" };
+const DICTS: Record<Lang, Record<string, string>> = { "zh-CN": {}, "en-US": enUS, "vi-VN": viVN, "km-KH": kmKH };
+// dayjs 无高棉语包时回落英文
+const DAYJS: Record<Lang, string> = { "zh-CN": "zh-cn", "en-US": "en", "vi-VN": "vi", "km-KH": "en" };
 
 function initial(): Lang {
   try {

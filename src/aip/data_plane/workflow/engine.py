@@ -1323,19 +1323,21 @@ class WorkflowEngine:
                     "data_ref": data_ref,
                 },
             )
-            # 待办通知进 outbox（邮件通道；IM 有配置时由 flush 投递）
+            # 待办通知进 outbox（email + 可选 IM）
             try:
-                from aip.libs.notify import enqueue
+                from aip.libs.common.config import get_settings
+                from aip.libs.notify import enqueue_channels
 
-                await enqueue(
+                settings = get_settings()
+                await enqueue_channels(
                     conn,
                     company_id=str(run["company_id"]),
-                    channel="email",
                     recipient=assignee,
                     subject=f"待办：{summary[:80]}",
                     body=f"任务需要处理（截止 {deadline.isoformat()}）。请登录控制台。",
                     kind="human_task",
                     ref={"run_id": str(run["id"]), "node_id": node_id},
+                    im_enabled=bool(settings.notify_im_webhook_url),
                 )
             except Exception:  # 通知失败不影响建任务
                 log.exception("enqueue human_task notify failed")

@@ -112,12 +112,34 @@ paths:
                 type: object
         default:
           $ref: '#/components/responses/Problem'
+  /oauth/authorize:
+    post:
+      operationId: authorizeStub
+      tags:
+      - oauth
+      summary: 授权码骨架（PKCE stub；真浏览器同意页后做）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthorizeStubResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthorizeStubRequest'
+      security: []
   /oauth/token:
     post:
       operationId: token
       tags:
       - oauth
-      summary: client_credentials 与 RFC 7523 jwt-bearer 令牌交换
+      summary: client_credentials、jwt-bearer 与 authorization_code+PKCE 令牌交换
       responses:
         '200':
           description: OK
@@ -595,6 +617,7 @@ components:
           enum:
           - client_credentials
           - urn:ietf:params:oauth:grant-type:jwt-bearer
+          - authorization_code
         assertion:
           type: string
         client_id:
@@ -607,6 +630,52 @@ components:
           type: string
         scope:
           type: string
+        code:
+          type: string
+        redirect_uri:
+          type: string
+        code_verifier:
+          type: string
+    AuthorizeStubRequest:
+      type: object
+      properties:
+        client_id:
+          type: string
+        redirect_uri:
+          type: string
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          default: S256
+        subject:
+          type: string
+        resource:
+          type:
+          - string
+          - 'null'
+      required:
+      - client_id
+      - redirect_uri
+      - code_challenge
+      - subject
+    AuthorizeStubResponse:
+      type: object
+      properties:
+        code:
+          type: string
+        expires_in:
+          type: integer
+        redirect_uri:
+          type: string
+        state:
+          type:
+          - string
+          - 'null'
+      required:
+      - code
+      - expires_in
+      - redirect_uri
     TokenResponse:
       type: object
       properties:
@@ -648,6 +717,16 @@ components:
         jwks_uri:
           type: string
         grant_types_supported:
+          type: array
+          items:
+            type: string
+        authorization_endpoint:
+          type: string
+        code_challenge_methods_supported:
+          type: array
+          items:
+            type: string
+        response_types_supported:
           type: array
           items:
             type: string

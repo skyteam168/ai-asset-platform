@@ -204,3 +204,23 @@ async def list_drifts(conn: AsyncConnection) -> list[dict[str, Any]]:
         )
     ).mappings()
     return [dict(r) for r in rows]
+
+
+async def clear_drift(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> dict[str, Any]:
+    """运维确认漂移已处理：标记 cleared_at（不自动改版本状态）。"""
+    if not (actor.has("platform_admin") or actor.has("asset_developer") or actor.has("data_owner")):
+        from aip.libs.common.errors import ErrorCode, PlatformError
+
+        raise PlatformError(ErrorCode.PERMISSION_DENIED, "无权清除契约漂移")
+    row = await drift_row(conn, version_id)
+    if row is None:
+        from aip.libs.common.errors import ErrorCode, PlatformError
+
+        raise PlatformError(ErrorCode.NOT_FOUND, "无活跃契约漂移")
+    await conn.execute(
+        update(contract_drift)
+        .where(and_(contract_drift.c.version_id == version_id, contract_drift.c.cleared_at.is_(None)))
+        .values(cleared_at=utcnow())
+    )
+    row["cleared_at"] = utcnow()
+    return row

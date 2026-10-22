@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import secrets
 import uuid
 from typing import Annotated, Any, Literal
 
@@ -13,13 +12,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.grant import service as grants
-from aip.control_plane.iam.api import ActorDep, DbDep, _bearer
+from aip.control_plane.iam.api import ActorDep, DbDep
 from aip.control_plane.registry import schemas as out
 from aip.control_plane.registry import service as registry
 from aip.control_plane.registry import snapshot
 from aip.control_plane.registry import tables as t
-from aip.libs.common.config import get_settings
-from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.paging import Page
 from aip.libs.tokens.keys import platform_key
 
@@ -206,8 +203,9 @@ def router() -> APIRouter:
         wait_s: float = 0,
         authorization: Annotated[str | None, Header()] = None,
     ) -> Response | dict[str, Any]:
-        if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
-            raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
+        from aip.libs.serviceauth import require_service_auth
+
+        require_service_auth(authorization)
 
         async def fetch(conn: AsyncConnection) -> dict[str, Any] | None:
             await snapshot.publish(conn, platform_key())

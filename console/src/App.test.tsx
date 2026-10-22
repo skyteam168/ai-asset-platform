@@ -43,16 +43,18 @@ describe("控制台外壳", () => {
     expect(session.get()).toBe("s-1");
     expect(calls.find((c) => c.path === "/auth/login" && (c.body as { totp: string }).totp === "123456")?.body)
       .toEqual({ login_name: "alice", password: "correct-horse-battery", totp: "123456" });
-    // 5 个顶层菜单（含分发与 Skill）+ 3 个分组标题 + 6 个分组内菜单（含 LLM 配置）
-    expect(screen.getAllByRole("menuitem")).toHaveLength(14);
+    // 运营概览 + 资产市场 + Prism + 原有菜单；含 3 个分组标题
+    expect(screen.getAllByRole("menuitem")).toHaveLength(17);
   });
 
-  it("菜单按角色裁剪：审计员只看到风控、审计与组织", async () => {
+  it("菜单按角色裁剪：审计员只看到运营概览、风控、审计与组织", async () => {
     session.set("s-2");
     mockApi(common(me("auditor")));
     render(wrap(<AppShell />));
-    await waitFor(() => expect(screen.getAllByRole("menuitem")).toHaveLength(5));
-    expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual(["风控与审计", "风控与计量", "审计", "系统管理", "组织与用户"]);
+    await waitFor(() => expect(screen.getAllByRole("menuitem")).toHaveLength(6));
+    expect(screen.getAllByRole("menuitem").map((x) => x.textContent)).toEqual([
+      "运营概览", "风控与审计", "风控与计量", "审计", "系统管理", "组织与用户",
+    ]);
   });
 
   it("没有任何角色时提示联系管理员", async () => {

@@ -29,3 +29,9 @@ async def test_multi_worker_rest_scales_and_no_errors() -> None:
         "two": two["rest"],
         "ratio": two["rest"]["rps"] / max(one["rest"]["rps"], 0.1),
     }
+
+
+async def test_mcp_smoke_no_errors() -> None:
+    """MCP tools/call 轻量冒烟：单进程 100 请求无错误（不卡 scaling，避免 CI 抖）。"""
+    out = await measure(1, requests=100, concurrency=10, kinds=("mcp",))
+    assert out["mcp"]["errors"] == 0, out

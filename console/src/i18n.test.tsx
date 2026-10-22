@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { setLang, t } from "./i18n";
 import { collectKeys } from "./i18nKeys";
 import { enUS } from "./locales/en-US";
+import { kmKH } from "./locales/km-KH";
 import { viVN } from "./locales/vi-VN";
 import { LoginPage } from "./pages/Login";
 import { wrap } from "./test/util";
@@ -21,14 +22,15 @@ afterEach(() => setLang("zh-CN"));
 describe("多语言", () => {
   const keys = collectKeys(Object.values(sources));
 
-  it("源码中的每个键都有英文与越南文译文", () => {
+  it("源码中的每个键都有英文、越南文与高棉文译文", () => {
     expect(keys.length).toBeGreaterThan(250);
     expect(keys.filter((k) => !(k in enUS))).toEqual([]);
     expect(keys.filter((k) => !(k in viVN))).toEqual([]);
+    expect(keys.filter((k) => !(k in kmKH))).toEqual([]);
   });
 
   it("译文保留占位符", () => {
-    for (const dict of [enUS, viVN]) {
+    for (const dict of [enUS, viVN, kmKH]) {
       expect(keys.filter((k) => placeholders(k) !== placeholders(dict[k] ?? k))).toEqual([]);
     }
   });

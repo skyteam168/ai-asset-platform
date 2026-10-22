@@ -74,3 +74,37 @@ architecture.md 第 1 章的初始目标：平台自身附加延迟 P95 ≤ 100m
 - **2 进程**接近线性（REST scaling ≈ 0.85；MCP ≥ 1 因单进程时 MCP 更吃事件循环）。
 - **4 进程**收益递减：客户端并发仍为 20，且 OPA / 本机 CPU 成为共享瓶颈；生产应按「每 Pod 多 worker + 多 Pod」扩展，并提高入口并发与 sidecar 本地 OPA。
 - CI：`tests/test_m7_capacity.py` 轻量冒烟（200 请求，`rps(2) ≥ rps(1)×1.15`）。
+
+## 9. 回归门槛（H40）
+
+| 层级 | 命令 | 通过条件 |
+| --- | --- | --- |
+| CI 冒烟 | `pytest -q tests/test_m7_capacity.py` | REST：workers=2 的 rps ≥ workers=1 × 1.15，且 errors=0；MCP：单进程 100 请求 errors=0 |
+| 手工短跑 | `python tools/dev.py loadtest --workers 1,2 --concurrency 20 --requests 400 --json-out .tmp/loadtest.json` | JSON 落盘；REST/MCP errors=0；2 进程 REST rps 明显高于 1 进程 |
+| 全量校准 | `python tools/dev.py loadtest --workers 1,2,4 --concurrency 20 --requests 2000 --json-out .tmp/loadtest-full.json` | 更新本节上表；2 进程 REST scaling 宜 ≥ 0.7（开发机参考） |
+
+更新结果表流程：跑全量校准 → 将 `.tmp/loadtest-full.json` 的 series/scaling 填入 §8 → 注明日期与机器。入口统一 `tools/dev.py loadtest`（透传参数给 `tools/loadtest.py`）。
+
+## 10. 多副本真实压测结果表（H55）
+
+本机多进程见 §8；**k8s 多副本**在 staging 填写下表（不阻塞 CI）。
+
+### 参数模板
+
+```bash
+# 入口：tools/dev.py loadtest（透传 tools/loadtest.py）
+# 对集群：把 BASE_URL 指到 Ingress / Service，关闭进程内起服（见 loadtest --help）
+python tools/dev.py loadtest \
+  --concurrency 40 --requests 2000 \
+  --json-out .tmp/loadtest-k8s-4replicas.json
+```
+
+建议拓扑：数据面 Deployment `replicas: 4`，每 Pod 1–4 worker；OPA sidecar；控制面可单独扩。
+
+### 结果表（staging 填写）
+
+| 日期 | 集群 | 副本×worker | 并发 | 请求 | 错误 | REST rps | REST P95 | MCP rps | MCP P95 | 备注 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| _待填_ | | 4×? | 40 | 2000 | | | | | | |
+
+验收参考：errors=0；REST P95（平台附加，下游 mock）在容量余量下尽量 ≤ 100ms；相对单副本吞吐有可见提升。

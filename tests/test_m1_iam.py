@@ -150,6 +150,40 @@ async def _seed_all_tables(db: Database, s: Seed) -> None:
                 id=uuid.uuid4(), consumer_id=s.consumers["kh-ai"], company_id=s.kh, name="production", domain_ids=[]
             )
         )
+        await conn.execute(
+            t.external_login.insert().values(
+                provider="oidc",
+                external_id="kh-seed-ext",
+                user_id=s.users["kh_admin"],
+                company_id=s.kh,
+                created_at=utcnow(),
+                created_by=s.users["kh_admin"],
+            )
+        )
+        await conn.execute(
+            t.webauthn_credential.insert().values(
+                id=uuid.uuid4(),
+                user_id=s.users["kh_admin"],
+                company_id=s.kh,
+                credential_id="cred-kh-seed",
+                public_key_cose=b"\x01\x02",
+                sign_count=0,
+                transports=[],
+                nickname="seed",
+                created_at=utcnow(),
+            )
+        )
+        await conn.execute(
+            t.webauthn_challenge.insert().values(
+                id=uuid.uuid4(),
+                user_id=s.users["kh_admin"],
+                company_id=s.kh,
+                kind="register",
+                challenge="chal-kh-seed",
+                expires_at=utcnow() + dt.timedelta(minutes=5),
+                created_at=utcnow(),
+            )
+        )
     async with db.tx(DbScope.system()) as conn:
         await auth.login(conn, "kh_admin", PASSWORD, pyotp.TOTP(s.totp["kh_admin"]).now())
 

@@ -168,12 +168,14 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 
 ### M6e M5 延后项与控制台 — 已完成（见 milestones.md）
 
-## 7. 之后：M7 与横向事项（**当前下一步 = zhparser 镜像（可选）/ 压测巩固**）
+## 7. 之后：M7 与横向事项（**当前下一步 = [task.md](task.md) Wave A**）
 
 - **M7a–m（已完成）**：见上表与 milestones（tasks、MRTR、发现、上游 MCP、SDK、A2A、兼容、故障演练、consumer-kit、PG 切换、容量、检索物化）。
 - **H1–H27（已完成）**：至 human_task 信封、Importer、待办/LLM、风控/webhook/Skill、门禁、控制台/连接、消费方/资产 response_model、wf 信封、pg_trgm/CNPG、K8s CI、IAM、WORM、OTel、业务角色、G0 PII。
 - **H27（已完成）**：顶栏帮助 → 使用说明抽屉（按实际功能分节，中英越）。
-- **横向（当前下一步）**：zhparser 镜像（可选）；压测巩固。
+- **H40–H43（已完成）**：压测巩固、zhparser opt-in、生产清单 `prod-check`、Notifier 邮件+通用 IM Webhook。
+- **生产深度执行清单**：[task.md](task.md)（**H44–H50 Wave A、H51–H55 Wave B 骨架已完成**；Wave C 明确后做）。
+- **当前下一步**：Wave C（SMTP/飞书专用、connector worker/RPA 等）按需；或 Wave B 真环境联调（IdP / kind CNPG / k8s 压测填表）。
 
 完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
 

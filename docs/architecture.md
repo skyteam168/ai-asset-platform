@@ -1109,7 +1109,7 @@ gantt
 | 0002 | 首期模块化单体加独立数据面进程 | Accepted |
 | 0003 | 工作流引擎：自研 step journal（spike 后选定，DBOS Transact 未采用），保留 WorkflowExecutor 抽象 | Accepted |
 | 0004 | 授权用 OPA 五方交集；PrincipalResolver 预计算事实，OPA 只持策略；快照缺失即拒绝 | Accepted |
-| 0005 | 认证：控制台本地账号加 TOTP；消费方 client\_credentials（private\_key\_jwt）与静态令牌；OIDC 为可选插件 | Proposed |
+| 0005 | 认证：控制台本地账号加 TOTP；消费方 client\_credentials（private\_key\_jwt）与静态令牌；OIDC 为可选插件 | Accepted |
 | 0006 | 终端用户身份：消费方签名的用户断言，推荐 RFC 7523 换平台令牌，兼容请求头模式；bind\_policy 默认 strict | Proposed |
 | 0007 | Skill 用标准 Agent Skills 目录，私有信息放 metadata 或 skill.lock.json | Accepted |
 | 0008 | 不部署 Connector Agent，专线直连 | Accepted |

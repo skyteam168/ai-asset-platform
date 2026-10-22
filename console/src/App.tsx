@@ -28,6 +28,9 @@ import {
   SettingOutlined,
   SunOutlined,
   ExperimentOutlined,
+  DashboardOutlined,
+  ShopOutlined,
+  BugOutlined,
 } from "@ant-design/icons";
 import { AutoComplete, Avatar, Badge, Button, DatePicker, Dropdown, Form, Input, Layout, Menu, Modal, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
@@ -61,6 +64,9 @@ const RiskPage = page(() => import("./pages/Risk"), "RiskPage");
 const RunsPage = page(() => import("./pages/Runs"), "RunsPage");
 const DistributionPage = page(() => import("./pages/Distribution"), "DistributionPage");
 const LlmConfigPage = page(() => import("./pages/LlmConfig"), "LlmConfigPage");
+const OpsDashboardPage = page(() => import("./pages/OpsDashboard"), "OpsDashboardPage");
+const MarketplacePage = page(() => import("./pages/Marketplace"), "MarketplacePage");
+const PrismMocksPage = page(() => import("./pages/PrismMocks"), "PrismMocksPage");
 
 type Group = "access" | "governance" | "system";
 
@@ -81,14 +87,20 @@ const GROUPS: Record<Group, { label: string; icon: ReactNode }> = {
 
 // 菜单按角色裁剪；后端仍会对每个接口做权限与范围检查，这里只影响可见性
 export const SECTIONS: Section[] = [
+  { path: "/ops", label: t("运营概览"), icon: <DashboardOutlined />, element: <OpsDashboardPage />,
+    roles: ["platform_admin", "company_admin", "data_owner", "auditor"] },
   { path: "/approvals", label: t("审批待办"), icon: <CheckSquareOutlined />, element: <ApprovalsPage />,
     roles: ["platform_admin", "data_owner", "business_owner", "company_admin", "asset_developer"] },
   { path: "/assets", label: t("资产与门禁"), icon: <ApiOutlined />, element: <AssetsPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
+  { path: "/marketplace", label: t("资产市场"), icon: <ShopOutlined />, element: <MarketplacePage />,
+    roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
   { path: "/catalog", label: t("资产目录"), icon: <BookOutlined />, element: <CatalogPage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
   { path: "/distribution", label: t("分发与 Skill"), icon: <CloudUploadOutlined />, element: <DistributionPage />,
     roles: ["platform_admin", "asset_developer", "company_admin"] },
+  { path: "/prism-mocks", label: t("Prism Mock"), icon: <BugOutlined />, element: <PrismMocksPage />,
+    roles: ["platform_admin", "asset_developer"], group: "access" },
   { path: "/grants", label: t("授权"), icon: <SafetyCertificateOutlined />, element: <GrantsPage />,
     roles: ["platform_admin", "company_admin"] },
   { path: "/consumers", label: t("消费方与绑定"), icon: <KeyOutlined />, element: <ConsumersPage />,
@@ -114,7 +126,7 @@ const ROLE_LABEL: Record<Role, string> = {
   auditor: t("审计员"),
 };
 
-const LANG_SHORT: Record<Lang, string> = { "zh-CN": "中", "en-US": "EN", "vi-VN": "VI" };
+const LANG_SHORT: Record<Lang, string> = { "zh-CN": "中", "en-US": "EN", "vi-VN": "VI", "km-KH": "ខ្មែរ" };
 const TABS_KEY = "aip.tabs";
 
 function menuItems(visible: Section[]): MenuProps["items"] {

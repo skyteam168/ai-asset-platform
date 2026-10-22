@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import secrets
 import uuid
 from typing import Annotated, Any, Literal
 
@@ -13,7 +12,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncConnection
 
 from aip.control_plane.db import Database, DbScope
-from aip.control_plane.iam import auth, business_roles, consumers, orgs, snapshot, users
+from aip.control_plane.iam import (
+    auth,
+    business_roles,
+    consumers,
+    external_login,
+    orgs,
+    providers,
+    snapshot,
+    users,
+    webauthn,
+)
 from aip.control_plane.iam import schemas as out
 from aip.control_plane.iam import tables as t
 from aip.control_plane.iam.authz import Actor
@@ -54,6 +63,33 @@ class LoginIn(BaseModel):
     login_name: str
     password: str
     totp: str | None = None
+
+
+class OidcCallbackIn(BaseModel):
+    """OIDC 回调骨架：stub 接受 id_token=stub:<sub>；真 IdP 联调后再接 code 交换。"""
+
+    id_token: str = Field(min_length=1, max_length=8192)
+
+
+class ExternalLoginIn(BaseModel):
+    provider: str = Field(pattern=r"^[a-z][a-z0-9_]{1,31}$")
+    external_id: str = Field(min_length=1, max_length=256)
+
+
+class WebAuthnFinishIn(BaseModel):
+    challenge_id: uuid.UUID
+    credential_id: str = Field(min_length=1, max_length=512)
+    public_key_cose_b64: str = Field(min_length=1, max_length=8192)
+    nickname: str = ""
+
+
+class WebAuthnAuthBeginIn(BaseModel):
+    login_name: str
+
+
+class WebAuthnAuthFinishIn(BaseModel):
+    challenge_id: uuid.UUID
+    credential_id: str = Field(min_length=1, max_length=512)
 
 
 class OrgIn(BaseModel):
@@ -176,6 +212,33 @@ def router() -> APIRouter:
         async with db.tx(DbScope.system()) as conn:
             await auth.logout(conn, _bearer(authorization))
         return Response(status_code=204)
+
+    @r.get(
+        f"{V}/auth/providers",
+        tags=["auth"],
+        operation_id="listAuthProviders",
+        response_model=Page[out.AuthProviderInfo],
+    )
+    async def list_auth_providers() -> Page[out.AuthProviderInfo]:
+        items = [out.AuthProviderInfo.model_validate(p) for p in providers.list_providers()]
+        return Page(items=items)
+
+    @r.post(
+        f"{V}/auth/oidc/callback",
+        tags=["auth"],
+        operation_id="oidcCallback",
+        response_model=out.Session,
+    )
+    async def oidc_callback(body: OidcCallbackIn, db: DbDep) -> out.Session:
+        async with db.tx(DbScope.system()) as conn:
+            token, expires, user_id = await auth.login_via_provider(
+                conn, "oidc", {"id_token": body.id_token}
+            )
+            u = await users.user_row(conn, user_id)
+            clearance = await users.effective_clearance(conn, user_id)
+        return out.Session(
+            session_token=token, expires_at=expires.isoformat(), user=_user_out(u, clearance)
+        )
 
     @r.get(f"{V}/me", tags=["auth"], operation_id="me", response_model=out.Me)
     async def me(actor: ActorDep, db: DbDep) -> out.Me:
@@ -305,6 +368,100 @@ def router() -> APIRouter:
         return out.RoleAssignment(
             id=str(rid), user_id=str(id), role=body.role, scope_org_id=str(body.scope_org_id)
         )
+
+    @r.get(
+        f"{V}/users/{{id}}/external-logins",
+        tags=["iam"],
+        operation_id="listExternalLogins",
+        response_model=Page[out.ExternalLogin],
+    )
+    async def list_external_logins(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.ExternalLogin]:
+        async with db.tx(actor.db_scope()) as conn:
+            await users.user_row(conn, id)  # 404 / RLS
+            items = [out.ExternalLogin.model_validate(x) for x in await external_login.list_for_user(conn, id)]
+        return Page(items=items)
+
+    @r.post(
+        f"{V}/users/{{id}}/external-logins",
+        tags=["iam"],
+        operation_id="bindExternalLogin",
+        status_code=201,
+        response_model=out.ExternalLogin,
+    )
+    async def bind_external_login(
+        id: uuid.UUID, body: ExternalLoginIn, actor: ActorDep, db: DbDep
+    ) -> out.ExternalLogin:
+        async with db.tx(actor.db_scope()) as conn:
+            row = await external_login.bind(
+                conn, actor, user_id=id, provider=body.provider, external_id=body.external_id
+            )
+        return out.ExternalLogin.model_validate(row)
+
+    @r.delete(
+        f"{V}/users/{{id}}/external-logins/{{provider}}/{{external_id}}",
+        tags=["iam"],
+        operation_id="unbindExternalLogin",
+        status_code=204,
+    )
+    async def unbind_external_login(
+        id: uuid.UUID, provider: str, external_id: str, actor: ActorDep, db: DbDep
+    ) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await external_login.unbind(conn, actor, user_id=id, provider=provider, external_id=external_id)
+        return Response(status_code=204)
+
+    @r.get(
+        f"{V}/users/{{id}}/webauthn/credentials",
+        tags=["auth"],
+        operation_id="listWebAuthnCredentials",
+        response_model=Page[out.WebAuthnCredential],
+    )
+    async def list_webauthn(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Page[out.WebAuthnCredential]:
+        actor.require(actor.user_id == id or actor.has("platform_admin"))
+        async with db.tx(actor.db_scope()) as conn:
+            items = [out.WebAuthnCredential.model_validate(x) for x in await webauthn.list_credentials(conn, id)]
+        return Page(items=items)
+
+    @r.post(f"{V}/users/{{id}}/webauthn/register/begin", tags=["auth"], operation_id="webauthnRegisterBegin")
+    async def webauthn_register_begin(id: uuid.UUID, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            return await webauthn.begin_registration(conn, actor, id)
+
+    @r.post(
+        f"{V}/users/{{id}}/webauthn/register/finish",
+        tags=["auth"],
+        operation_id="webauthnRegisterFinish",
+        status_code=201,
+        response_model=out.WebAuthnCredential,
+    )
+    async def webauthn_register_finish(
+        id: uuid.UUID, body: WebAuthnFinishIn, actor: ActorDep, db: DbDep
+    ) -> out.WebAuthnCredential:
+        async with db.tx(actor.db_scope()) as conn:
+            row = await webauthn.finish_registration(
+                conn,
+                actor,
+                id,
+                challenge_id=body.challenge_id,
+                credential_id=body.credential_id,
+                public_key_cose_b64=body.public_key_cose_b64,
+                nickname=body.nickname,
+            )
+        return out.WebAuthnCredential.model_validate(row)
+
+    @r.post(f"{V}/auth/webauthn/authenticate/begin", tags=["auth"], operation_id="webauthnAuthenticateBegin")
+    async def webauthn_auth_begin(body: WebAuthnAuthBeginIn, db: DbDep) -> dict[str, Any]:
+        async with db.tx(DbScope.system()) as conn:
+            return await webauthn.begin_authentication(conn, body.login_name)
+
+    @r.post(f"{V}/auth/webauthn/authenticate/finish", tags=["auth"], operation_id="webauthnAuthenticateFinish")
+    async def webauthn_auth_finish(body: WebAuthnAuthFinishIn, db: DbDep) -> dict[str, Any]:
+        """stub：校验挑战后返回 user_id；完整登录仍须口令或后续与 session 衔接。"""
+        async with db.tx(DbScope.system()) as conn:
+            uid = await webauthn.stub_verify_authentication(
+                conn, challenge_id=body.challenge_id, credential_id=body.credential_id
+            )
+        return {"user_id": str(uid), "verified": True}
 
     @r.get(
         f"{V}/companies/{{id}}/business-roles",
@@ -574,8 +731,9 @@ def router() -> APIRouter:
         wait_s: float = 0,
         authorization: Annotated[str | None, Header()] = None,
     ) -> Response | dict[str, Any]:
-        if not secrets.compare_digest(_bearer(authorization), get_settings().internal_service_token):
-            raise PlatformError(ErrorCode.UNAUTHENTICATED, "需要服务凭据")
+        from aip.libs.serviceauth import require_service_auth
+
+        require_service_auth(authorization)
 
         async def fetch(conn: AsyncConnection) -> dict[str, Any] | None:
             await snapshot.publish(conn, platform_key())

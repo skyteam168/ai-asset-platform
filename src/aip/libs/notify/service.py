@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 import logging
 import uuid
@@ -56,11 +57,14 @@ class ImWebhookChannel:
         if parsed.query:
             path = f"{path}?{parsed.query}"
         scheme: Scheme = "https" if parsed.scheme == "https" else "http"
+        # http 为传输例外：与 webhook 内网回调同策略（architecture.md 9.6）
         cfg = ConnectionConfig(
             id="notify-im",
             base_url=base,
             scheme=scheme,
             tls_mode="system_ca" if scheme == "https" else None,
+            transport_exception_reason="notify IM webhook" if scheme == "http" else None,
+            transport_exception_expires_at=dt.datetime(2099, 1, 1, tzinfo=dt.UTC) if scheme == "http" else None,
         )
         async with build_client(cfg) as client:
             r = await client.post(path, json={"to": recipient, "subject": subject, "body": body})
@@ -102,6 +106,66 @@ async def enqueue(
         },
     )
     return mid
+
+
+async def enqueue_channels(
+    conn: AsyncConnection,
+    *,
+    company_id: str | uuid.UUID,
+    recipient: str,
+    subject: str,
+    body: str,
+    kind: str,
+    ref: dict[str, Any] | None = None,
+    im_recipient: str | None = None,
+    im_enabled: bool = False,
+) -> list[uuid.UUID]:
+    """同时入队 email；若配置了 IM Webhook 再入队 im（收件人缺省用 email）。"""
+    ids = [
+        await enqueue(
+            conn,
+            company_id=company_id,
+            channel="email",
+            recipient=recipient,
+            subject=subject,
+            body=body,
+            kind=kind,
+            ref=ref,
+        )
+    ]
+    if im_enabled:
+        ids.append(
+            await enqueue(
+                conn,
+                company_id=company_id,
+                channel="im",
+                recipient=(im_recipient or recipient),
+                subject=subject,
+                body=body,
+                kind=kind,
+                ref=ref,
+            )
+        )
+    return ids
+
+
+def build_notifier(*, im_webhook_url: str | None = None) -> Notifier:
+    channels: list[Channel] = [LogMailChannel()]
+    if im_webhook_url:
+        channels.append(ImWebhookChannel(im_webhook_url))
+    return Notifier(channels)
+
+
+async def flush_forever(engine: AsyncEngine, notifier: Notifier, interval_s: float) -> None:
+    """后台循环 flush outbox（对齐 webhook deliver_forever）。"""
+    import asyncio
+
+    while True:
+        try:
+            await flush_outbox(engine, notifier)
+        except Exception:  # 单轮失败不退出循环
+            log.exception("notify flush_forever failed")
+        await asyncio.sleep(interval_s)
 
 
 async def flush_outbox(engine: AsyncEngine, notifier: Notifier, *, limit: int = 50) -> int:

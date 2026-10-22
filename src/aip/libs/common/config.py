@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     secret_box_key: str = "ZGV2LW9ubHktc2VjcmV0LWJveC1rZXktMzJieXRlcyE="
     # 服务间认证（生产为 mTLS + 短期服务令牌，architecture.md 3.3）；dev 用共享令牌
     internal_service_token: str = "aip-dev-internal-service-token"
+    # static=仅共享令牌；jwt=仅短期 JWT；both=二者皆可（默认，兼容旧调用方）
+    service_auth_mode: str = Field(default="both", pattern="^(static|jwt|both)$")
+    service_token_ttl_s: int = Field(default=300, ge=60, le=3600)
+    # 非空则 require_service_auth 额外校验客户端证书 PEM（由调用方/入口传入）
+    service_mtls_ca_pem: str = ""
     control_plane_url: str = ""
     # 控制面经服务凭据调用数据面内部接口（平台待办：确认与人工任务）
     data_plane_url: str = "http://127.0.0.1:18082"
@@ -89,6 +94,29 @@ class Settings(BaseSettings):
     # Skill 包对象存储（H35）：双写 SeaweedFS + bytea；下载 object 优先
     skill_bucket: str = "aip-skills"
     skill_object_storage: bool = False
+    # Notifier（H43）：通用 IM Webhook；空则只发邮件通道
+    notify_im_webhook_url: str | None = None
+    notify_flush_interval_s: float = Field(default=2.0, ge=0.5, le=60)
+    # Langfuse（H50）：可选登记，不强制接线
+    langfuse_host: str | None = None
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    # OIDC 登录插件（H51）：默认关闭；stub 供本地映射测例，不接真 IdP
+    oidc_enabled: bool = False
+    oidc_stub: bool = True
+    oidc_issuer: str = ""
+    oidc_client_id: str = ""
+    oidc_audience: str = ""
+    # OAuth authorization_code + PKCE（H52）：默认关闭；stub 签发授权码供本地测例
+    oauth_pkce_enabled: bool = False
+    oauth_pkce_stub: bool = True
+    oauth_pkce_code_ttl_s: int = Field(default=120, ge=30, le=600)
+    # WebAuthn 可选第二因子（H53）：默认关闭；stub 跳过 attestation 签名校验
+    webauthn_enabled: bool = False
+    webauthn_stub: bool = True
+    webauthn_rp_id: str = "localhost"
+    webauthn_rp_name: str = "AIP Console"
+    webauthn_challenge_ttl_s: int = Field(default=300, ge=60, le=600)
 
     @model_validator(mode="after")
     def _no_dev_secrets_outside_dev(self) -> Settings:

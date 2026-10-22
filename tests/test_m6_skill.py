@@ -25,6 +25,7 @@ from aip.libs.common.ids import utcnow
 from aip.libs.tokens.keys import SigningKey
 from iam_seed import Seed, app_url
 from m2_fixtures import tool_spec
+from test_h7_selection_eval import MP, ScriptedLlm, _cases
 from test_m1_api import login
 from test_m4_gates import SECRETS, People, _people
 
@@ -100,14 +101,18 @@ def test_tamper_fails_local_verify() -> None:
 
 async def test_skill_gates_grant_and_retract(db: Database, seeded: Seed) -> None:
     p = await _people(db, seeded)
-    tool_aid, ref = await _publish_tool(db, seeded, p, "production.mes.query_work_orders")
+    cap = "production.mes.query_work_orders"
+    tool_aid, ref = await _publish_tool(db, seeded, p, cap)
     vid = await _skill_draft(db, seeded, p, _zip_skill(tools=[ref]))
+    cases = _cases(cap)
+    llm = ScriptedLlm([c["expect_capability_id"] for c in cases])
 
     async with db.tx(DbScope.system()) as conn:
+        await gates.put_selection_eval(conn, p.dev, vid, model_profiles=[MP], cases=cases)
         g0 = await gates.submit(conn, p.dev, vid)
         assert g0["passed"] is True, g0
-        lab = await gates.run_lab(conn, p.dev, vid, secrets=SECRETS)
-        assert lab["passed"] is True
+        lab = await gates.run_lab(conn, p.dev, vid, secrets=SECRETS, llm=llm)
+        assert lab["passed"] is True, lab
 
         missing = await skill.missing_tool_grants(
             conn, consumer_id=seeded.consumers["vn-ai"], tool_refs=[ref], env="test"

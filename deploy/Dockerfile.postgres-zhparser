@@ -1,0 +1,25 @@
+# PostgreSQL 16 + zhparser（H41 opt-in；默认开发仍用 postgres:16-alpine）
+# 构建：docker build -t aip-postgres-zhparser:16 -f deploy/Dockerfile.postgres-zhparser deploy/
+FROM postgres:16-bookworm
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+      ca-certificates curl gcc make postgresql-server-dev-16 wget bzip2; \
+    curl -fsSL -o /tmp/scws.tar.bz2 \
+      http://www.xunsearch.com/scws/down/scws-1.2.3.tar.bz2; \
+    mkdir -p /tmp/scws; \
+    tar -xjf /tmp/scws.tar.bz2 -C /tmp/scws --strip-components=1; \
+    cd /tmp/scws; \
+    ./configure --prefix=/usr/local; \
+    make -j"$(nproc)"; \
+    make install; \
+    curl -fsSL -o /tmp/zhparser.tar.gz \
+      https://github.com/amutu/zhparser/archive/refs/heads/master.tar.gz; \
+    mkdir -p /tmp/zhparser; \
+    tar -xzf /tmp/zhparser.tar.gz -C /tmp/zhparser --strip-components=1; \
+    cd /tmp/zhparser; \
+    SCWS_HOME=/usr/local make; \
+    make install; \
+    apt-get purge -y --auto-remove gcc make postgresql-server-dev-16 wget bzip2 curl; \
+    rm -rf /var/lib/apt/lists/* /tmp/scws /tmp/zhparser /tmp/scws.tar.bz2 /tmp/zhparser.tar.gz

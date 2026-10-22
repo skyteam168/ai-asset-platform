@@ -45,8 +45,17 @@ python tools/dev.py serve-otel
 | `deploy/otel/prometheus.yml` | 抓取 Collector |
 | `deploy/otel/grafana/` | 数据源与看板自动供给 |
 
+## GenAI / Langfuse（H50）
+
+| 项 | 说明 |
+| --- | --- |
+| OTel GenAI | LLM Gateway 出站 span 应带 `gen_ai.*` 属性（模型名、token 用量等，无 PII） |
+| Langfuse | 可选自托管；环境变量 `AIP_LANGFUSE_HOST` / `AIP_LANGFUSE_PUBLIC_KEY` / `AIP_LANGFUSE_SECRET_KEY` 仅登记，接线按需 |
+| 生产勾选 | 见 [production-checklist.md](production-checklist.md)「GenAI / Langfuse」 |
+
 ## 不在本片
 
-- Loki 日志流水线、Langfuse / GenAI 语义约定
+- Loki 日志流水线全量
 - 生产级 Tempo 多租户与长期存储
 - 应用进程内 Prometheus `/metrics` 直出（指标经 OTLP → Collector）
+- 强制 Langfuse SDK 接线（骨架登记即可）

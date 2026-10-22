@@ -14,6 +14,9 @@ python tools/dev.py serve     本地运行控制面(18081)与数据面(18082)
 python tools/dev.py otel-up   启动 OTel Collector / Tempo / Prometheus / Grafana
 python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
 python tools/dev.py k8s-check  kubectl kustomize 构建 base 与 prod overlay
+python tools/dev.py loadtest [--workers …]  数据面压测（透传 tools/loadtest.py）
+python tools/dev.py zhparser-up  可选：构建并启动带 zhparser 的 PostgreSQL
+python tools/dev.py prod-check 生产清单本地校验（kustomize + 文档章节）
 """
 
 from __future__ import annotations
@@ -249,6 +252,58 @@ def k8s_check() -> None:
     print("k8s kustomize ok")
 
 
+def loadtest(argv: list[str] | None = None) -> None:
+    """透传参数给 tools/loadtest.py。"""
+    run([PY, str(ROOT / "tools" / "loadtest.py"), *(argv or [])])
+
+
+COMPOSE_ZHPARSER = [
+    "docker",
+    "compose",
+    "-f",
+    str(ROOT / "deploy" / "docker-compose.yml"),
+    "-f",
+    str(ROOT / "deploy" / "docker-compose.zhparser.yml"),
+]
+
+
+def zhparser_up() -> None:
+    """构建带 zhparser 的 Postgres 并替换默认库（会重建 postgres 卷）。"""
+    run([*COMPOSE, "stop", "postgres"], check=False)
+    run([*COMPOSE, "rm", "-f", "-v", "postgres"], check=False)
+    run([*COMPOSE_ZHPARSER, "build", "postgres"])
+    run([*COMPOSE_ZHPARSER, "up", "-d", "postgres"])
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        if (
+            subprocess.call(
+                [*COMPOSE_ZHPARSER, "exec", "-T", "postgres", "pg_isready", "-U", "aip", "-d", "aip"],
+                cwd=ROOT,
+                stdout=subprocess.DEVNULL,
+            )
+            == 0
+        ):
+            break
+        time.sleep(1)
+    else:
+        sys.exit("zhparser postgres not ready")
+    migrate()
+    print("zhparser postgres ready on 55432")
+
+
+def prod_check() -> None:
+    """生产清单本地校验：kustomize + 文档章节 + Settings 环境变量名对照。"""
+    from aip.libs.prod_check import run_prod_check
+
+    k8s_check()
+    problems = run_prod_check(ROOT)
+    if problems:
+        for p in problems:
+            print(f"FAIL: {p}", flush=True)
+        raise SystemExit(1)
+    print("prod-check ok")
+
+
 TASKS = {
     "up": up,
     "down": down,
@@ -262,6 +317,9 @@ TASKS = {
     "otel-up": otel_up,
     "otel-down": otel_down,
     "k8s-check": k8s_check,
+    "loadtest": loadtest,  # 实际由 __main__ 传 argv
+    "zhparser-up": zhparser_up,
+    "prod-check": prod_check,
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,
     "activate-nike": activate_nike,
@@ -271,4 +329,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in TASKS:
         print(__doc__)
         sys.exit(2)
-    TASKS[sys.argv[1]]()
+    name = sys.argv[1]
+    if name == "loadtest":
+        loadtest(sys.argv[2:])
+    else:
+        TASKS[name]()

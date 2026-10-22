@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import uuid
 from typing import Any
 
@@ -19,6 +20,8 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 from aip.control_plane.iam.authz import Actor
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
+
+log = logging.getLogger(__name__)
 
 md = MetaData(schema="approval")
 U = UUID(as_uuid=True)
@@ -106,6 +109,24 @@ async def create(
             due_at=business_due(utcnow(), sla_business_days),
         )
     )
+    # 审批待办通知（email + 可选 IM；收件人用角色标识，控制台认领）
+    try:
+        from aip.libs.common.config import get_settings
+        from aip.libs.notify import enqueue_channels
+
+        settings = get_settings()
+        await enqueue_channels(
+            conn,
+            company_id=company_id,
+            recipient=f"role:{approver_role}",
+            subject=f"审批待办：{kind}",
+            body=f"有新的审批单（{kind}），请登录控制台处理。",
+            kind="approval",
+            ref={"request_id": str(rid), "subject_id": str(subject_id)},
+            im_enabled=bool(settings.notify_im_webhook_url),
+        )
+    except Exception:  # 通知失败不影响建单
+        log.exception("enqueue approval notify failed")
     return rid
 
 

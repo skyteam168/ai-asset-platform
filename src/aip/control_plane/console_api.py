@@ -217,7 +217,9 @@ def router() -> APIRouter:
         operation_id="consoleCatalog",
         response_model=out.ConsoleCatalog,
     )
-    async def console_catalog(actor: ActorDep, db: DbDep) -> out.ConsoleCatalog:
+    async def console_catalog(
+        actor: ActorDep, db: DbDep, q: str | None = None
+    ) -> out.ConsoleCatalog:
         """控制台资产目录：最新发布快照中的 Tool 与套件（运维视角；消费方可见性以数据面 GET /catalog 为准）。"""
         actor.require(
             actor.has("platform_admin")
@@ -226,6 +228,7 @@ def router() -> APIRouter:
             or actor.has("company_admin"),
             "需要平台角色",
         )
+        from aip.control_plane.registry.fts import match_in_memory, search_asset_ids, upsert_catalog_fts
         from aip.control_plane.registry.list_enrich import attach_system_fields, summary_from_spec
 
         async with db.tx(DbScope.system()) as conn:
@@ -304,10 +307,89 @@ def router() -> APIRouter:
                     }
                 )
             items = await attach_system_fields(conn, items)
+            # H41：有 zhparser 时物化 search_text；q 优先走 FTS，否则子串降级
+            for it in items:
+                aid = it.get("asset_id")
+                cid = it.get("company_id")
+                if not aid or not cid:
+                    continue
+                try:
+                    await upsert_catalog_fts(
+                        conn,
+                        asset_id=uuid.UUID(str(aid)),
+                        company_id=uuid.UUID(str(cid)),
+                        search_text=" ".join(
+                            str(it.get(k) or "")
+                            for k in ("capability_id", "title", "description", "name")
+                        ),
+                    )
+                except ValueError:
+                    pass
+            qq = (q or "").strip()
+            if qq:
+                fts_ids = await search_asset_ids(conn, qq)
+                if fts_ids is None:
+                    items = match_in_memory(items, qq)
+                else:
+                    allow = {str(i) for i in fts_ids}
+                    items = [
+                        it
+                        for it in items
+                        if (it.get("asset_id") and str(it["asset_id"]) in allow)
+                        or qq.lower() in str(it.get("capability_id") or "").lower()
+                    ]
         items.sort(key=lambda x: x["capability_id"] or "")
         return out.ConsoleCatalog(
             items=[out.CatalogTool.model_validate(i) for i in items],
             bundles=[out.CatalogBundle.model_validate(b) for b in bundles],
         )
+
+    @r.get(f"{V}/console/ops-summary", tags=["catalog"], operation_id="consoleOpsSummary")
+    async def ops_summary(actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        """运营概览：待办相关计数、活跃漂移、近期风险（H47）。"""
+        actor.require(
+            actor.has("platform_admin")
+            or actor.has("company_admin")
+            or actor.has("data_owner")
+            or actor.has("auditor"),
+            "需要平台角色",
+        )
+        from aip.control_plane.probe import service as probe
+        from aip.control_plane.risk import service as risk
+
+        async with db.tx(actor.db_scope()) as conn:
+            drifts = await probe.list_drifts(conn)
+            events = await risk.list_events(conn, status="open", limit=20)
+            open_risk = len(events)
+        def _ts(v: Any) -> str | None:
+            if v is None:
+                return None
+            if hasattr(v, "isoformat"):
+                return str(v.isoformat())
+            return str(v)
+
+        return {
+            "active_drifts": len(drifts),
+            "open_risk_events": open_risk,
+            "recent_risk_events": [
+                {
+                    "id": str(e.get("id")),
+                    "rule_code": e.get("rule_code"),
+                    "severity": e.get("severity"),
+                    "status": e.get("status"),
+                    "created_at": _ts(e.get("created_at")),
+                }
+                for e in events[:10]
+            ],
+            "drift_items": [
+                {
+                    "version_id": str(d.get("version_id")),
+                    "capability_id": d.get("capability_id"),
+                    "reason": d.get("reason"),
+                    "marked_at": _ts(d.get("marked_at")),
+                }
+                for d in drifts[:20]
+            ],
+        }
 
     return r

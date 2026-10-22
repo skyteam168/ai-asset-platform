@@ -235,15 +235,19 @@ async def measure_scaling(
 async def main(a: argparse.Namespace) -> None:
     counts = parse_workers(a.workers)
     if len(counts) == 1:
-        print(json.dumps(await measure(counts[0], a.requests, a.concurrency), ensure_ascii=False, indent=2))
+        payload: dict[str, Any] = await measure(counts[0], a.requests, a.concurrency)
     else:
-        print(
-            json.dumps(
-                await measure_scaling(counts, a.requests, a.concurrency),
-                ensure_ascii=False,
-                indent=2,
-            )
-        )
+        payload = await measure_scaling(counts, a.requests, a.concurrency)
+    text = json.dumps(payload, ensure_ascii=False, indent=2)
+    print(text)
+    if a.json_out:
+        out = pathlib.Path(a.json_out)
+
+        def _write() -> None:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(text + "\n", encoding="utf-8")
+
+        await asyncio.to_thread(_write)
 
 
 if __name__ == "__main__":
@@ -257,5 +261,11 @@ if __name__ == "__main__":
         type=str,
         default="1",
         help="worker 进程数，或逗号列表做扩展对比（如 1,2,4）",
+    )
+    ap.add_argument(
+        "--json-out",
+        type=str,
+        default="",
+        help="将结果 JSON 写入该路径（目录不存在则创建）",
     )
     asyncio.run(main(ap.parse_args()))

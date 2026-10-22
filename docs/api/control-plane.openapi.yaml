@@ -13,10 +13,12 @@ tags:
 - name: auth
 - name: catalog
 - name: connection
+- name: gates
 - name: grant
 - name: iam
 - name: importer
 - name: llm
+- name: notify
 - name: ops
 - name: registry
 - name: release
@@ -75,6 +77,58 @@ paths:
           description: OK
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/auth/providers:
+    get:
+      operationId: listAuthProviders
+      tags:
+      - auth
+      summary: 已登记的登录插件（local / oidc 等）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuthProviderInfo'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
+  /api/v1/auth/oidc/callback:
+    post:
+      operationId: oidcCallback
+      tags:
+      - auth
+      summary: OIDC 回调（stub：id_token=stub:<sub>；经 external_login 映射）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OidcCallbackRequest'
+      security: []
   /api/v1/me:
     get:
       operationId: me
@@ -407,6 +461,189 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/RoleAssignment'
+  /api/v1/users/{id}/external-logins:
+    get:
+      operationId: listExternalLogins
+      tags:
+      - iam
+      summary: 用户外部登录绑定列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ExternalLogin'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      operationId: bindExternalLogin
+      tags:
+      - iam
+      summary: 绑定外部登录主体（OIDC/SAML → iam_user）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExternalLogin'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExternalLoginBind'
+  /api/v1/users/{id}/external-logins/{provider}/{external_id}:
+    delete:
+      operationId: unbindExternalLogin
+      tags:
+      - iam
+      summary: 解绑外部登录
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Provider'
+      - $ref: '#/components/parameters/ExternalId'
+  /api/v1/users/{id}/webauthn/credentials:
+    get:
+      operationId: listWebAuthnCredentials
+      tags:
+      - auth
+      summary: 已登记的 WebAuthn 凭证
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WebAuthnCredential'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/users/{id}/webauthn/register/begin:
+    post:
+      operationId: webauthnRegisterBegin
+      tags:
+      - auth
+      summary: 开始 WebAuthn 注册（返回 PublicKeyCredentialCreationOptions）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/users/{id}/webauthn/register/finish:
+    post:
+      operationId: webauthnRegisterFinish
+      tags:
+      - auth
+      summary: 完成 WebAuthn 注册（stub 跳过 attestation）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebAuthnCredential'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnFinishRequest'
+  /api/v1/auth/webauthn/authenticate/begin:
+    post:
+      operationId: webauthnAuthenticateBegin
+      tags:
+      - auth
+      summary: 开始 WebAuthn 认证挑战
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnAuthBeginRequest'
+      security: []
+  /api/v1/auth/webauthn/authenticate/finish:
+    post:
+      operationId: webauthnAuthenticateFinish
+      tags:
+      - auth
+      summary: 完成 WebAuthn 认证（stub）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebAuthnAuthFinishRequest'
+      security: []
   /api/v1/companies/{id}/business-roles:
     get:
       operationId: listBusinessRoles
@@ -2069,6 +2306,21 @@ paths:
                 $ref: '#/components/schemas/WebhookProcessResult'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/notify/flush:
+    post:
+      operationId: notifyFlush
+      tags:
+      - notify
+      summary: 手动触发通知 outbox 投递（platform_admin）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotifyFlushResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /api/v1/console/catalog:
     get:
       operationId: consoleCatalog
@@ -2084,6 +2336,67 @@ paths:
                 $ref: '#/components/schemas/ConsoleCatalog'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/console/ops-summary:
+    get:
+      operationId: consoleOpsSummary
+      tags:
+      - catalog
+      summary: 运营概览摘要（漂移 / 开放风险）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpsSummary'
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/contract-drifts:
+    get:
+      operationId: listContractDrifts
+      tags:
+      - gates
+      summary: 列出活跃契约漂移
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContractDrift'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/contract-drifts/{version_id}/clear:
+    post:
+      operationId: clearContractDrift
+      tags:
+      - gates
+      summary: 清除活跃契约漂移（运维确认已处理）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftCleared'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/VersionId'
   /api/v1/versions/{id}/skill-package:
     post:
       operationId: uploadSkillPackage
@@ -2467,6 +2780,34 @@ paths:
             schema:
               $ref: '#/components/schemas/ImporterRequest'
   /api/v1/prism-mocks:
+    get:
+      operationId: listPrismMocks
+      tags:
+      - testlab
+      summary: 列出本进程 Prism Mock 会话
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PrismMock'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
     post:
       operationId: createPrismMock
       tags:
@@ -2854,6 +3195,24 @@ components:
       required: true
       schema:
         type: string
+    Provider:
+      name: provider
+      in: path
+      required: true
+      schema:
+        type: string
+    ExternalId:
+      name: external_id
+      in: path
+      required: true
+      schema:
+        type: string
+    VersionId:
+      name: version_id
+      in: path
+      required: true
+      schema:
+        type: string
     Limit:
       name: limit
       in: query
@@ -2961,6 +3320,107 @@ components:
       required:
       - login_name
       - password
+    OidcCallbackRequest:
+      type: object
+      properties:
+        id_token:
+          type: string
+      required:
+      - id_token
+    AuthProviderInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+      required:
+      - name
+      - enabled
+    ExternalLogin:
+      type: object
+      properties:
+        provider:
+          type: string
+        external_id:
+          type: string
+        user_id:
+          type: string
+        company_id:
+          type:
+          - string
+          - 'null'
+        created_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - provider
+      - external_id
+      - user_id
+    ExternalLoginBind:
+      type: object
+      properties:
+        provider:
+          type: string
+        external_id:
+          type: string
+      required:
+      - provider
+      - external_id
+    WebAuthnCredential:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        credential_id:
+          type: string
+        nickname:
+          type: string
+        sign_count:
+          type: integer
+        created_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - credential_id
+    WebAuthnFinishRequest:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+        credential_id:
+          type: string
+        public_key_cose_b64:
+          type: string
+        nickname:
+          type: string
+      required:
+      - challenge_id
+      - credential_id
+      - public_key_cose_b64
+    WebAuthnAuthBeginRequest:
+      type: object
+      properties:
+        login_name:
+          type: string
+      required:
+      - login_name
+    WebAuthnAuthFinishRequest:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+        credential_id:
+          type: string
+      required:
+      - challenge_id
+      - credential_id
     Session:
       type: object
       properties:
@@ -3660,6 +4120,13 @@ components:
             type: object
       required:
       - results
+    NotifyFlushResult:
+      type: object
+      properties:
+        sent:
+          type: integer
+      required:
+      - sent
     SkillPackageUploaded:
       type: object
       properties:
@@ -5341,6 +5808,67 @@ components:
       - base_url
       - container_name
       - expires_at
+    ContractDrift:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        company_id:
+          type: string
+          description: UUIDv7
+        capability_id:
+          type: string
+        marked_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        consecutive_failures:
+          type: integer
+        last_g1_at:
+          type: string
+          format: date-time
+        cleared_at:
+          type: string
+          format: date-time
+      required:
+      - version_id
+      - company_id
+      - capability_id
+      - reason
+      - consecutive_failures
+    DriftCleared:
+      type: object
+      properties:
+        version_id:
+          type: string
+          description: UUIDv7
+        cleared_at:
+          type: string
+          format: date-time
+      required:
+      - version_id
+    OpsSummary:
+      type: object
+      properties:
+        active_drifts:
+          type: integer
+        open_risk_events:
+          type: integer
+        recent_risk_events:
+          type: array
+          items:
+            type: object
+        drift_items:
+          type: array
+          items:
+            type: object
+      required:
+      - active_drifts
+      - open_risk_events
+      - recent_risk_events
+      - drift_items
     LlmAllowlist:
       type: object
       properties:

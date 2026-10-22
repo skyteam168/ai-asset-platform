@@ -16,7 +16,7 @@
 | MFA_REQUIRED | 401 | false | 认证 | 需要 TOTP |
 | ACCOUNT_LOCKED | 423 | false | 认证 | 连续失败被锁定 |
 | PERMISSION_DENIED | 403 | false | 权限 | 授权判定不通过 |
-| USER_NOT_BOUND | 403 | false | 权限 | 消费方侧用户未绑定到平台用户 |
+| USER_NOT_BOUND | 403 | false | 权限 | 消费方侧用户或外部登录主体未绑定到平台用户 |
 | OUT_OF_SCOPE | 403 | false | 权限 | 参数超出用户数据范围 |
 | CLASSIFICATION_DENIED | 403 | false | 权限 | 有效密级不足 |
 | CONFIRMATION_REQUIRED | 202 | false | 确认 | 需要用户确认或审批 |

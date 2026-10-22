@@ -41,6 +41,31 @@ class Session(BaseModel):
     user: User
 
 
+class AuthProviderInfo(BaseModel):
+    name: str
+    enabled: bool
+
+
+class ExternalLogin(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    provider: str
+    external_id: str
+    user_id: str
+    company_id: str | None = None
+    created_at: str | None = None
+
+
+class WebAuthnCredential(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    credential_id: str
+    nickname: str = ""
+    sign_count: int = 0
+    created_at: str | None = None
+
+
 class OrgUnit(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

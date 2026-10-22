@@ -1,4 +1,6 @@
 // 控制面 API 客户端：Bearer 会话令牌、RFC 9457 错误解析（docs/api/conventions.md）
+import { errorCodeLabel } from "./errorCodes";
+
 const BASE = "/api/v1";
 const TOKEN_KEY = "aip.session";
 
@@ -71,8 +73,9 @@ export const del = <T = void>(path: string) => api<T>("DELETE", path);
 
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
+    const codeLabel = errorCodeLabel(e.code);
     const fields = e.errors.map((f) => `${f.field}：${f.message}`).join("；");
-    return fields ? `${e.detail}（${fields}）` : `${e.detail}（${e.code}）`;
+    return fields ? `${e.detail}（${fields}）` : `${e.detail}（${codeLabel}）`;
   }
   return e instanceof Error ? e.message : String(e);
 }

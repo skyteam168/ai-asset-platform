@@ -2,6 +2,7 @@
 
 - client_credentials：应用身份令牌。
 - urn:ietf:params:oauth:grant-type:jwt-bearer（RFC 7523）：用户断言换用户令牌，act.sub = client_id。
+- authorization_code + PKCE（H52 骨架）：个人 MCP 客户端；真浏览器同意页后做。
 客户端认证：private_key_jwt（client_assertion，RFC 7523 第 2.2 节）或静态 API Token（Authorization: Bearer）。
 """
 
@@ -13,7 +14,9 @@ from dataclasses import dataclass, field
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Form, Header, Request
+from pydantic import BaseModel, Field
 
+from aip.data_plane.pkce import AuthCodeStore, MemoryAuthCodeStore, issue_auth_code, verify_pkce
 from aip.data_plane.principal import Principal, PrincipalResolver
 from aip.libs.common.config import Settings
 from aip.libs.common.errors import ErrorCode, PlatformError
@@ -34,6 +37,7 @@ class AuthContext:
     key: SigningKey
     replay: ReplayStore
     verify_keys: list[SigningKey] = field(default_factory=list)
+    auth_codes: AuthCodeStore = field(default_factory=MemoryAuthCodeStore)
 
     # 用户断言验签失败时回调（client_id, 错误码），用于“断言验签失败激增”风险规则（12.4）
     on_assertion_failure: Callable[[str, str], None] | None = None
@@ -118,6 +122,17 @@ class AuthContext:
         return self.resolver.for_user(claims.client_id, claims.subject, auth_mode="token_exchange")
 
 
+class AuthorizeStubIn(BaseModel):
+    """骨架：无浏览器同意页时用 stub 签发授权码（须 AIP_OAUTH_PKCE_STUB=true）。"""
+
+    client_id: str
+    redirect_uri: str = Field(min_length=1, max_length=2048)
+    code_challenge: str = Field(min_length=43, max_length=128)
+    code_challenge_method: str = "S256"
+    subject: str = Field(min_length=1, max_length=256, description="消费方侧员工标识，经 user_binding 映射")
+    resource: str | None = None
+
+
 def router(ctx: AuthContext) -> APIRouter:
     r = APIRouter(tags=["oauth"])
     s = ctx.settings
@@ -128,18 +143,59 @@ def router(ctx: AuthContext) -> APIRouter:
 
     @r.get("/.well-known/oauth-authorization-server", operation_id="authorizationServerMetadata")
     async def authorization_server() -> dict[str, Any]:
-        return {
+        grants = ["client_credentials", JWT_BEARER]
+        meta: dict[str, Any] = {
             "issuer": s.issuer,
             "token_endpoint": f"{s.issuer}/oauth/token",
             "jwks_uri": f"{s.issuer}/.well-known/jwks.json",
-            "grant_types_supported": ["client_credentials", JWT_BEARER],
+            "grant_types_supported": grants,
             "token_endpoint_auth_methods_supported": ["private_key_jwt"],
             "token_endpoint_auth_signing_alg_values_supported": ["ES256", "RS256"],
         }
+        if s.oauth_pkce_enabled:
+            grants.append("authorization_code")
+            meta["authorization_endpoint"] = f"{s.issuer}/oauth/authorize"
+            meta["code_challenge_methods_supported"] = ["S256"]
+            meta["response_types_supported"] = ["code"]
+        return meta
 
     @r.get("/.well-known/jwks.json", operation_id="jwks")
     async def jwks() -> dict[str, Any]:
         return {"keys": [k.public_jwk() for k in ctx.verify_keys]}
+
+    @r.post("/oauth/authorize", operation_id="authorizeStub", response_model=None)
+    async def authorize_stub(body: AuthorizeStubIn) -> dict[str, Any]:
+        """授权端点骨架：stub 签发 code；真浏览器 redirect 同意页后接。"""
+        if not s.oauth_pkce_enabled:
+            raise PlatformError(ErrorCode.PRECONDITION_FAILED, "authorization_code + PKCE 未启用")
+        if not s.oauth_pkce_stub:
+            raise PlatformError(
+                ErrorCode.PRECONDITION_FAILED,
+                "非 stub 模式需浏览器同意页；本地请设 AIP_OAUTH_PKCE_STUB=true",
+            )
+        if not body.redirect_uri.startswith(("http://127.0.0.1", "http://localhost", "https://")):
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "redirect_uri 不在骨架允许列表")
+        consumer_id, c = ctx.resolver.consumer(body.client_id)
+        user_id = ctx.resolver.map_subject(consumer_id, c, body.subject)
+        audience = body.resource or s.mcp_resource
+        if audience not in ctx.audiences:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "resource 不是本平台的受保护资源")
+        code = issue_auth_code(
+            ctx.auth_codes,
+            client_id=body.client_id,
+            user_id=user_id,
+            redirect_uri=body.redirect_uri,
+            code_challenge=body.code_challenge,
+            code_challenge_method=body.code_challenge_method,
+            resource=audience,
+            ttl_s=s.oauth_pkce_code_ttl_s,
+        )
+        return {
+            "code": code,
+            "expires_in": s.oauth_pkce_code_ttl_s,
+            "redirect_uri": body.redirect_uri,
+            "state": None,
+        }
 
     @r.post("/oauth/token", operation_id="token")
     async def token(
@@ -150,8 +206,42 @@ def router(ctx: AuthContext) -> APIRouter:
         client_assertion_type: Annotated[str | None, Form()] = None,
         client_assertion: Annotated[str | None, Form()] = None,
         resource: Annotated[str | None, Form()] = None,
+        code: Annotated[str | None, Form()] = None,
+        redirect_uri: Annotated[str | None, Form()] = None,
+        code_verifier: Annotated[str | None, Form()] = None,
         authorization: Annotated[str | None, Header()] = None,
     ) -> dict[str, Any]:
+        if grant_type == "authorization_code":
+            if not s.oauth_pkce_enabled:
+                raise PlatformError(ErrorCode.PRECONDITION_FAILED, "authorization_code + PKCE 未启用")
+            if not code or not redirect_uri or not code_verifier or not client_id:
+                raise PlatformError(
+                    ErrorCode.INVALID_ARGUMENT, "authorization_code 缺少 code/redirect_uri/code_verifier/client_id"
+                )
+            cid = await ctx.authenticate_client(authorization, client_id, client_assertion_type, client_assertion)
+            if cid != client_id:
+                raise PlatformError(ErrorCode.UNAUTHENTICATED, "client_id 与凭据不一致")
+            rec = ctx.auth_codes.take(code)
+            if rec is None:
+                raise PlatformError(ErrorCode.UNAUTHENTICATED, "授权码无效或已使用")
+            if rec.client_id != cid or rec.redirect_uri != redirect_uri:
+                raise PlatformError(ErrorCode.UNAUTHENTICATED, "授权码与 client/redirect 不匹配")
+            verify_pkce(code_verifier, rec.code_challenge, rec.code_challenge_method)
+            if rec.resource not in ctx.audiences:
+                raise PlatformError(ErrorCode.INVALID_ARGUMENT, "resource 不是本平台的受保护资源")
+            p = ctx.resolver.for_user(cid, rec.user_id, auth_mode="token_exchange")
+            tok, ttl = platform_token.issue(
+                ctx.key,
+                issuer=s.issuer,
+                audience=rec.resource,
+                kind="user",
+                subject=str(p.user_id),
+                client_id=cid,
+                agent_profile=None,
+                ttl_s=s.access_token_ttl_s,
+            )
+            return {"access_token": tok, "token_type": "Bearer", "expires_in": ttl}
+
         audience = resource or s.mcp_resource
         if audience not in ctx.audiences:
             raise PlatformError(ErrorCode.INVALID_ARGUMENT, "resource 不是本平台的受保护资源")

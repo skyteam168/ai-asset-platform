@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    LargeBinary,
     MetaData,
     SmallInteger,
     Table,
@@ -157,6 +158,42 @@ console_session = Table(
     _ts("expires_at"),
     _ts("absolute_expires_at"),
     Column("revoked", Boolean),
+)
+external_login = Table(
+    "external_login",
+    md,
+    Column("provider", Text, primary_key=True),
+    Column("external_id", Text, primary_key=True),
+    _id("user_id"),
+    _id("company_id"),
+    _ts("created_at"),
+    _id("created_by"),
+)
+webauthn_credential = Table(
+    "webauthn_credential",
+    md,
+    _id(pk=True),
+    _id("user_id"),
+    _id("company_id"),
+    Column("credential_id", Text),
+    Column("public_key_cose", LargeBinary),
+    Column("sign_count", BigInteger),
+    Column("transports", ARRAY(Text)),
+    Column("nickname", Text),
+    _ts("created_at"),
+    _ts("last_used_at"),
+)
+webauthn_challenge = Table(
+    "webauthn_challenge",
+    md,
+    _id(pk=True),
+    _id("user_id"),
+    _id("company_id"),
+    Column("kind", Text),
+    Column("challenge", Text),
+    _ts("expires_at"),
+    _ts("consumed_at"),
+    _ts("created_at"),
 )
 consumer = Table(
     "consumer",

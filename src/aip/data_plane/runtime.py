@@ -719,6 +719,34 @@ class ToolRuntime:
                 )
             return _result(prev, next_action=_confirm_action(prev))
         await self.confirmations.create(conf)
+        # 确认到期提醒进 outbox（email + 可选 IM；短连接，失败不影响确认流）
+        try:
+            from sqlalchemy import text
+            from sqlalchemy.ext.asyncio import create_async_engine
+
+            from aip.libs.common.config import get_settings
+            from aip.libs.notify import enqueue_channels
+
+            settings = get_settings()
+            recipient = conf.get("end_user_id") or conf.get("approver_role") or "operator"
+            engine = create_async_engine(settings.app_database_url)
+            try:
+                async with engine.begin() as conn:
+                    await conn.execute(text("SELECT set_config('app.bypass_rls', 'on', true)"))
+                    await enqueue_channels(
+                        conn,
+                        company_id=str(conf["company_id"]),
+                        recipient=str(recipient),
+                        subject=f"确认待办：{conf.get('summary', '')[:80]}",
+                        body=f"调用确认将于 {conf['expires_at'].isoformat()} 到期，请登录控制台处理。",
+                        kind="confirmation",
+                        ref={"confirmation_id": conf["id"], "execution_id": rec["id"]},
+                        im_enabled=bool(settings.notify_im_webhook_url),
+                    )
+            finally:
+                await engine.dispose()
+        except Exception:  # 通知失败不影响确认流
+            log.exception("enqueue confirmation notify failed")
         await self.audit.append_async(
             "confirmation.created",
             company_id=rec["company_id"],

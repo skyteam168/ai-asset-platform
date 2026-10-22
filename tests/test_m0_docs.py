@@ -206,4 +206,4 @@ def test_openapi_has_tls_and_oauth_endpoints() -> None:
 
 def test_adrs_complete() -> None:
     adrs = sorted(p.name for p in (ROOT / "docs/adr").glob("0*.md"))
-    assert adrs == ["0000-template.md", *[f"{i:04d}.md" for i in range(1, 26)]]
+    assert adrs == ["0000-template.md", *[f"{i:04d}.md" for i in range(1, 27)]]

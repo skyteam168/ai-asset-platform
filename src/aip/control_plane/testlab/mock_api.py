@@ -23,6 +23,11 @@ class PrismMockIn(BaseModel):
 def router() -> APIRouter:
     r = APIRouter(tags=["testlab"])
 
+    @r.get(f"{V}/prism-mocks", operation_id="listPrismMocks")
+    async def list_mocks(actor: ActorDep) -> dict[str, Any]:
+        items = svc.list_mocks(actor)
+        return {"items": items, "has_more": False}
+
     @r.post(f"{V}/prism-mocks", operation_id="createPrismMock", status_code=201)
     async def create(body: PrismMockIn, actor: ActorDep) -> dict[str, Any]:
         return svc.create_mock(

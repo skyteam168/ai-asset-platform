@@ -66,7 +66,7 @@ export const SURFACE: Record<Mode, {
 
 const KEY = "aip.theme";
 const DEFAULTS: ThemePrefs = { mode: "light", primary: PRESETS[0].color, compact: false };
-const ANTD_LOCALE: Record<Lang, Locale> = { "zh-CN": zhCN, "en-US": enUS, "vi-VN": viVN };
+const ANTD_LOCALE: Record<Lang, Locale> = { "zh-CN": zhCN, "en-US": enUS, "vi-VN": viVN, "km-KH": enUS };
 
 function load(): ThemePrefs {
   try {
