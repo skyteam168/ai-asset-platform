@@ -337,7 +337,7 @@ async def read_package_bytes(conn: AsyncConnection, version_id: uuid.UUID) -> by
     if key:
         try:
             return await skill_store.get_skill_zip(str(key))
-        except Exception:  # noqa: BLE001 — 回落 bytea
+        except Exception:
             pass
     return bytes(row["zip_bytes"])
 

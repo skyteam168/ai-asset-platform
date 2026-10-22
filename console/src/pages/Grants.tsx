@@ -1,9 +1,10 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Typography } from "antd";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Modal, Select, Space, Tabs, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, OrgName, PageCard, PAGINATION, StateTag, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, Ceiling, Consumer, Grant } from "../types";
 import { t } from "../i18n";
@@ -57,7 +58,7 @@ function Ceilings(p: Lookups & { admin: boolean }) {
         </Form>
       )}
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<Ceiling> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
+      <ListTable<Ceiling> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("分公司"), dataIndex: "company_id", render: (v) => <OrgName id={v} /> },
           { title: t("资产"), dataIndex: "asset_ids", render: (ids: string[]) => ids.map(p.assetName).join("，") },
@@ -116,7 +117,7 @@ function Grants(p: Lookups) {
     <>
       {has("platform_admin", "company_admin") && <Button type="primary" style={{ marginBottom: 12 }} onClick={() => setOpen(true)}>{t("新建授权")}</Button>}
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<Grant> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
+      <ListTable<Grant> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("资产"), dataIndex: "asset_id", render: p.assetName },
           { title: t("被授权方"), key: "grantee", render: (_, g) => `${g.grantee_type}：${g.grantee_type === "consumer" ? p.consumerName(g.grantee_id) : g.grantee_id.slice(0, 8)}` },
@@ -185,7 +186,7 @@ function Usage(p: Lookups) {
         <Button htmlType="submit" type="primary">{t("提交申请")}</Button>
       </Form>
       {list.error && <Alert type="error" message={list.error} />}
-      <Table<UsageRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
+      <ListTable<UsageRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: t("消费方"), dataIndex: "consumer_id", render: p.consumerName },
           { title: t("资产"), dataIndex: "asset_id", render: p.assetName },

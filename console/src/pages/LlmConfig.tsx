@@ -1,8 +1,9 @@
-import { Alert, Button, Form, Input, InputNumber, Select, Space, Table, Typography } from "antd";
+import { Alert, Button, Form, Input, InputNumber, Select, Space, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { get, put } from "../api";
 import { useAuth } from "../auth";
 import { OrgName, PageCard, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import { t } from "../i18n";
 
@@ -132,7 +133,7 @@ function CompanyLlmPanel({ companyId }: { companyId: string }) {
       <Typography.Title level={5} style={{ marginTop: 24 }}>
         {t("当前白名单")}
       </Typography.Title>
-      <Table
+      <ListTable
         size="small"
         rowKey="name"
         pagination={false}

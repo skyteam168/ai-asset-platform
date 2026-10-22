@@ -1,7 +1,8 @@
-import { Alert, Descriptions, Table, Typography } from "antd";
+import { Alert, Descriptions, Typography } from "antd";
 import { useParams } from "react-router-dom";
 import { get } from "../api";
 import { JsonView, PageCard, StateTag } from "../components";
+import { ListTable } from "../ListTable";
 import { useLoad } from "../hooks";
 import type { RunView } from "../types";
 import { t } from "../i18n";
@@ -31,7 +32,7 @@ export function RunsPage() {
             <Descriptions.Item label="trace">{view.trace_id || "-"}</Descriptions.Item>
           </Descriptions>
           <Typography.Title level={5}>{t("步骤")}</Typography.Title>
-          <Table
+          <ListTable
             size="small"
             pagination={false}
             rowKey="node_id"

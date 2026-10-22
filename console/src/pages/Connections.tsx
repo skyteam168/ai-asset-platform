@@ -1,9 +1,10 @@
-import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Tabs, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
 import { get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { matches, OrgName, PageCard, PAGINATION, StateTag, Toolbar, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { Connection, ConnectionTest } from "../types";
 import { t } from "../i18n";
@@ -11,6 +12,11 @@ import { ConnectorInstancesTab } from "./ConnectorInstances";
 
 /** 传输方式标签：明文与不校验证书醒目标出（architecture.md 9.6）。 */
 export function TransportTag({ c }: { c: Pick<Connection, "scheme" | "tls_mode"> }) {
+  if (c.scheme === "postgres" || c.scheme === "mysql") {
+    const eng = c.scheme === "postgres" ? "PostgreSQL" : "MySQL";
+    if (c.tls_mode === "insecure") return <Tag color="volcano">{eng} · {t("不校验证书")}</Tag>;
+    return <Tag color="cyan">{eng}</Tag>;
+  }
   if (c.scheme === "http") return <Tag color="red">{t("明文 HTTP")}</Tag>;
   if (c.tls_mode === "insecure") return <Tag color="volcano">{t("不校验证书")}</Tag>;
   if (c.tls_mode === "pinned") return <Tag color="blue">{t("HTTPS · 固定指纹")}</Tag>;
@@ -30,7 +36,7 @@ export function ConnectionsPage() {
       <Toolbar placeholder={t("系统 / 地址 / 环境")} onSearch={setKw}
         actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("登记连接")}</Button>} />
       {conns.error && <Alert type="error" message={conns.error} />}
-      <Table<Connection> pagination={PAGINATION} rowKey="id" loading={conns.loading} dataSource={(conns.data?.items ?? []).filter((c) => matches(c, kw, ["system_key", "base_url", "env"]))}
+      <ListTable<Connection> pagination={PAGINATION} rowKey="id" loading={conns.loading} dataSource={(conns.data?.items ?? []).filter((c) => matches(c, kw, ["system_key", "base_url", "env"]))}
         columns={[
           { title: t("系统"), dataIndex: "system_key", render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
           { title: t("环境"), dataIndex: "env" },
@@ -42,7 +48,9 @@ export function ConnectionsPage() {
           {
             title: t("操作"), key: "ops", render: (_, c) => (
               <Space>
-                <Button size="small" onClick={() => setTesting(c)}>{t("连接测试")}</Button>
+                {(c.scheme === "http" || c.scheme === "https") && (
+                  <Button size="small" onClick={() => setTesting(c)}>{t("连接测试")}</Button>
+                )}
                 {c.status === "pending_approval" && has("data_owner") && (
                   <Button size="small" type="primary" onClick={async () => {
                     const r = await act(() => post<{ status: string }>(`/connections/${c.id}/approve-exception`));
@@ -73,11 +81,18 @@ function NewConnection(p: { open: boolean; onClose: () => void; onDone: () => vo
   const act = useAction();
   const scheme = Form.useWatch("scheme", form);
   const tlsMode = Form.useWatch("tls_mode", form);
+  const isDb = scheme === "postgres" || scheme === "mysql";
   const exception = scheme === "http" || tlsMode === "insecure";
   return (
     <Modal open={p.open} title={t("登记系统连接")} width={640} onCancel={p.onClose} onOk={() => form.submit()} destroyOnClose>
       <Form form={form} layout="vertical" preserve={false}
         initialValues={{ scheme: "https", tls_mode: "system_ca", env: "test", tls_check_hostname: true }}
+        onValuesChange={(ch) => {
+          if (ch.scheme === "postgres") form.setFieldsValue({ base_url: "postgres://host:5432/dbname", tls_mode: "system_ca" });
+          if (ch.scheme === "mysql") form.setFieldsValue({ base_url: "mysql://host:3306/dbname", tls_mode: "system_ca" });
+          if (ch.scheme === "https") form.setFieldsValue({ base_url: "https://", tls_mode: "system_ca" });
+          if (ch.scheme === "http") form.setFieldsValue({ base_url: "http://", tls_mode: undefined });
+        }}
         onFinish={async (v) => {
           const body = {
             ...v,
@@ -98,19 +113,31 @@ function NewConnection(p: { open: boolean; onClose: () => void; onDone: () => vo
             <Select style={{ width: 110 }} options={["sandbox", "test", "staging", "prod"].map((e) => ({ value: e, label: e }))} />
           </Form.Item>
         </Space>
-        <Form.Item name="base_url" label={t("地址")} rules={[{ required: true, pattern: /^https?:\/\//, message: t("以 http:// 或 https:// 开头") }]}>
-          <Input placeholder="https://10.10.1.20:8443" />
+        <Form.Item name="base_url" label={t("地址")} rules={[{
+          required: true,
+          pattern: isDb ? /^(postgres|mysql):\/\// : /^https?:\/\//,
+          message: isDb ? t("以 postgres:// 或 mysql:// 开头（勿含密码）") : t("以 http:// 或 https:// 开头"),
+        }]}>
+          <Input placeholder={isDb ? "postgres://10.10.1.20:5432/erp_ro" : "https://10.10.1.20:8443"} />
         </Form.Item>
         <Space style={{ display: "flex" }} align="start">
-          <Form.Item name="scheme" label={t("协议")}><Select style={{ width: 110 }} options={[{ value: "https", label: "https" }, { value: "http", label: "http" }]} /></Form.Item>
-          {scheme === "https" && (
+          <Form.Item name="scheme" label={t("协议")}>
+            <Select style={{ width: 120 }} options={[
+              { value: "https", label: "https" }, { value: "http", label: "http" },
+              { value: "postgres", label: "postgres" }, { value: "mysql", label: "mysql" },
+            ]} />
+          </Form.Item>
+          {(scheme === "https" || isDb) && (
             <Form.Item name="tls_mode" label={t("TLS 策略")}>
-              <Select style={{ width: 220 }} options={[
+              <Select style={{ width: 220 }} options={isDb ? [
+                { value: "system_ca", label: t("系统 CA") }, { value: "custom_ca", label: t("内部 CA") },
+                { value: "insecure", label: t("不校验证书（例外）") },
+              ] : [
                 { value: "system_ca", label: t("系统 CA") }, { value: "custom_ca", label: t("内部 CA") },
                 { value: "pinned", label: t("固定指纹（自签推荐）") }, { value: "insecure", label: t("不校验证书（例外）") }]} />
             </Form.Item>
           )}
-          {tlsMode === "insecure" && (
+          {tlsMode === "insecure" && !isDb && (
             <Form.Item name="tls_check_hostname" label={t("仍校验主机名")} valuePropName="checked"><Switch /></Form.Item>
           )}
         </Space>

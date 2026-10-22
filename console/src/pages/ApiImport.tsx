@@ -1,7 +1,8 @@
-import { Alert, Button, Checkbox, Drawer, Form, Input, Radio, Select, Space, Steps, Table, Tag, Typography, Upload } from "antd";
+import { Alert, Button, Checkbox, Drawer, Form, Input, Radio, Select, Space, Steps, Tag, Typography, Upload } from "antd";
 import { useState } from "react";
 import { post } from "../api";
 import { JsonView, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction } from "../hooks";
 import type { Connection, ImporterResult } from "../types";
 import { t } from "../i18n";
@@ -53,7 +54,7 @@ export function ApiImportDrawer(p: { open: boolean; connections: Connection[]; o
   const close = () => { setPreview(null); setResult(null); p.onClose(); };
   const tools = (preview?.tools ?? []) as unknown as Draft[];
   return (
-    <Drawer open={p.open} width={980} title={t("API 导入：OpenAPI / Postman → 声明式 Connector 与 Tool 草稿")} onClose={close} destroyOnClose>
+    <Drawer open={p.open} width={980} title={t("API 导入：OpenAPI / Swagger / Postman → 声明式 Connector 与 Tool 草稿")} onClose={close} destroyOnClose>
       <Steps size="small" current={step} style={{ marginBottom: 16 }}
         items={[{ title: t("粘贴或上传文档") }, { title: t("预览草稿") }, { title: t("落库") }]} />
       <Form form={form} layout="vertical" preserve={false}
@@ -61,7 +62,7 @@ export function ApiImportDrawer(p: { open: boolean; connections: Connection[]; o
         onValuesChange={(changed) => { if ("document" in changed || "format" in changed || "connector_name" in changed) { setPreview(null); setResult(null); } }}>
         <Space style={{ display: "flex" }} align="start" wrap>
           <Form.Item name="format" label={t("格式")}>
-            <Radio.Group optionType="button" options={[{ value: "openapi", label: "OpenAPI 3.x" }, { value: "postman", label: "Postman v2.x" }]} />
+            <Radio.Group optionType="button" options={[{ value: "openapi", label: t("OpenAPI / Swagger") }, { value: "postman", label: "Postman v2.x" }]} />
           </Form.Item>
           <Form.Item name="connector_name" label={t("Connector 名称")} style={{ width: 220 }}
             rules={[{ required: true, pattern: /^[a-z][a-z0-9_]{2,63}$/, message: t("小写字母开头，仅含 a-z / 0-9 / _") }]}>
@@ -87,7 +88,7 @@ export function ApiImportDrawer(p: { open: boolean; connections: Connection[]; o
             </Upload>
           )}>
           <Input.TextArea rows={8} spellCheck={false} style={{ fontFamily: "Consolas, monospace", fontSize: 12 }}
-            placeholder={t("粘贴 OpenAPI 3.x 或 Postman Collection v2.x 文档")} />
+            placeholder={t("粘贴 OpenAPI 3.x、Swagger 2.0 或 Postman Collection v2.x 文档")} />
         </Form.Item>
         <Space align="start" wrap>
           <Form.Item name="enrich_descriptions" valuePropName="checked">
@@ -107,7 +108,7 @@ export function ApiImportDrawer(p: { open: boolean; connections: Connection[]; o
               <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("导入提示（{0}）", [preview.warnings.length])}
                 description={preview.warnings.map((w) => <div key={w}>· {w}</div>)} />
             )}
-            <Table<Draft> rowKey="capability_id" size="small" pagination={false} dataSource={tools}
+            <ListTable<Draft> rowKey="capability_id" size="small" pagination={false} dataSource={tools}
               expandable={{ expandedRowRender: (d) => <JsonView value={d} /> }}
               columns={[
                 { title: "capability_id", dataIndex: "capability_id", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },

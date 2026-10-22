@@ -621,7 +621,7 @@ async def _skill_guidance_text(conn: AsyncConnection, asset_type: str, version_i
         text = files[skill_pkg.SKILL_MD].decode("utf-8")
         _, body = skill_pkg.parse_frontmatter(text)
         return body.strip() or text
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

@@ -24,7 +24,7 @@ def validate_skill_files(files: dict[str, bytes]) -> list[str]:
         return ["缺少 SKILL.md，无法执行 skills-ref validate"]
     try:
         meta, _ = skill_pkg.parse_frontmatter(files[skill_pkg.SKILL_MD].decode("utf-8"))
-    except Exception as e:  # noqa: BLE001 — 交给 G0 汇总
+    except Exception as e:
         return [f"skills-ref：无法解析 SKILL.md（{e}）"]
     name = (meta.get("name") or "").strip()
     if not name:

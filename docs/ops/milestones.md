@@ -1126,6 +1126,59 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 能力 | `nike.sample.app_13` / `pc_12` / `app_8` |
 | 不在本片 | 其余 46 个草稿批量上架；写类 Tool；打真机 10.10.131.188 |
 
+### H39f MySQL 只读引擎 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `:name` → `%s` 绑定 | 通过 | `test_bind_named_mysql_style` |
+| `build_client` 拒绝 mysql | 通过 | `test_build_client_rejects_mysql` |
+| 真机 SELECT（可选） | 跳过无环境 | `@pytest.mark.mysql` + `AIP_TEST_MYSQL_URL`；`optional-dependencies mysql`（asyncmy） |
+| 会话只读 | 通过 | `START TRANSACTION READ ONLY` + `MAX_EXECUTION_TIME` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `sql_readonly._fetch_mysql`；`dbclient.pool` asyncmy；`pyproject` `[mysql]` |
+| 不在本片 | compose 内置 MySQL；EXPLAIN 成本门禁（MySQL 返回 None） |
+
+### H39e 控制台 SQL 只读 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 连接登记 postgres/mysql | 通过 | Connections TransportTag + scheme 表单 |
+| sql_readonly 实例 + SQL 模板抽屉 | 通过 | ConnectorInstances SqlTemplatesDrawer |
+| i18n 覆盖 | 通过 | en-US / vi-VN；`npm test` i18n |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | Assets 页创建 Tool 直接选 SQL operation（走模板 activate 后 Runtime） |
+
+### H39a–d sql_readonly（ADR-0026）— 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| scheme postgres/mysql + kind sql_readonly | 通过 | 迁移 `20261022_0025`；conn schemas/api |
+| PG SELECT 模板 + LIMIT；多语句/非 SELECT 拒绝 | 通过 | `test_h39_sql_readonly` |
+| 模板 API create / try / activate | 通过 | `test_sql_template_api_create_activate_try` |
+| `build_client` 拒绝 DB scheme | 通过 | `test_build_client_rejects_postgres` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | ADR-0026；architecture 9.5/16.1；`SqlReadonlyConnector`；`conn.sql_query_template` |
+| 不在本片 | MySQL 真机（H39f）；控制台（H39e） |
+
+### H38 Swagger 2.0 Importer 兼容 — 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Swagger 2.0 preview 出 operation | 通过 | `test_h38_swagger2.py::test_preview_swagger2_upgrades`（list_pets / create_pet） |
+| Swagger 1.x 拒绝；OpenAPI 3 回归 | 通过 | `test_swagger_1_rejected`；`test_openapi3_unchanged` + `test_h2_importer` |
+| 控制台文案含 Swagger | 通过 | ApiImport + en/vi |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `importer/swagger2.py`；`openapi.load_document` 自动升级 |
+| 不在本片 | 外部 `$ref` 拉取；完整 OAuth2 flow 还原 |
+
 ### H37 资产列表公司→系统级联筛选 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |

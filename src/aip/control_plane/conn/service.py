@@ -8,7 +8,21 @@ import uuid
 from typing import Any
 
 import jsonschema
-from sqlalchemy import ARRAY, REAL, Boolean, Column, DateTime, Integer, MetaData, Table, Text, and_, select, update
+from sqlalchemy import (
+    ARRAY,
+    REAL,
+    Boolean,
+    Column,
+    DateTime,
+    Integer,
+    MetaData,
+    Table,
+    Text,
+    and_,
+    select,
+    text,
+    update,
+)
 from sqlalchemy.dialects.postgresql import CIDR, JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -288,6 +302,31 @@ async def check_release_connection(conn: AsyncConnection, spec: dict[str, Any], 
     check_tool_on_connection(spec, await row(conn, inst["system_connection_id"]))
 
 
+async def _active_sql_templates(conn: AsyncConnection, instance_id: uuid.UUID) -> dict[str, Any]:
+    rows = (
+        await conn.execute(
+            text(
+                "SELECT template_key, engine, statement, param_schema, max_rows, "
+                "statement_timeout_ms, explain_cost_cap, output_field_whitelist "
+                "FROM conn.sql_query_template WHERE connector_instance_id = :iid AND status = 'active'"
+            ),
+            {"iid": instance_id},
+        )
+    ).mappings().all()
+    out: dict[str, Any] = {}
+    for r in rows:
+        out[str(r["template_key"])] = {
+            "engine": r["engine"],
+            "statement": r["statement"],
+            "param_schema": r["param_schema"] or {},
+            "max_rows": r["max_rows"],
+            "statement_timeout_ms": r["statement_timeout_ms"],
+            "explain_cost_cap": float(r["explain_cost_cap"]) if r["explain_cost_cap"] is not None else None,
+            "output_field_whitelist": list(r["output_field_whitelist"] or []),
+        }
+    return out
+
+
 async def snapshot_part(conn: AsyncConnection) -> dict[str, Any]:
     """供发布快照使用：启用的 Connector 实例及其连接（只含凭据引用，不含明文）。"""
     await expire_exceptions(conn)
@@ -295,11 +334,14 @@ async def snapshot_part(conn: AsyncConnection) -> dict[str, Any]:
     out = []
     for i in (await conn.execute(select(connector_instance).where(connector_instance.c.status == "active"))).mappings():
         c = conns.get(i["system_connection_id"])
+        cfg = dict(i["config"] or {})
+        if i["kind"] == "sql_readonly":
+            cfg = {**cfg, "templates": await _active_sql_templates(conn, i["id"])}
         out.append(
             {
                 "name": i["name"],
                 "kind": i["kind"],
-                "config": i["config"],
+                "config": cfg,
                 "concurrency": i["concurrency"],
                 "rate_per_s": i["rate_per_s"],
                 "burst": i["burst"],

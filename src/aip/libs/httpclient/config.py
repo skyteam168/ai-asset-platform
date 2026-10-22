@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-Scheme = Literal["https", "http"]
+Scheme = Literal["https", "http", "postgres", "mysql"]
 TlsMode = Literal["system_ca", "custom_ca", "pinned", "insecure"]
 EventSink = Callable[[str, dict[str, Any]], None]
 Resolver = Callable[[str, int], Awaitable[list[str]]]
@@ -45,12 +45,20 @@ class ConnectionConfig:
 
     @property
     def is_transport_exception(self) -> bool:
-        """http 与 https + insecure 属于传输例外：需审批、限内网、带到期日（architecture.md 9.6）。"""
+        """http 与 * + insecure 属于传输例外：需审批、限内网、带到期日（architecture.md 9.6、ADR-0026）。"""
         return self.scheme == "http" or self.tls_mode == "insecure"
 
     @property
+    def is_http_transport(self) -> bool:
+        return self.scheme in ("http", "https")
+
+    @property
     def tls_verified(self) -> bool:
-        return self.scheme == "https" and self.tls_mode in ("system_ca", "custom_ca", "pinned")
+        return self.scheme in ("https", "postgres", "mysql") and self.tls_mode in (
+            "system_ca",
+            "custom_ca",
+            "pinned",
+        )
 
     @staticmethod
     def from_dict(d: dict[str, Any]) -> ConnectionConfig:

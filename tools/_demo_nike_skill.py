@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime, timedelta
 
 import pyotp
 
@@ -86,7 +85,7 @@ def main() -> None:
         assert st in (200, 201) and isinstance(created, dict)
         aid = created["id"]
 
-    zip_bytes = pkg.make_zip(
+    pkg.make_zip(
         {
             "SKILL.md": (
                 f"---\nname: {NAME}\n"

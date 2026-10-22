@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aip.internal/sql-query-template.schema.json",
+  "title": "sql_query_template（architecture.md 9.5、ADR-0026）",
+  "type": "object",
+  "properties": {
+    "template_key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{1,63}$"
+    },
+    "engine": {
+      "enum": [
+        "postgres",
+        "mysql"
+      ]
+    },
+    "statement": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 20000
+    },
+    "param_schema": {
+      "type": "object"
+    },
+    "max_rows": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "default": 200
+    },
+    "statement_timeout_ms": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 60000,
+      "default": 5000
+    },
+    "explain_cost_cap": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "output_field_whitelist": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    }
+  },
+  "required": [
+    "template_key",
+    "engine",
+    "statement",
+    "param_schema"
+  ],
+  "additionalProperties": false
+}

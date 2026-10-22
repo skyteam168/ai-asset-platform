@@ -1510,6 +1510,108 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/connector-instances/{id}/sql-templates:
+    get:
+      operationId: listSqlTemplates
+      tags:
+      - connection
+      summary: 列出 SQL 只读模板
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      operationId: createSqlTemplate
+      tags:
+      - connection
+      summary: 登记 SQL 只读模板（draft）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/sql-templates/{id}:
+    put:
+      operationId: updateSqlTemplate
+      tags:
+      - connection
+      summary: 更新 SQL 只读模板（回 draft）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/sql-templates/{id}/try:
+    post:
+      operationId: trySqlTemplate
+      tags:
+      - connection
+      summary: 试跑 SQL 只读模板
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/sql-templates/{id}/activate:
+    post:
+      operationId: activateSqlTemplate
+      tags:
+      - connection
+      summary: 激活 SQL 只读模板（含 EXPLAIN 成本门）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/connections/{id}/test:
     post:
       operationId: testConnection

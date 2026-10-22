@@ -185,7 +185,8 @@ def _ssl_context(conn: ConnectionConfig) -> ssl.SSLContext:
 def check_connection_usable(conn: ConnectionConfig, now: dt.datetime | None = None) -> None:
     """构造客户端前的静态检查：协议一致、连接未停用、传输例外有效。"""
     url = httpx.URL(conn.base_url)
-    if url.scheme != conn.scheme or (conn.scheme == "https") != (conn.tls_mode is not None):
+    tls_ok = (conn.scheme == "http") == (conn.tls_mode is None)
+    if url.scheme != conn.scheme or not tls_ok:
         raise PlatformError(ErrorCode.SCHEME_MISMATCH, "base_url 协议与连接配置不一致")
     if conn.status != "active":
         raise PlatformError(ErrorCode.TRANSPORT_EXCEPTION_EXPIRED, "连接已停用")
@@ -206,7 +207,12 @@ def build_client(
     trace_id: str = "",
     extra_headers: dict[str, str] | None = None,
 ) -> httpx.AsyncClient:
-    """按连接的 scheme 与 tls_mode 构造出站客户端。所有 Connector 必须经此出站。"""
+    """按连接的 scheme 与 tls_mode 构造出站客户端。所有 HTTP Connector 必须经此出站。"""
+    if conn.scheme not in ("http", "https"):
+        raise PlatformError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"build_client 不支持 scheme={conn.scheme}（数据库连接请用 libs.dbclient）",
+        )
     sink = on_event if on_event is not None else _noop
     try:
         check_connection_usable(conn)

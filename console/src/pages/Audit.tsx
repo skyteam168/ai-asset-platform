@@ -1,9 +1,10 @@
-import { Alert, Button, DatePicker, Form, Input, InputNumber, Table, Tag, Typography } from "antd";
+import { Alert, Button, DatePicker, Form, Input, InputNumber, Tag, Typography } from "antd";
 import type { Dayjs } from "dayjs";
 import { useState } from "react";
 import { get, post, query, type Page } from "../api";
 import { useAuth } from "../auth";
 import { JsonView, OrgName, PageCard, PAGINATION } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { AuditRecord } from "../types";
 import { t } from "../i18n";
@@ -49,7 +50,7 @@ export function AuditPage() {
           description={verify.problems.map((x) => <div key={x}>{x}</div>)} />
       )}
       {logs.error && <Alert type="error" message={logs.error} />}
-      <Table<AuditRecord> rowKey={(r) => `${r.shard_id}-${r.seq}`} loading={logs.loading}
+      <ListTable<AuditRecord> rowKey={(r) => `${r.shard_id}-${r.seq}`} loading={logs.loading}
         dataSource={logs.data?.items ?? []} pagination={{ ...PAGINATION, defaultPageSize: 20 }}
         expandable={{ expandedRowRender: (r) => <JsonView value={r.record} /> }}
         footer={() => (logs.data?.has_more ? t("结果已截断，请缩小时间范围或提高条数上限") : null)}

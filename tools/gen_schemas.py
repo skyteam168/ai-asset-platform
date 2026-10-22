@@ -385,8 +385,12 @@ CONN = obj(
     {
         "system_key": {"type": "string"},
         "env": {"enum": ["sandbox", "test", "staging", "prod"]},
-        "base_url": {"type": "string", "pattern": "^https?://"},
-        "scheme": {"enum": ["https", "http"]},
+        # HTTP(S) 或 DB URI（不含密码）；见 ADR-0026
+        "base_url": {
+            "type": "string",
+            "pattern": "^(https?|postgres|mysql)://",
+        },
+        "scheme": {"enum": ["https", "http", "postgres", "mysql"]},
         "tls_mode": {"enum": ["system_ca", "custom_ca", "pinned", "insecure", None]},
         "tls_profile_id": NULLSTR,
         "tls_check_hostname": {"type": "boolean", "default": True},
@@ -425,10 +429,48 @@ CONN = obj(
                 },
             },
         ),
+        when(
+            "scheme",
+            "postgres",
+            {
+                "required": ["tls_mode"],
+                "properties": {
+                    "tls_mode": {"enum": ["system_ca", "custom_ca", "insecure"]},
+                    "base_url": {"pattern": "^postgres://"},
+                },
+            },
+        ),
+        when(
+            "scheme",
+            "mysql",
+            {
+                "required": ["tls_mode"],
+                "properties": {
+                    "tls_mode": {"enum": ["system_ca", "custom_ca", "insecure"]},
+                    "base_url": {"pattern": "^mysql://"},
+                },
+            },
+        ),
         when("tls_mode", "pinned", {"required": ["pins"], "properties": {"pins": {"minItems": 1}}}),
         when("tls_mode", "custom_ca", {"required": ["tls_profile_id"]}),
         when("tls_mode", "insecure", {"required": ["transport_exception_reason", "transport_exception_expires_at"]}),
     ],
+)
+
+# 数据库只读查询模板（architecture.md 9.5、ADR-0026）
+SQL_TEMPLATE = obj(
+    {
+        "template_key": {"type": "string", "pattern": r"^[a-z][a-z0-9_]{1,63}$"},
+        "engine": {"enum": ["postgres", "mysql"]},
+        "statement": {"type": "string", "minLength": 8, "maxLength": 20000},
+        "param_schema": {"type": "object"},
+        "max_rows": {"type": "integer", "minimum": 1, "maximum": 1000, "default": 200},
+        "statement_timeout_ms": {"type": "integer", "minimum": 100, "maximum": 60000, "default": 5000},
+        "explain_cost_cap": {"type": ["number", "null"]},
+        "output_field_whitelist": {"type": "array", "items": {"type": "string"}, "default": []},
+    },
+    ["template_key", "engine", "statement", "param_schema"],
+    extra=False,
 )
 
 # Skill（architecture.md 6.2、10.4）：标准 Agent Skills 目录的元数据；包体另存 skill_package
@@ -515,7 +557,8 @@ SPECS = {
     "model-profile": ("model_profile（architecture.md 8.6）", MODEL_PROFILE),
     "policy-input": ("PDP 输入（architecture.md 4.4）", POLICY),
     "declarative-connector": ("声明式 REST Connector 映射（architecture.md 9.1）", DECL),
-    "system-connection": ("system_connection（architecture.md 9.6、11.3）", CONN),
+    "system-connection": ("system_connection（architecture.md 9.6、11.3、ADR-0026）", CONN),
+    "sql-query-template": ("sql_query_template（architecture.md 9.5、ADR-0026）", SQL_TEMPLATE),
 }
 
 

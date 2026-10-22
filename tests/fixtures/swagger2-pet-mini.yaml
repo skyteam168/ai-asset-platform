@@ -1,0 +1,66 @@
+swagger: "2.0"
+info:
+  title: Pet mini
+  version: "1.0.0"
+host: pet.example.local
+basePath: /v1
+schemes:
+  - https
+consumes:
+  - application/json
+produces:
+  - application/json
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List pets
+      parameters:
+        - name: status
+          in: query
+          type: string
+          required: false
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+              data:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/definitions/Pet"
+    post:
+      operationId: createPet
+      summary: Create pet
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            $ref: "#/definitions/Pet"
+      responses:
+        "201":
+          description: created
+          schema:
+            type: object
+            properties:
+              code:
+                type: integer
+              data:
+                $ref: "#/definitions/Pet"
+definitions:
+  Pet:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+      tag:
+        type: string

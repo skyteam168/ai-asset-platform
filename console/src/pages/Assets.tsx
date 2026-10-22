@@ -1,11 +1,11 @@
-import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Table, Tabs, Tag, Tooltip, Typography } from "antd";
+import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import {
-  Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matchOrgSystem, matches, OrgName, OrgSystemFilter,
-  PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs,
+  Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matchOrgSystem, matches, OrgName, OrgSystemFilter, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs,
 } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { Asset, GateRecord, ImpactItem, Release, TestCase, VersionDetail, VersionSummary } from "../types";
 import { t } from "../i18n";
@@ -87,7 +87,7 @@ export function AssetsPage() {
         actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("新建资产")}</Button>}
       />
       {assets.error && <Alert type="error" message={assets.error} />}
-      <Table<Asset>
+      <ListTable<Asset>
         pagination={PAGINATION}
         rowKey="id"
         loading={assets.loading}
@@ -174,7 +174,7 @@ function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => v
           <Space style={{ marginBottom: 12 }}>
             {has("platform_admin", "asset_developer") && <Button onClick={() => setNewOpen(true)}>{t("新建版本")}</Button>}
           </Space>
-          <Table<VersionSummary> rowKey="id" size="small" pagination={false} loading={versions.loading}
+          <ListTable<VersionSummary> rowKey="id" size="small" pagination={false} loading={versions.loading}
             dataSource={versions.data?.items ?? []}
             rowClassName={(r) => (r.id === versionId ? "ant-table-row-selected" : "")}
             onRow={(r) => ({ onClick: () => setVersionId(r.id), style: { cursor: "pointer" } })}
@@ -295,7 +295,7 @@ function VersionPanel({
   const activeRelease = (releases.data?.items ?? []).find((r) => r.version_id === versionId && r.status === "active" && r.prev_release_id);
   const tabs = [
     { key: "gates", label: t("门禁记录"), children: (
-      <Table<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
+      <ListTable<GateRecord> rowKey={(r) => `${r.gate}-${r.created_at}`} size="small" pagination={false} dataSource={gates.data?.items ?? []}
         expandable={{ expandedRowRender: (r) => <GateEvidence value={r.evidence} /> }}
         columns={[
           { title: t("门"), dataIndex: "gate" },
@@ -471,7 +471,7 @@ function ImpactTab({ versionId }: { versionId: string }) {
   return (
     <>
       {impact.error && <Alert type="error" message={impact.error} style={{ marginBottom: 8 }} />}
-      <Table<ImpactItem> rowKey="name" size="small" loading={impact.loading} pagination={false}
+      <ListTable<ImpactItem> rowKey="name" size="small" loading={impact.loading} pagination={false}
         locale={{ emptyText: t("无影响项") }}
         dataSource={impact.data?.items ?? []}
         columns={[
@@ -532,7 +532,7 @@ function Cases({ v, editable, onDone }: { v: VersionDetail; editable: boolean; o
   const act = useAction();
   return (
     <>
-      <Table<TestCase> rowKey="id" size="small" pagination={false} dataSource={v.test_cases}
+      <ListTable<TestCase> rowKey="id" size="small" pagination={false} dataSource={v.test_cases}
         expandable={{ expandedRowRender: (c) => <JsonView value={{ args: c.args, principal: c.principal, expect: c.expect }} /> }}
         columns={[
           { title: t("名称"), dataIndex: "name" },

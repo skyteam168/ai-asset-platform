@@ -1,9 +1,10 @@
-import { Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tabs, Tree, Typography } from "antd";
+import { Alert, Button, Card, Col, DatePicker, Descriptions, Drawer, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Tabs, Tree, Typography } from "antd";
 import dayjs from "dayjs";
 import { useMemo, useState } from "react";
 import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, OrgName, PAGINATION, StateTag, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { OrgUnit, RoleAssignment, User } from "../types";
 import { t } from "../i18n";
@@ -80,7 +81,7 @@ export function OrgsPage() {
             <Button size="small" type="primary" onClick={() => setUserOpen(true)}>{t("新建用户")}</Button>
           </Space>)}>
           {users.error && <Alert type="error" message={users.error} />}
-          <Table<User> rowKey="id" loading={users.loading} dataSource={shown} pagination={{ ...PAGINATION, defaultPageSize: 15 }}
+          <ListTable<User> rowKey="id" loading={users.loading} dataSource={shown} pagination={{ ...PAGINATION, defaultPageSize: 15 }}
             onRow={(r) => ({ onClick: () => setDrawerUser(r), style: { cursor: "pointer" } })}
             columns={[
               { title: t("姓名"), dataIndex: "display_name", render: (v) => <Typography.Link>{v}</Typography.Link> },
@@ -137,7 +138,7 @@ function BusinessRoles({ companyId, companyCode }: { companyId: string; companyC
         message={t("用于 Workflow 人工任务分派（如 role:purchase_manager@公司）；不授予控制台管理权限。")}
       />
       {roles.error && <Alert type="error" message={roles.error} style={{ marginBottom: 12 }} />}
-      <Table<BizRole>
+      <ListTable<BizRole>
         size="small"
         rowKey="code"
         loading={roles.loading}
@@ -290,7 +291,7 @@ function UserRolesTab({ userId, canManage, orgList }: { userId: string; canManag
   ];
   return (
     <Space direction="vertical" style={{ width: "100%" }}>
-      <Table<RoleAssignment> rowKey="id" size="small" loading={roles.loading} pagination={false}
+      <ListTable<RoleAssignment> rowKey="id" size="small" loading={roles.loading} pagination={false}
         dataSource={roles.data?.items ?? []}
         locale={{ emptyText: t("尚无角色") }}
         columns={[

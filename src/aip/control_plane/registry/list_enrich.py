@@ -21,7 +21,7 @@ def _host_from_url(url: str | None) -> str | None:
     try:
         p = urlparse(url)
         return p.netloc or None
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 

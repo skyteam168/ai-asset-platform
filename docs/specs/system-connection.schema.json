@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.aip.internal/system-connection.schema.json",
-  "title": "system_connection（architecture.md 9.6、11.3）",
+  "title": "system_connection（architecture.md 9.6、11.3、ADR-0026）",
   "type": "object",
   "properties": {
     "system_key": {
@@ -17,12 +17,14 @@
     },
     "base_url": {
       "type": "string",
-      "pattern": "^https?://"
+      "pattern": "^(https?|postgres|mysql)://"
     },
     "scheme": {
       "enum": [
         "https",
-        "http"
+        "http",
+        "postgres",
+        "mysql"
       ]
     },
     "tls_mode": {
@@ -159,6 +161,64 @@
           },
           "base_url": {
             "pattern": "^https://"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scheme": {
+            "const": "postgres"
+          }
+        },
+        "required": [
+          "scheme"
+        ]
+      },
+      "then": {
+        "required": [
+          "tls_mode"
+        ],
+        "properties": {
+          "tls_mode": {
+            "enum": [
+              "system_ca",
+              "custom_ca",
+              "insecure"
+            ]
+          },
+          "base_url": {
+            "pattern": "^postgres://"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "scheme": {
+            "const": "mysql"
+          }
+        },
+        "required": [
+          "scheme"
+        ]
+      },
+      "then": {
+        "required": [
+          "tls_mode"
+        ],
+        "properties": {
+          "tls_mode": {
+            "enum": [
+              "system_ca",
+              "custom_ca",
+              "insecure"
+            ]
+          },
+          "base_url": {
+            "pattern": "^mysql://"
           }
         }
       }

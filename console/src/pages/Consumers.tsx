@@ -1,8 +1,9 @@
-import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Descriptions, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
 import { get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import { Clearance, JsonInput, jsonRule, JsonView, matches, OrgName, PageCard, PAGINATION, parseJson, Toolbar, useOrgs } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { Binding, Consumer, CredentialMeta, User } from "../types";
 import { t } from "../i18n";
@@ -20,7 +21,7 @@ export function ConsumersPage() {
       <Toolbar placeholder={t("client_id / 联系人")} onSearch={setKw}
         actions={has("platform_admin") && <Button onClick={() => setOpen(true)}>{t("注册消费方")}</Button>} />
       {consumers.error && <Alert type="error" message={consumers.error} />}
-      <Table<Consumer> pagination={PAGINATION} rowKey="id" loading={consumers.loading} dataSource={(consumers.data?.items ?? []).filter((c) => matches(c, kw, ["client_id"]))}
+      <ListTable<Consumer> pagination={PAGINATION} rowKey="id" loading={consumers.loading} dataSource={(consumers.data?.items ?? []).filter((c) => matches(c, kw, ["client_id"]))}
         onRow={(r) => ({ onClick: () => setDetail(r), style: { cursor: "pointer" } })}
         columns={[
           { title: "client_id", dataIndex: "client_id", render: (v: string) => <Typography.Link>{v}</Typography.Link> },
@@ -105,7 +106,7 @@ function Bindings({ consumer }: { consumer: Consumer }) {
         </Form.Item>
         <Button htmlType="submit" type="primary">{t("添加绑定")}</Button>
       </Form>
-      <Table<Binding> rowKey="id" size="small" loading={bindings.loading} dataSource={bindings.data?.items ?? []}
+      <ListTable<Binding> rowKey="id" size="small" loading={bindings.loading} dataSource={bindings.data?.items ?? []}
         columns={[
           { title: t("消费方侧标识"), dataIndex: "external_subject" },
           { title: t("平台用户"), dataIndex: "user_id", render: userName },
@@ -132,7 +133,7 @@ function Credentials({ consumer }: { consumer: Consumer }) {
         <Alert type="warning" showIcon message={t("只显示这一次，请立即交给消费方保存")}
           description={<Typography.Paragraph copyable code style={{ margin: 0 }}>{token}</Typography.Paragraph>} />
       )}
-      <Table<CredentialMeta> rowKey="id" size="small" loading={credList.loading} pagination={false}
+      <ListTable<CredentialMeta> rowKey="id" size="small" loading={credList.loading} pagination={false}
         dataSource={credList.data?.items ?? []}
         locale={{ emptyText: t("无凭据") }}
         columns={[
@@ -237,7 +238,7 @@ function Webhooks({ consumer }: { consumer: Consumer }) {
         <Alert type="warning" showIcon message={t("密钥只显示这一次，请交给接收方保存")}
           description={<Typography.Paragraph copyable code style={{ margin: 0 }}>{secret}</Typography.Paragraph>} />
       )}
-      <Table<WebhookEndpoint> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
+      <ListTable<WebhookEndpoint> rowKey="id" size="small" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
           { title: "URL", dataIndex: "url", ellipsis: true },
           { title: t("事件"), dataIndex: "events", render: (v: string[]) => v?.join(", ") },
@@ -263,7 +264,7 @@ function Webhooks({ consumer }: { consumer: Consumer }) {
           },
         ]} />
       {deliveries && (
-        <Table<WebhookDelivery> rowKey="id" size="small" dataSource={deliveries} pagination={false}
+        <ListTable<WebhookDelivery> rowKey="id" size="small" dataSource={deliveries} pagination={false}
           columns={[
             { title: t("事件"), dataIndex: "event_kind" },
             { title: t("状态"), dataIndex: "status" },

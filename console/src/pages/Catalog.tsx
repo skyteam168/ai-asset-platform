@@ -1,7 +1,8 @@
-import { Alert, Table, Tabs, Tag, Tooltip, Typography } from "antd";
+import { Alert, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { get } from "../api";
 import { matchOrgSystem, matches, OrgName, OrgSystemFilter, PageCard, PAGINATION, Toolbar } from "../components";
+import { ListTable } from "../ListTable";
 import { useLoad } from "../hooks";
 import { t } from "../i18n";
 
@@ -110,7 +111,7 @@ export function CatalogPage() {
             key: "tools",
             label: t("能力目录"),
             children: (
-              <Table<CatalogTool>
+              <ListTable<CatalogTool>
                 pagination={PAGINATION}
                 rowKey="capability_id"
                 loading={data.loading}
@@ -173,7 +174,7 @@ export function CatalogPage() {
             key: "bundles",
             label: t("套件"),
             children: (
-              <Table<CatalogBundle>
+              <ListTable<CatalogBundle>
                 pagination={PAGINATION}
                 rowKey="name"
                 loading={data.loading}

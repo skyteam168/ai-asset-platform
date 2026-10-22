@@ -235,12 +235,15 @@ body {
 /* ---------- 内容卡片 ---------- */
 .aip-content {
   flex: 1;
+  min-width: 0; /* flex 子项默认可被撑破；配合下方表格横滚 */
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 16px 20px 24px;
 }
 .aip-card {
+  max-width: 100%;
+  min-width: 0;
   background: var(--aip-container-card, var(--aip-container));
   border-radius: 10px;
   padding: 20px;
@@ -268,6 +271,14 @@ body {
 }
 .aip-card .ant-table-wrapper .ant-table {
   background: transparent;
+}
+/* 宽表在卡片内横滚；表头不换行，避免「系统/公司」被挤成竖排字 */
+.aip-card .ant-table-wrapper,
+.aip-card .ant-tabs .ant-table-wrapper {
+  max-width: 100%;
+}
+.aip-card .ant-table-thead > tr > th {
+  white-space: nowrap;
 }
 .aip-card .ant-tabs-nav {
   margin-bottom: 16px;

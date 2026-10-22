@@ -28,11 +28,27 @@ def load_document(raw: str) -> dict[str, Any]:
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"无法解析 OpenAPI：{e}") from e
     if not isinstance(doc, dict):
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "OpenAPI 根节点须为对象")
-    if not str(doc.get("openapi") or "").startswith("3."):
-        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "仅支持 OpenAPI 3.x")
+    swagger = str(doc.get("swagger") or "")
+    openapi = str(doc.get("openapi") or "")
+    if swagger.startswith("2."):
+        from aip.control_plane.importer.swagger2 import upgrade_swagger2
+
+        upgraded = upgrade_swagger2(doc)
+        if not isinstance(upgraded, dict):
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "Swagger 升级结果无效")
+        doc = upgraded
+        openapi = str(doc.get("openapi") or "")
+    elif swagger and not swagger.startswith("2."):
+        raise PlatformError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"不支持的 Swagger 版本：{swagger}（仅 2.x 可升级为 OpenAPI 3）",
+        )
+    elif not openapi.startswith("3."):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "仅支持 OpenAPI 3.x 或 Swagger 2.0")
     if not isinstance(doc.get("paths"), dict) or not doc["paths"]:
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "OpenAPI 缺少 paths")
-    return doc
+    result: dict[str, Any] = dict(doc)
+    return result
 
 
 def _resolve_ref(doc: dict[str, Any], node: Any) -> Any:

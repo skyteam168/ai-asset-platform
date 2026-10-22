@@ -1,8 +1,9 @@
-import { Alert, Badge, Button, Descriptions, Drawer, Form, Input, Modal, Radio, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Badge, Button, Descriptions, Drawer, Form, Input, Modal, Radio, Space, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { get, post, type Page } from "../api";
 import { JsonInput, jsonRule, JsonView, PageCard, PAGINATION, parseJson, StateTag } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import type { Approval, ClearanceRequest, RunView, Todo, TodoConfirmation, TodoTask } from "../types";
 import { useAuth } from "../auth";
@@ -29,7 +30,7 @@ export function ApprovalsPage() {
           children: (
             <>
               {items.error && <Alert type="error" message={items.error} />}
-              <Table<Approval> pagination={PAGINATION} rowKey="id" loading={items.loading} dataSource={items.data?.items ?? []}
+              <ListTable<Approval> pagination={PAGINATION} rowKey="id" loading={items.loading} dataSource={items.data?.items ?? []}
                 locale={{ emptyText: t("没有待办") }}
                 expandable={{ expandedRowRender: (a) => <JsonView value={a.payload} /> }}
                 columns={[
@@ -71,7 +72,7 @@ function Confirmations(p: { rows: TodoConfirmation[]; loading: boolean; error: s
       <Alert type="info" showIcon style={{ marginBottom: 12 }}
         message={t("写操作在执行前冻结了参数（只显示参数摘要）。通过后平台按冻结内容执行一次；审批人不能是被代表的用户本人。")} />
       {p.error && <Alert type="error" message={p.error} />}
-      <Table<TodoConfirmation> pagination={PAGINATION} rowKey="id" loading={p.loading} dataSource={p.rows} locale={{ emptyText: t("没有待确认的调用") }}
+      <ListTable<TodoConfirmation> pagination={PAGINATION} rowKey="id" loading={p.loading} dataSource={p.rows} locale={{ emptyText: t("没有待确认的调用") }}
         columns={[
           { title: t("类型"), dataIndex: "kind", render: (k: string) => <Tag color={k === "approval" ? "orange" : "blue"}>{k === "approval" ? t("审批") : t("本人确认")}</Tag> },
           { title: t("内容"), dataIndex: "summary" },
@@ -97,7 +98,7 @@ function Tasks(p: { rows: TodoTask[]; loading: boolean; error: string | null; on
   return (
     <>
       {p.error && <Alert type="error" message={p.error} />}
-      <Table<TodoTask> pagination={PAGINATION} rowKey="id" loading={p.loading} dataSource={p.rows} locale={{ emptyText: t("没有工作流任务") }}
+      <ListTable<TodoTask> pagination={PAGINATION} rowKey="id" loading={p.loading} dataSource={p.rows} locale={{ emptyText: t("没有工作流任务") }}
         columns={[
           { title: t("类型"), dataIndex: "kind", render: (k: string) => <Tag>{TASK_LABEL[k] ?? k}</Tag> },
           { title: t("内容"), dataIndex: "summary" },
@@ -177,7 +178,7 @@ function RunDrawer({ id, onClose }: { id: string; onClose: () => void }) {
             </Descriptions.Item>
           </Descriptions>
           {v.error && <Alert type="error" showIcon style={{ marginBottom: 12 }} message={`${v.error.code}：${v.error.message ?? ""}`} />}
-          <Table rowKey="node_id" size="small" pagination={false} dataSource={v.steps}
+          <ListTable rowKey="node_id" size="small" pagination={false} dataSource={v.steps}
             columns={[
               { title: t("节点"), dataIndex: "node_id" },
               { title: t("类型"), dataIndex: "kind" },
@@ -205,7 +206,7 @@ function ClearanceRequests({ list, canDecide, onDone }: {
   return (
     <>
       {list.error && <Alert type="error" message={list.error} style={{ marginBottom: 8 }} />}
-      <Table<ClearanceRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
+      <ListTable<ClearanceRequest> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         locale={{ emptyText: t("没有密级申请") }}
         columns={[
           { title: t("用户"), dataIndex: "user_id", render: (v: string) => <Typography.Text code>{v.slice(0, 8)}</Typography.Text> },

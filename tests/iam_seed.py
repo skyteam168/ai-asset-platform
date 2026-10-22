@@ -67,6 +67,7 @@ async def truncate() -> None:
             "grants.grant_ceiling",
             "audit.audit_anchor",
             "audit.audit_log",
+            "conn.sql_query_template",
             "conn.connector_instance",
             "conn.upstream_mcp_source",
             "conn.connection_test_run",

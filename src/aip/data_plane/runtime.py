@@ -164,6 +164,11 @@ class ConnectorRegistry:
                 connector = kb_connector(c["name"], c["config"], creds)
             elif c["kind"] == "upstream_mcp":
                 connector = UpstreamMcpConnector(c["name"], c["config"], creds)
+            elif c["kind"] == "sql_readonly":
+                from aip.connectors.sql_readonly import SqlReadonlyConnector
+
+                sql_cfg = {**c["config"], "connection": c.get("connection") or {}}
+                connector = SqlReadonlyConnector(c["name"], sql_cfg, self.secrets)
             else:
                 connector = DeclarativeConnector(c["name"], c["config"], creds)
             prev = old.get(c["name"])

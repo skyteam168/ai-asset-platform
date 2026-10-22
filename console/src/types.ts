@@ -57,7 +57,7 @@ export interface Connection {
   system_key: string;
   env: string;
   base_url: string;
-  scheme: "https" | "http";
+  scheme: "https" | "http" | "postgres" | "mysql";
   tls_mode: "system_ca" | "custom_ca" | "pinned" | "insecure" | null;
   pins: { kind: "cert" | "spki"; sha256: string }[];
   transport_exception_reason: string | null;
@@ -219,7 +219,7 @@ export interface RunView {
 export interface ConnectorInstance {
   id: string;
   name: string;
-  kind: "declarative" | "kb" | "mock" | "upstream_mcp";
+  kind: "declarative" | "kb" | "mock" | "upstream_mcp" | "sql_readonly";
   company_id: string | null;
   system_connection_id: string | null;
   config: Record<string, unknown>;

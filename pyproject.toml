@@ -58,6 +58,9 @@ pii = [
 skills = [
     "skills-ref>=0.1.1",
 ]
+mysql = [
+    "asyncmy>=0.2.9",
+]
 
 [project.scripts]
 corp-skill = "aip.cli.corp_skill:main"
@@ -78,6 +81,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 markers = [
     "infra: needs docker-compose services (python tools/dev.py up)",
+    "mysql: needs asyncmy + reachable MySQL (AIP_TEST_MYSQL_URL)",
 ]
 
 [tool.ruff]
@@ -100,8 +104,11 @@ ignore = ["RUF001", "RUF002", "RUF003", "S101"]
 "src/aip/libs/common/errors.py" = ["S105"]  # 错误码名称不是口令
 "src/aip/libs/common/config.py" = ["S105"]  # 配置项名称与 dev 默认值，prod 校验见 Settings
 "src/aip/libs/tokens/secrets_util.py" = ["S105"]
-"tests/**" = ["S", "TID251", "ASYNC110", "ASYNC221", "ASYNC240"]
-"tools/**" = ["S", "T201", "ASYNC110"]
+"src/aip/control_plane/skill/git_export.py" = ["S603", "S607", "E501"]  # 固定调用本机 git
+"src/aip/control_plane/skill/service.py" = ["S110"]  # object store 回退 zip_bytes
+"src/aip/sdk/skills.py" = ["S603", "ASYNC240"]  # SDK 同步写本地下载目录
+"tests/**" = ["S", "TID251", "ASYNC110", "ASYNC221", "ASYNC240", "E501"]
+"tools/**" = ["S", "T201", "ASYNC110", "E501"]
 "migrations/**" = ["E501"]  # SQL DDL
 "docs/architecture/reference/**" = ["ALL"]
 
@@ -113,5 +120,13 @@ packages = ["aip"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["langchain_core.*"]
+module = [
+    "langchain_core.*",
+    "asyncpg.*",
+    "asyncpg",
+    "asyncmy.*",
+    "asyncmy",
+    "skills_ref.*",
+    "skills_ref",
+]
 ignore_missing_imports = true

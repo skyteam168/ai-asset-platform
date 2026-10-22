@@ -1498,6 +1498,53 @@ def control_plane() -> dict[str, Any]:
                 code="201",
             )
         },
+        f"{A}/connector-instances/{{id}}/sql-templates": {
+            "get": op(
+                "listSqlTemplates",
+                "connection",
+                "列出 SQL 只读模板",
+                res={"type": "object"},
+                params=["Id"],
+            ),
+            "post": op(
+                "createSqlTemplate",
+                "connection",
+                "登记 SQL 只读模板（draft）",
+                req={"type": "object"},
+                res={"type": "object"},
+                code="201",
+                params=["Id"],
+            ),
+        },
+        f"{A}/sql-templates/{{id}}": {
+            "put": op(
+                "updateSqlTemplate",
+                "connection",
+                "更新 SQL 只读模板（回 draft）",
+                req={"type": "object"},
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/sql-templates/{{id}}/try": {
+            "post": op(
+                "trySqlTemplate",
+                "connection",
+                "试跑 SQL 只读模板",
+                req={"type": "object"},
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/sql-templates/{{id}}/activate": {
+            "post": op(
+                "activateSqlTemplate",
+                "connection",
+                "激活 SQL 只读模板（含 EXPLAIN 成本门）",
+                res={"type": "object"},
+                params=["Id"],
+            )
+        },
         f"{A}/connections/{{id}}/test": {
             "post": op(
                 "testConnection", "connection", "连接测试（真实握手）", res=ref("ConnectionTestResult"), params=["Id"]

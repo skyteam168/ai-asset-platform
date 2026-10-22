@@ -13,7 +13,7 @@ class SystemConnection(BaseModel):
     system_key: str
     env: Literal["sandbox", "test", "staging", "prod"]
     base_url: str
-    scheme: Literal["https", "http"]
+    scheme: Literal["https", "http", "postgres", "mysql"]
     id: str | None = None
     company_id: str | None = None
     tls_mode: Literal["system_ca", "custom_ca", "pinned", "insecure"] | None = None
@@ -63,7 +63,7 @@ class ConnectorInstance(BaseModel):
 
     id: str
     name: str
-    kind: Literal["declarative", "kb", "mock", "upstream_mcp"]
+    kind: Literal["declarative", "kb", "mock", "upstream_mcp", "sql_readonly"]
     company_id: str | None = None
     system_connection_id: str | None = None
     config: dict[str, Any] = Field(default_factory=dict)

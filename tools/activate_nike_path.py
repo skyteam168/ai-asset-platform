@@ -152,7 +152,7 @@ def ensure_staff(admin_token: str, hq_id: str, group_id: str) -> dict[str, str]:
 
 
 def find_asset(admin_token: str, name: str) -> dict[str, Any]:
-    st, page = req("GET", f"{CP}/assets?limit=200", token=admin_token)
+    _st, page = req("GET", f"{CP}/assets?limit=200", token=admin_token)
     for a in page.get("items") or []:
         if a.get("name") == name:
             return a
@@ -411,7 +411,7 @@ def main() -> None:
     admin_token = login("admin", admin_secret)
     print("login admin ok")
 
-    st, orgs = req("GET", f"{CP}/orgs?limit=100", token=admin_token)
+    _st, orgs = req("GET", f"{CP}/orgs?limit=100", token=admin_token)
     items = orgs.get("items") or []
     group = next(o for o in items if o.get("type") == "group")
     hq = next(o for o in items if o.get("code") == "HQ")

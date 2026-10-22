@@ -1,8 +1,9 @@
 import { BranchesOutlined, CheckCircleOutlined, CloudUploadOutlined, DownloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Form, message, Modal, Select, Space, Table, Tabs, Tag, Typography } from "antd";
+import { Alert, Button, Form, message, Modal, Select, Space, Tabs, Tag, Typography } from "antd";
 import { useState } from "react";
 import { describeError, downloadFile, get, post, type Page } from "../api";
 import { matches, PageCard, PAGINATION, Toolbar } from "../components";
+import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import { t } from "../i18n";
 
@@ -71,7 +72,7 @@ export function DistributionPage() {
             children: (
               <>
                 {skills.error && <Alert type="error" message={skills.error} style={{ marginBottom: 12 }} />}
-                <Table<SkillRow>
+                <ListTable<SkillRow>
                   pagination={PAGINATION}
                   rowKey={(r) => `${r.name}@${r.version}`}
                   loading={skills.loading}

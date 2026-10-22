@@ -1130,6 +1130,7 @@ gantt
 | 0023 | 基础组件：OpenBao、Valkey、SeaweedFS 或 Ceph RGW 替代 Vault、Redis、MinIO | Proposed |
 | 0024 | 数据流护栏：套件组合约束与 Run 污点标记 | Proposed |
 | 0025 | 跨境数据合规由集团另行解决，平台不做数据驻留与跨境报表 | Accepted |
+| 0026 | sql_readonly：扩展 system_connection.scheme（postgres/mysql）；密码仅 OpenBao；模板化只读 SQL | Accepted |
 
 ### 16.2 docs/ 目录
 
