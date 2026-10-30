@@ -101,6 +101,83 @@ async def test_authorize_and_token_pkce(env: Env) -> None:
     assert again.status_code == 401
 
 
+async def test_browser_consent_redirect_and_token(env: Env) -> None:
+    """G3.2：GET 同意页 → POST consent → redirect code → token；缺 verifier / 重放失败。"""
+    from urllib.parse import parse_qs, urlparse
+
+    verifier = new_code_verifier()
+    challenge = s256_challenge(verifier)
+    page = await env.http.get(
+        "/oauth/authorize",
+        params={
+            "client_id": "vn-ai",
+            "redirect_uri": "http://127.0.0.1:9999/cb",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "subject": "vn.emp.001",
+            "state": "st1",
+        },
+    )
+    assert page.status_code == 200, page.text
+    assert "授权第三方访问" in page.text
+    consent = await env.http.post(
+        "/oauth/authorize/consent",
+        data={
+            "client_id": "vn-ai",
+            "redirect_uri": "http://127.0.0.1:9999/cb",
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "subject": "vn.emp.001",
+            "decision": "allow",
+            "state": "st1",
+        },
+        follow_redirects=False,
+    )
+    assert consent.status_code == 302, consent.text
+    loc = consent.headers["location"]
+    assert "code=" in loc and "state=st1" in loc
+    code = parse_qs(urlparse(loc).query)["code"][0]
+    client_assertion = assertion(VN_KEY, "vn-ai", "vn-ai")
+    missing = await env.http.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "http://127.0.0.1:9999/cb",
+            "client_id": "vn-ai",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": client_assertion,
+        },
+    )
+    assert missing.status_code == 400
+    tok = await env.http.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "http://127.0.0.1:9999/cb",
+            "code_verifier": verifier,
+            "client_id": "vn-ai",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": client_assertion,
+        },
+    )
+    assert tok.status_code == 200, tok.text
+    replay = await env.http.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": "http://127.0.0.1:9999/cb",
+            "code_verifier": verifier,
+            "client_id": "vn-ai",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": client_assertion,
+        },
+    )
+    assert replay.status_code == 401
+
+
 async def test_pkce_wrong_verifier(env: Env) -> None:
     verifier = new_code_verifier()
     authz = await env.http.post(

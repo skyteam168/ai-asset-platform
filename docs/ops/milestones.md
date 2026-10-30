@@ -1249,6 +1249,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 本地 JWKS 冒烟 + staging 文档 | 通过 | `test_g31_oidc_jwks`；`docs/ops/oidc-staging.md` |
 | prod 启用 OIDC 时禁 stub | 通过 | Settings 校验 |
 
+### G3.2 PKCE 浏览器同意页 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| GET 同意页 + POST consent → 302 code | 通过 | `test_browser_consent_redirect_and_token` |
+| 缺 verifier 400；重放 code 401 | 通过 | 同上 |
+| 运维说明 | 通过 | `docs/ops/pkce-staging.md` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

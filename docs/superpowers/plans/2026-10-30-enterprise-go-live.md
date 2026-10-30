@@ -222,9 +222,9 @@ flowchart TB
 - Test: Playwright 或脚本走完 code+pkce → token
 - Docs: `docs/ops/pkce-staging.md`
 
-- [ ] **Step 1:** 浏览器完整授权码流成功
-- [ ] **Step 2:** 重放 code 失败；缺 code_verifier 失败
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** 浏览器完整授权码流成功
+- [x] **Step 2:** 重放 code 失败；缺 code_verifier 失败
+- [x] **Step 3:** Commit
 
 ### Task G3.3: WebAuthn 真密钥器注册/登录
 
