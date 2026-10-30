@@ -11,6 +11,60 @@ import httpx
 from aip.libs.common.errors import ErrorCode, PlatformError
 
 
+def _join(base_url: str, api_path: str) -> str:
+    root = base_url.rstrip("/") + "/"
+    path = api_path if api_path.startswith("/") else f"/{api_path}"
+    return urljoin(root, path.lstrip("/"))
+
+
+def _auth_headers(api_key: str | None) -> dict[str, str]:
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    return headers
+
+
+async def list_models(
+    *,
+    base_url: str,
+    api_key: str | None = None,
+    models_path: str = "/models",
+    transport: httpx.AsyncBaseTransport | None = None,
+    timeout_s: float = 30.0,
+) -> list[dict[str, Any]]:
+    """GET {base}/models（OpenAI 兼容）；返回 data 数组。"""
+    url = _join(base_url, models_path)
+    async with httpx.AsyncClient(
+        transport=transport,
+        timeout=timeout_s,
+        trust_env=False,
+        follow_redirects=False,
+    ) as client:
+        try:
+            r = await client.get(url, headers=_auth_headers(api_key))
+        except httpx.TimeoutException as e:
+            raise PlatformError(ErrorCode.DOWNSTREAM_TIMEOUT, "LLM 上游超时") from e
+        except httpx.HTTPError as e:
+            raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "LLM 上游不可用") from e
+    if r.status_code >= 500:
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "LLM 上游 5xx")
+    if r.status_code == 401 or r.status_code == 403:
+        raise PlatformError(ErrorCode.DOWNSTREAM_AUTH_EXPIRED, "LLM 上游鉴权失败（检查 API Key）")
+    if r.status_code >= 400:
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, f"LLM 上游拒绝：HTTP {r.status_code}")
+    try:
+        doc: Any = r.json()
+    except json.JSONDecodeError as e:
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "LLM 上游返回非 JSON") from e
+    if isinstance(doc, dict):
+        data = doc.get("data")
+        if isinstance(data, list):
+            return [x for x in data if isinstance(x, dict)]
+    if isinstance(doc, list):
+        return [x for x in doc if isinstance(x, dict)]
+    raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "LLM /models 响应格式无效")
+
+
 async def chat_completions(
     *,
     base_url: str,
@@ -24,12 +78,7 @@ async def chat_completions(
     timeout_s: float = 60.0,
 ) -> dict[str, Any]:
     """调用上游；verify 使用系统 CA，禁止关闭校验。"""
-    root = base_url.rstrip("/") + "/"
-    path = api_path if api_path.startswith("/") else f"/{api_path}"
-    url = urljoin(root, path.lstrip("/"))
-    headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    url = _join(base_url, api_path)
     body = {
         "model": model,
         "messages": messages,
@@ -44,7 +93,7 @@ async def chat_completions(
         follow_redirects=False,
     ) as client:
         try:
-            r = await client.post(url, headers=headers, json=body)
+            r = await client.post(url, headers=_auth_headers(api_key), json=body)
         except httpx.TimeoutException as e:
             raise PlatformError(ErrorCode.DOWNSTREAM_TIMEOUT, "LLM 上游超时") from e
         except httpx.HTTPError as e:

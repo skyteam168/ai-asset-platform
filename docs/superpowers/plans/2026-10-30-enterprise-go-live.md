@@ -268,9 +268,9 @@ flowchart TB
 - Docs: `observability.md` Langfuse 接线步骤
 - Test: mark `llm` 真调用；无密钥 skip
 
-- [ ] **Step 1:** 控制台 LLM 配置指向 staging 兼容端点，一次 chat 成功
-- [ ] **Step 2:** 预算/脱敏仍生效的测例
-- [ ] **Step 3:** 有 Langfuse 则 traces 可见；Commit
+- [x] **Step 1:** Gateway GenAI span + `-m llm` 真调用夹具（无密钥 skip）；提供方 API 已支持兼容端点
+- [x] **Step 2:** 预算/脱敏仍生效的测例（`test_budget_and_redact_still_gate_before_upstream`）
+- [x] **Step 3:** `observability.md` Langfuse 经 Collector OTLP 接线步骤；Commit
 
 ---
 

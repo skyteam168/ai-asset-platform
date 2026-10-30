@@ -98,6 +98,15 @@ describe("LLM 配置页", () => {
     const calls = mockApi((method, path) => {
       if (path === "/me") return { body: me("platform_admin") };
       if (path === "/orgs") return page([company]);
+      if (path === "/llm/provider") {
+        return {
+          body: {
+            base_url: "", credential_ref: "kv/data/aip/llm/default", models_path: "/models",
+            has_api_key: false, api_key_hint: null, synced_at: null, synced_count: 0,
+          },
+        };
+      }
+      if (path === "/llm/provider/synced-models" || path === "/llm/model-profiles") return page([]);
       if (path === "/companies/c1/llm-allowlist") {
         return method === "PUT" ? { body: { company_id: "c1", names: ["gpt-4o-mini"] } } : { body: { company_id: "c1", names: [] } };
       }
@@ -110,8 +119,9 @@ describe("LLM 配置页", () => {
       return method === "GET" ? page([]) : undefined;
     });
     render(wrap(<OrgProvider><LlmConfigPage /></OrgProvider>));
-    expect(await screen.findByText(/当日用量/)).toBeInTheDocument();
     const user = userEvent.setup();
+    await user.click(await screen.findByRole("tab", { name: "公司策略" }));
+    expect(await screen.findByText(/当日用量/)).toBeInTheDocument();
     const box = await screen.findByLabelText(/模型白名单/);
     fireEvent.change(box, { target: { value: "gpt-4o-mini" } });
     fireEvent.change(screen.getByLabelText(/日 token 预算/), { target: { value: "1000" } });

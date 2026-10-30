@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 import jsonschema
 
+from aip.connectors.credentials import SecretStore
 from aip.data_plane.llm.allowlist import AllowlistStore
 from aip.data_plane.llm.budget import BudgetStore
 from aip.data_plane.llm.openai_compat import chat_completions, extract_content_and_tokens
@@ -38,6 +39,7 @@ class LlmGateway:
         resolve_profile: ProfileResolver,
         env: str = "test",
         api_key: str | None = None,
+        secrets: SecretStore | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
         audit_hook: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
@@ -46,6 +48,7 @@ class LlmGateway:
         self.resolve_profile = resolve_profile
         self.env = env
         self.api_key = api_key
+        self.secrets = secrets
         self.transport = transport
         self.audit_hook = audit_hook
 
@@ -87,45 +90,59 @@ class LlmGateway:
             "You are a structured extraction assistant. "
             "Reply with a single JSON object matching the required schema. No markdown."
         )
-        doc = await chat_completions(
-            base_url=str(profile["base_url"]),
-            api_path=str(profile.get("api_path") or "/v1/chat/completions"),
-            model=str(profile["model"]),
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=float(profile.get("temperature", 0)),
-            max_tokens=int(profile.get("max_tokens", 1024)),
-            api_key=self.api_key,
-            transport=self.transport,
-        )
-        content, tokens = extract_content_and_tokens(doc)
-        tokens = max(1, tokens)
-        await self.budget.reserve_and_add(cid, day, tokens)
+        api_key = await self._resolve_api_key(profile)
+        model_name = str(profile["model"])
+        from aip.libs.otel import get_tracer
 
-        try:
-            data = json.loads(content)
-        except json.JSONDecodeError as e:
-            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "LLM 输出不是合法 JSON") from e
-        if isinstance(data, dict) and isinstance(output_schema.get("properties"), dict):
-            data = {k: v for k, v in data.items() if k in output_schema["properties"]}
-        errs = list(jsonschema.Draft202012Validator(output_schema).iter_errors(data))
-        if errs:
-            raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"LLM 输出不符合 schema：{errs[0].message}")
-
-        if self.audit_hook:
-            self.audit_hook(
-                {
-                    "kind": "llm.complete",
-                    "company_id": company_id,
-                    "model_profile": model_profile,
-                    "prompt_sha256": sha256_text(user_prompt),
-                    "prompt_preview": user_prompt[:200],
-                    "tokens": tokens,
-                }
+        tracer = get_tracer("aip.llm")
+        with tracer.start_as_current_span("gen_ai.chat") as span:
+            span.set_attribute("gen_ai.operation.name", "chat")
+            span.set_attribute("gen_ai.request.model", model_name)
+            span.set_attribute("gen_ai.system", str(profile.get("deployment") or "openai_compat"))
+            span.set_attribute("aip.model_profile", model_profile)
+            # 无 prompt / 密钥 / 未脱敏业务字段
+            doc = await chat_completions(
+                base_url=str(profile["base_url"]),
+                api_path=str(profile.get("api_path") or "/v1/chat/completions"),
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=float(profile.get("temperature", 0)),
+                max_tokens=int(profile.get("max_tokens", 1024)),
+                api_key=api_key,
+                transport=self.transport,
             )
-        return LlmResult(data=data, tokens=tokens)
+            content, tokens = extract_content_and_tokens(doc)
+            tokens = max(1, tokens)
+            span.set_attribute("gen_ai.usage.total_tokens", tokens)
+            await self.budget.reserve_and_add(cid, day, tokens)
+
+            try:
+                data = json.loads(content)
+            except json.JSONDecodeError as e:
+                raise PlatformError(ErrorCode.INVALID_ARGUMENT, "LLM 输出不是合法 JSON") from e
+            if isinstance(data, dict) and isinstance(output_schema.get("properties"), dict):
+                data = {k: v for k, v in data.items() if k in output_schema["properties"]}
+            errs = list(jsonschema.Draft202012Validator(output_schema).iter_errors(data))
+            if errs:
+                raise PlatformError(
+                    ErrorCode.INVALID_ARGUMENT, f"LLM 输出不符合 schema：{errs[0].message}"
+                )
+
+            if self.audit_hook:
+                self.audit_hook(
+                    {
+                        "kind": "llm.complete",
+                        "company_id": company_id,
+                        "model_profile": model_profile,
+                        "prompt_sha256": sha256_text(user_prompt),
+                        "prompt_preview": user_prompt[:200],
+                        "tokens": tokens,
+                    }
+                )
+            return LlmResult(data=data, tokens=tokens)
 
     async def _profile(self, name: str, ver: str) -> dict[str, Any]:
         ref = f"{name}@{ver}"
@@ -138,6 +155,19 @@ class LlmGateway:
             if key not in profile:
                 raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"model_profile 缺少 {key}")
         return profile
+
+    async def _resolve_api_key(self, profile: dict[str, Any]) -> str | None:
+        """model_profile.credential_ref → OpenBao；否则用构造时的默认 api_key。"""
+        ref = profile.get("credential_ref")
+        if isinstance(ref, str) and ref.strip() and self.secrets is not None:
+            try:
+                secret = await self.secrets.get(ref.strip())
+                key = (secret.get("api_key") or secret.get("token") or "").strip()
+                if key:
+                    return key
+            except PlatformError:
+                log.warning("llm credential_ref 读取失败，回落默认密钥")
+        return self.api_key
 
 
 def utc_today() -> dt.date:

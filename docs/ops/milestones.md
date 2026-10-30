@@ -1282,6 +1282,15 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 非法 URL 抛 ValueError | 通过 | `test_feishu_bad_url_does_not_crash_loop` |
 | 真推 `-m feishu`（无 URL skip） | 通过 | `test_live_feishu_webhook` |
 
+### G4.3 真 LLM + GenAI / Langfuse — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| Gateway span `gen_ai.*`（无 PII） | 通过 | `test_gateway_emits_gen_ai_span_attrs` |
+| 预算耗尽不出站；脱敏仍生效 | 通过 | `test_budget_and_redact_still_gate_before_upstream` |
+| 真 chat `-m llm`（无密钥 skip） | 通过 | `test_live_llm_chat_completions` |
+| Langfuse 接线步骤 | 通过 | `docs/ops/observability.md` GenAI / Langfuse |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
