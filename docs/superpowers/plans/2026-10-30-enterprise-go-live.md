@@ -296,9 +296,9 @@ flowchart TB
 - Console: 运营概览或独立节
 - Test: 灌 `usage_counter` 后聚合正确
 
-- [ ] **Step 1:** 失败测例定聚合规则（与 architecture 计量一致）
-- [ ] **Step 2:** 实现 + OpenAPI + UI + i18n
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** 失败测例定聚合规则（与 architecture 计量一致）
+- [x] **Step 2:** 实现 + OpenAPI + UI + i18n
+- [x] **Step 3:** Commit
 
 ### Task G5.3: pgvector 语义检索
 

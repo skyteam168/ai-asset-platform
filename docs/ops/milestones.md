@@ -1300,6 +1300,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | worker 入口 + K8s 草稿 | 通过 | `aip.workers.connector_main`；`deploy/k8s/base/connector-worker.yaml` |
 | 运维说明 | 通过 | `docs/ops/connector-worker.md` |
 
+### G5.2 成本分摊报表 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| usage_counter 按 company/consumer/asset 聚合 | 通过 | `test_aggregate_rules` |
+| `GET /api/v1/console/usage-report` | 通过 | `test_console_usage_report_http` |
+| 控制台「成本分摊」页签 | 通过 | `Risk.tsx` CostShare；en/vi/km |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

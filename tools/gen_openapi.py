@@ -1062,6 +1062,25 @@ def control_plane() -> dict[str, Any]:
                 ["items", "has_more"],
             ),
             "UsageReport": o({"items": {"type": "array", "items": {"type": "object"}}}, ["items"]),
+            "UsageCounterRow": o(
+                {
+                    "group_by": S,
+                    "dim": S,
+                    "company_id": SN,
+                    "calls": INT,
+                    "writes": INT,
+                },
+                ["group_by", "dim", "calls", "writes"],
+            ),
+            "UsageCounterReport": o(
+                {
+                    "from_day": S,
+                    "to_day": S,
+                    "group_by": S,
+                    "items": {"type": "array", "items": ref("UsageCounterRow")},
+                },
+                ["from_day", "to_day", "group_by", "items"],
+            ),
             "TransportExceptionStatus": o({"id": ID, "status": S}, ["id", "status"]),
             "UsageRequest": o(
                 {
@@ -2188,6 +2207,25 @@ def control_plane() -> dict[str, Any]:
                 "运营概览摘要（漂移 / 开放风险 / 接入管道）",
                 res=ref("OpsSummary"),
             )
+        },
+        f"{A}/console/usage-report": {
+            "get": {
+                **op(
+                    "consoleUsageReport",
+                    "catalog",
+                    "成本分摊：聚合 usage_counter（group_by=consumer|company|asset）",
+                    res=ref("UsageCounterReport"),
+                ),
+                "parameters": [
+                    {
+                        "name": "group_by",
+                        "in": "query",
+                        "schema": {"type": "string", "enum": ["consumer", "company", "asset"]},
+                    },
+                    {"name": "from", "in": "query", "schema": {"type": "string", "format": "date"}},
+                    {"name": "to", "in": "query", "schema": {"type": "string", "format": "date"}},
+                ],
+            }
         },
         f"{A}/contract-drifts": {
             "get": op(

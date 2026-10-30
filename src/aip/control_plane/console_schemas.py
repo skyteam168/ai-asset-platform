@@ -75,6 +75,8 @@ class CatalogTool(BaseModel):
     company_id: str | None = None
     owner_org_id: str | None = None
     asset_id: str | None = None
+    # 未过期且 status=active 的 Grant 条数（运维参考；MCP 可见性仍按调用方 Principal 判定）
+    active_grant_count: int = 0
 
 
 class CatalogBundle(BaseModel):
@@ -108,3 +110,22 @@ class UsageMeterRow(BaseModel):
 
 class UsageReport(BaseModel):
     items: list[UsageMeterRow]
+
+
+class UsageCounterRow(BaseModel):
+    """usage_counter 成本分摊行（G5.2）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    group_by: str
+    dim: str
+    company_id: str | None = None
+    calls: int = 0
+    writes: int = 0
+
+
+class UsageCounterReport(BaseModel):
+    from_day: str
+    to_day: str
+    group_by: str
+    items: list[UsageCounterRow]

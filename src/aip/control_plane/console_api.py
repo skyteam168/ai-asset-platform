@@ -6,8 +6,8 @@ import datetime as dt
 import uuid
 from typing import Any
 
-from fastapi import APIRouter
-from sqlalchemy import select, text
+from fastapi import APIRouter, Query
+from sqlalchemy import and_, func, select, text
 
 from aip.control_plane import console_schemas as out
 from aip.control_plane.db import DbScope
@@ -196,6 +196,51 @@ def router() -> APIRouter:
             rows = (await conn.execute(text(sql), params)).mappings().all()
         return out.UsageReport(items=[out.UsageMeterRow.model_validate(_out(x)) for x in rows])
 
+    @r.get(
+        f"{V}/console/usage-report",
+        tags=["catalog"],
+        operation_id="consoleUsageReport",
+        response_model=out.UsageCounterReport,
+    )
+    async def console_usage_report(
+        actor: ActorDep,
+        db: DbDep,
+        group_by: str = "company",
+        from_day: str | None = Query(None, alias="from"),
+        to_day: str | None = Query(None, alias="to"),
+    ) -> out.UsageCounterReport:
+        """成本分摊：聚合 exec.usage_counter（G5.2）。group_by=consumer|company|asset。"""
+        from aip.control_plane.billing.usage_report import aggregate_usage_counter, parse_day
+
+        global_view = actor.is_global or actor.has("platform_admin") or actor.has("auditor")
+        companies = {g.scope_company_id for g in actor.roles if g.role == "company_admin" and g.scope_company_id}
+        actor.require(
+            global_view or bool(companies) or actor.has("data_owner") or actor.has("company_admin"),
+            "需要平台 / 审计 / 数据 Owner / 分公司管理员",
+        )
+        if group_by not in ("consumer", "company", "asset"):
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "group_by 须为 consumer|company|asset")
+        today = utcnow().date()
+        d_to = parse_day(to_day, field="to") if to_day else today
+        d_from = parse_day(from_day, field="from") if from_day else d_to - dt.timedelta(days=6)
+        company_filter: list[str] | None = None
+        if not (global_view or actor.has("data_owner")):
+            company_filter = [str(c) for c in companies if c is not None]
+        async with db.tx(DbScope.system()) as conn:
+            items = await aggregate_usage_counter(
+                conn,
+                day_from=d_from,
+                day_to=d_to,
+                group_by=group_by,  # type: ignore[arg-type]
+                company_ids=company_filter,
+            )
+        return out.UsageCounterReport(
+            from_day=d_from.isoformat(),
+            to_day=d_to.isoformat(),
+            group_by=group_by,
+            items=[out.UsageCounterRow.model_validate(x) for x in items],
+        )
+
     @r.post(
         f"{V}/audit-logs/verify",
         tags=["audit"],
@@ -269,6 +314,7 @@ def router() -> APIRouter:
                     except ValueError:
                         pass
             org_by_asset: dict[str, dict[str, str | None]] = {}
+            grant_counts: dict[str, int] = {}
             if asset_ids:
                 arows = (
                     await conn.execute(
@@ -282,6 +328,22 @@ def router() -> APIRouter:
                         "company_id": str(ar["company_id"]) if ar["company_id"] else None,
                         "owner_org_id": str(ar["owner_org_id"]) if ar["owner_org_id"] else None,
                     }
+                now = utcnow()
+                grows = (
+                    await conn.execute(
+                        select(t.grant.c.asset_id, func.count())
+                        .where(
+                            and_(
+                                t.grant.c.asset_id.in_(asset_ids),
+                                t.grant.c.status == "active",
+                                t.grant.c.expires_at > now,
+                            )
+                        )
+                        .group_by(t.grant.c.asset_id)
+                    )
+                ).all()
+                for aid, cnt in grows:
+                    grant_counts[str(aid)] = int(cnt)
             items = []
             for rel in releases:
                 if rel.get("asset_type") != "tool" or rel.get("status") != "active":
@@ -304,6 +366,7 @@ def router() -> APIRouter:
                         "asset_id": aid,
                         "company_id": org.get("company_id") or rel.get("company_id"),
                         "owner_org_id": org.get("owner_org_id") or rel.get("owner_org_id"),
+                        "active_grant_count": grant_counts.get(aid or "", 0),
                     }
                 )
             items = await attach_system_fields(conn, items)
@@ -320,7 +383,15 @@ def router() -> APIRouter:
                         company_id=uuid.UUID(str(cid)),
                         search_text=" ".join(
                             str(it.get(k) or "")
-                            for k in ("capability_id", "title", "description", "name")
+                            for k in (
+                                "capability_id",
+                                "title",
+                                "description",
+                                "name",
+                                "connector",
+                                "system_key",
+                                "system_host",
+                            )
                         ),
                     )
                 except ValueError:
@@ -332,11 +403,22 @@ def router() -> APIRouter:
                     items = match_in_memory(items, qq)
                 else:
                     allow = {str(i) for i in fts_ids}
+                    ql = qq.lower()
                     items = [
                         it
                         for it in items
                         if (it.get("asset_id") and str(it["asset_id"]) in allow)
-                        or qq.lower() in str(it.get("capability_id") or "").lower()
+                        or any(
+                            ql in str(it.get(k) or "").lower()
+                            for k in (
+                                "capability_id",
+                                "title",
+                                "description",
+                                "connector",
+                                "system_key",
+                                "system_host",
+                            )
+                        )
                     ]
         items.sort(key=lambda x: x["capability_id"] or "")
         return out.ConsoleCatalog(

@@ -2547,6 +2547,40 @@ paths:
                 $ref: '#/components/schemas/OpsSummary'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/console/usage-report:
+    get:
+      operationId: consoleUsageReport
+      tags:
+      - catalog
+      summary: 成本分摊：聚合 usage_counter（group_by=consumer|company|asset）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageCounterReport'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - name: group_by
+        in: query
+        schema:
+          type: string
+          enum:
+          - consumer
+          - company
+          - asset
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date
   /api/v1/contract-drifts:
     get:
       operationId: listContractDrifts
@@ -6128,6 +6162,44 @@ components:
           items:
             type: object
       required:
+      - items
+    UsageCounterRow:
+      type: object
+      properties:
+        group_by:
+          type: string
+        dim:
+          type: string
+        company_id:
+          type:
+          - string
+          - 'null'
+        calls:
+          type: integer
+        writes:
+          type: integer
+      required:
+      - group_by
+      - dim
+      - calls
+      - writes
+    UsageCounterReport:
+      type: object
+      properties:
+        from_day:
+          type: string
+        to_day:
+          type: string
+        group_by:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/UsageCounterRow'
+      required:
+      - from_day
+      - to_day
+      - group_by
       - items
     TransportExceptionStatus:
       type: object

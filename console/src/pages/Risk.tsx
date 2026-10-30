@@ -56,9 +56,68 @@ export function RiskPage() {
           { key: "events", label: t("风险事件"), children: <Events /> },
           { key: "rules", label: t("风险规则"), children: <Rules /> },
           { key: "usage", label: t("计量"), children: <Usage /> },
+          { key: "cost", label: t("成本分摊"), children: <CostShare /> },
         ]}
       />
     </PageCard>
+  );
+}
+
+interface CostRow {
+  group_by: string;
+  dim: string;
+  company_id: string | null;
+  calls: number;
+  writes: number;
+}
+
+function CostShare() {
+  const [groupBy, setGroupBy] = useState<"company" | "consumer" | "asset">("company");
+  const report = useLoad(
+    () =>
+      get<{ from_day: string; to_day: string; group_by: string; items: CostRow[] }>(
+        `/console/usage-report${query({ group_by: groupBy })}`,
+      ),
+    [groupBy],
+  );
+  const dimTitle =
+    groupBy === "company" ? t("公司") : groupBy === "consumer" ? t("消费方") : t("资产");
+  return (
+    <>
+      <Typography.Paragraph type="secondary">
+        {t("按 usage_counter 聚合调用量（公司 / 消费方 / 资产）。默认近 7 个 UTC 日。")}
+      </Typography.Paragraph>
+      <Space style={{ marginBottom: 12 }}>
+        <Typography.Text>{t("分组")}</Typography.Text>
+        <Segmented
+          value={groupBy}
+          onChange={(v) => setGroupBy(v as "company" | "consumer" | "asset")}
+          options={[
+            { value: "company", label: t("公司") },
+            { value: "consumer", label: t("消费方") },
+            { value: "asset", label: t("资产") },
+          ]}
+        />
+      </Space>
+      {report.error && <Alert type="error" message={report.error} />}
+      <ListTable<CostRow>
+        pagination={PAGINATION}
+        rowKey={(r) => `${r.company_id}-${r.dim}`}
+        loading={report.loading}
+        dataSource={report.data?.items ?? []}
+        locale={{ emptyText: t("这段时间没有调用") }}
+        columns={[
+          { title: dimTitle, dataIndex: "dim", render: (v: string) => (
+            groupBy === "company" ? <OrgName id={v} /> : <Typography.Text code>{v.slice(0, 8)}</Typography.Text>
+          ) },
+          ...(groupBy !== "company"
+            ? [{ title: t("公司"), dataIndex: "company_id" as const, render: (v: string | null) => (v ? <OrgName id={v} /> : "-") }]
+            : []),
+          { title: t("调用"), dataIndex: "calls", sorter: (a: CostRow, b: CostRow) => a.calls - b.calls },
+          { title: t("写操作"), dataIndex: "writes" },
+        ]}
+      />
+    </>
   );
 }
 
