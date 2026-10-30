@@ -1,0 +1,16 @@
+# G2.3：服务 mTLS 冒烟骨架（默认不纳入日常 compose）。
+# 用法（需自备 CA/证书，勿提交私钥）：
+#   1. 将 ca.pem 放到 .aip-data/mtls/（已 gitignore）
+#   2. export AIP_SERVICE_MTLS_CA_PEM="$(cat .aip-data/mtls/ca.pem)"
+#   3. 控制面/数据面入口须把对端客户端证书 PEM 传到 require_service_auth
+# 本文件仅演示环境变量挂载；完整 sidecar 终止由集群 Ingress/Service mesh 负责。
+
+services:
+  note:
+    image: busybox:1.36
+    profiles: ["mtls-smoke"]
+    command: ["sh", "-c", "echo Mount AIP_SERVICE_MTLS_CA_PEM from .aip-data/mtls/ca.pem; sleep 1"]
+    volumes:
+      - ../.aip-data/mtls:/certs:ro
+    environment:
+      AIP_SERVICE_MTLS_CA_PEM_FILE: /certs/ca.pem

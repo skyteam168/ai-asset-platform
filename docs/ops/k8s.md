@@ -42,6 +42,18 @@ kubectl kustomize deploy/k8s/overlays/prod
 本地验证：`pytest -q tests/test_h44_service_auth.py::test_shared_signing_pem_mint_and_verify_across_settings`。  
 逼近生产：`AIP_SERVICE_AUTH_MODE=jwt python tools/dev.py serve` 后，登录控制台确认待办角标非 401。
 
+### 服务 mTLS（可选，G2.3）
+
+当入口 / sidecar 已终止客户端证书时，把信任的 CA PEM 配到两端 `AIP_SERVICE_MTLS_CA_PEM`；`require_service_auth(..., client_cert_pem=...)` 会校验叶子证书由该 CA 签发。
+
+可复现步骤（本地）：
+
+1. 生成临时 CA + 客户端证书（测例已覆盖）：`pytest -q tests/test_h44_service_auth.py -k mtls`
+2. 生产：由平台 PKI 签发服务身份；Secret 注入 `AIP_SERVICE_MTLS_CA_PEM`（仅 CA，不含私钥）。
+3. 可选 Compose 骨架：`deploy/docker-compose.mtls-smoke.yml`（注释说明如何挂载 CA；默认不启动，避免强制证书依赖）。
+
+单测冒烟：`test_mtls_smoke_ephemeral_ca`（无外部夹具时进程内生成 CA）。
+
 ## PostgreSQL（生产）
 
 CloudNativePG 示例见 `deploy/k8s/cnpg/` 与 [pg-ha-prod.md](pg-ha-prod.md)；**不**纳入 `base` kustomization。

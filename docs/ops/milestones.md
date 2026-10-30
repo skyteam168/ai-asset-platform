@@ -1232,6 +1232,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 缺 PEM / Transit key → check 失败 | 通过 | `test_check_service_auth_settings_flags_static_and_missing_pem` |
 | 清单提及 `AIP_SIGNING_KEY_PEM` | 通过 | `production-checklist.md` + `REQUIRED_ENV_NAMES` |
 
+### G2.3 服务 mTLS 说明与冒烟 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| k8s.md 可复现步骤 | 通过 | 「服务 mTLS（可选，G2.3）」 |
+| 进程内 CA 冒烟 jwt+mTLS | 通过 | `test_mtls_smoke_ephemeral_ca` |
+| 可选 compose 骨架 | 通过 | `deploy/docker-compose.mtls-smoke.yml` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

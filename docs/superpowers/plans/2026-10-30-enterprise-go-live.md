@@ -192,9 +192,9 @@ flowchart TB
 - Optional: `deploy/docker-compose.mtls-smoke.yml`
 - Test: 已有 `test_h44` mTLS 单测；增 skip 标记的集成冒烟
 
-- [ ] **Step 1:** 文档步骤可复现
-- [ ] **Step 2:** 有证书夹具时 pytest 通过
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** 文档步骤可复现
+- [x] **Step 2:** 有证书夹具时 pytest 通过
+- [x] **Step 3:** Commit
 
 ---
 

@@ -116,6 +116,22 @@ def test_mtls_client_cert_required_when_ca_set() -> None:
     )
 
 
+@pytest.mark.smoke
+def test_mtls_smoke_ephemeral_ca() -> None:
+    """G2.3：无外部证书夹具时进程内生成 CA；jwt+mTLS 双因素冒烟。"""
+    ca_pem, client_pem = _ca_and_client()
+    s = _s(service_auth_mode="jwt", service_mtls_ca_pem=ca_pem)
+    tok = mint_service_token(settings=s)
+    with pytest.raises(PlatformError):
+        require_service_auth(f"Bearer {tok}", settings=s)
+    assert require_service_auth(f"Bearer {tok}", settings=s, client_cert_pem=client_pem) == "control-plane"
+    # 伪造客户端证书（另一 CA）应拒绝
+    other_ca, other_client = _ca_and_client()
+    assert other_ca != ca_pem
+    with pytest.raises(PlatformError):
+        require_service_auth(f"Bearer {tok}", settings=s, client_cert_pem=other_client)
+
+
 def test_bearer_for_outbound_jwt_mode() -> None:
     s = _s(service_auth_mode="both")
     tok = bearer_for_outbound(settings=s)
