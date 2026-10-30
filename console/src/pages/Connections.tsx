@@ -306,7 +306,7 @@ function TestDrawer({ conn, onClose }: { conn: Connection | null; onClose: () =>
     setResult(r ?? null);
     setBusy(false);
   };
-  const cert = result?.chain[0];
+  const cert = result?.chain?.[0];
   return (
     <Drawer open={Boolean(conn)} width={720} title={conn ? t("连接测试 · {0}（{1}）", [conn.system_key, conn.env]) : ""}
       onClose={() => { setResult(null); setDraft(null); onClose(); }} destroyOnClose>

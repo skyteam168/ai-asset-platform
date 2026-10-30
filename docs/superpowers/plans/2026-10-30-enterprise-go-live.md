@@ -154,10 +154,10 @@ flowchart TB
 - Modify: 逐步替换 `src/types.ts` 中与 OpenAPI 重合的接口（首批：Connection / UpstreamMcpSource / Asset 列表）
 - Test: `npm run typecheck`
 
-- [ ] **Step 1:** 接入生成器，输出 `src/api-types.generated.ts`
-- [ ] **Step 2:** 手工类型改为 re-export / 交叉，保证 build
-- [ ] **Step 3:** CI 或 `tools/dev.py docs` 说明生成物需提交
-- [ ] **Step 4:** Commit
+- [x] **Step 1:** 接入生成器，输出 `src/api-types.generated.ts`
+- [x] **Step 2:** 手工类型改为 re-export / 交叉，保证 build
+- [x] **Step 3:** CI 或 `tools/dev.py docs` 说明生成物需提交
+- [x] **Step 4:** Commit
 
 ---
 

@@ -10,6 +10,7 @@ python tools/dev.py ci        docs + lint + test
 python tools/dev.py bootstrap 初始化集团、总部与首个平台管理员（只运行一次）
 python tools/dev.py seed-demo  M5 演示数据（需先 serve）
 python tools/dev.py activate-nike  Nike 导入草稿走完门禁/授权/REST·MCP（需 serve + 已导入 + seed-demo）
+python tools/dev.py activate-equipment  设备管家 RSA+JWT 真连接 → Tool → 门禁 → REST/MCP（需 serve + seed-demo）
 python tools/dev.py serve     本地运行控制面(18081)与数据面(18082)
 python tools/dev.py otel-up   启动 OTel Collector / Tempo / Prometheus / Grafana
 python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
@@ -105,7 +106,8 @@ def docs() -> None:
     run([PY, "tools/gen_adrs.py"])
     run([PY, "tools/gen_schemas.py"])
     run([PY, "tools/gen_openapi.py"])
-    run(["git", "diff", "--exit-code", "--", "docs/specs", "docs/api", "docs/adr"])  # 生成物必须已提交
+    run([PY, "tools/gen_console_api_types.py"])  # G1.4：控制台 OpenAPI 类型生成物须提交
+    run(["git", "diff", "--exit-code", "--", "docs/specs", "docs/api", "docs/adr", "console/src/api-types.generated.ts"])
     run([PY, "tools/check_links.py"])
     npx = shutil.which("npx.cmd") or shutil.which("npx")
     if npx:
@@ -181,6 +183,16 @@ def activate_nike() -> None:
     """Nike 导入草稿 → 门禁 → Grant → REST/MCP（需先 serve + 已导入 Collection + seed-demo）。"""
     subprocess.run(
         [PY, "tools/activate_nike_path.py"],
+        cwd=ROOT,
+        env={**dev_env(), "PYTHONPATH": str(ROOT / "src"), "PYTHONIOENCODING": "utf-8"},
+        check=True,
+    )
+
+
+def activate_equipment() -> None:
+    """设备管家 RSA 登录握手 → 声明式 Tool → 门禁 → Grant → REST/MCP。"""
+    subprocess.run(
+        [PY, "tools/activate_equipment_path.py"],
         cwd=ROOT,
         env={**dev_env(), "PYTHONPATH": str(ROOT / "src"), "PYTHONIOENCODING": "utf-8"},
         check=True,
@@ -323,6 +335,7 @@ TASKS = {
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,
     "activate-nike": activate_nike,
+    "activate-equipment": activate_equipment,
 }
 
 if __name__ == "__main__":

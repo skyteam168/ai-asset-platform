@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "gen:api": "node scripts/gen-api-types.mjs",
     "e2e": "playwright test"
   },
   "dependencies": {

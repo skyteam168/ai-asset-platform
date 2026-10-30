@@ -1,4 +1,40 @@
-// 与 docs/api/control-plane.openapi.yaml 对应的前端类型（只列控制台用到的字段）
+// 与 docs/api/control-plane.openapi.yaml 对应的前端类型（只列控制台用到的字段）。
+// 首批与 OpenAPI 重合的接口从生成物 re-export：npm run gen:api / tools/gen_console_api_types.py
+import type {
+  Asset as GenAsset,
+  ConnectionTestResult,
+  SystemConnection,
+  UpstreamMcpPreviewHash,
+  UpstreamMcpSource as GenUpstreamMcpSource,
+} from "./api-types.generated";
+
+export type { UpstreamMcpPreviewHash };
+export type Connection = SystemConnection;
+/** OpenAPI chain 字段不全；控制台按探针完整结果收紧 */
+export type ConnectionTest = Omit<ConnectionTestResult, "chain" | "allowlisted"> & {
+  chain: Array<{
+    subject: string;
+    issuer: string;
+    not_before: string;
+    not_after: string;
+    self_signed: boolean;
+    sans: string[];
+  }>;
+  allowlisted: boolean | null;
+};
+/** 列表响应必有 id；OpenAPI Asset 的 id 为可选，这里收紧 */
+export type Asset = GenAsset & { id: string; company_id?: string | null };
+export type UpstreamMcpSource = Required<
+  Pick<GenUpstreamMcpSource, "id" | "name" | "system_connection_id" | "tools_manifest_hash">
+> &
+  GenUpstreamMcpSource & {
+    company_id: string | null;
+    mcp_path: string;
+    pinned_tools: Record<string, unknown>[];
+    status: "active" | "disabled";
+    created_at: string | null;
+  };
+
 export type Role = "platform_admin" | "asset_developer" | "data_owner" | "business_owner" | "company_admin" | "auditor";
 
 export interface Me {
@@ -51,52 +87,6 @@ export interface Binding {
   expires_at: string;
 }
 
-export interface Connection {
-  id: string;
-  company_id: string;
-  system_key: string;
-  env: string;
-  base_url: string;
-  scheme: "https" | "http" | "postgres" | "mysql";
-  tls_mode: "system_ca" | "custom_ca" | "pinned" | "insecure" | null;
-  pins: { kind: "cert" | "spki"; sha256: string }[];
-  transport_exception_reason: string | null;
-  transport_exception_expires_at: string | null;
-  transport_approved_by: string[];
-  tls_last_seen_fingerprint: string | null;
-  status: "pending_approval" | "active" | "disabled";
-}
-
-export interface ConnectionTest {
-  connection_id: string;
-  resolved_ip: string | null;
-  allowlisted: boolean | null;
-  tls_version: string | null;
-  chain: { subject: string; issuer: string; not_before: string; not_after: string; self_signed: boolean; sans: string[] }[];
-  fingerprint_cert_sha256: string | null;
-  fingerprint_spki_sha256: string | null;
-  hostname_match: boolean | null;
-  verdict: "pass" | "fail";
-  error_code: string | null;
-  detail: string | null;
-}
-
-export interface Asset {
-  id: string;
-  type: string;
-  name: string;
-  owner_org_id: string;
-  company_id?: string | null;
-  classification: number;
-  latest_semver?: string | null;
-  latest_state?: string | null;
-  title?: string | null;
-  description?: string;
-  risk_level?: string | null;
-  connector?: string | null;
-  system_key?: string | null;
-  system_host?: string | null;
-}
 
 export interface VersionSummary {
   id: string;
@@ -227,18 +217,6 @@ export interface ConnectorInstance {
   rate_per_s: number | null;
   burst: number | null;
   status: string | null;
-}
-
-export interface UpstreamMcpSource {
-  id: string;
-  name: string;
-  company_id: string | null;
-  system_connection_id: string;
-  mcp_path: string;
-  tools_manifest_hash: string;
-  pinned_tools: Record<string, unknown>[];
-  status: "active" | "disabled";
-  created_at: string | null;
 }
 
 export interface ImporterResult {

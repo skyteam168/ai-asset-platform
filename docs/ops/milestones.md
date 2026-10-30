@@ -1208,6 +1208,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 含 pending_approval、风控态、revoked/left | 通过 | `i18n.test.tsx` |
 | Risk 页复用 StateTag | 通过 | `Risk.tsx` |
 
+### G1.4 控制台 OpenAPI 类型生成 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `tools/gen_console_api_types.py` → `api-types.generated.ts` | 通过 | Connection / UpstreamMcp / Asset / ConnectionTest |
+| `npm run gen:api`；`types.ts` re-export | 通过 | `console/scripts/gen-api-types.mjs` |
+| `tools/dev.py docs` 校验生成物已提交 | 通过 | `dev.py` git diff 含 generated |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
