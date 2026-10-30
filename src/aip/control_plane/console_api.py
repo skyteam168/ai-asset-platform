@@ -370,39 +370,54 @@ def router() -> APIRouter:
                     }
                 )
             items = await attach_system_fields(conn, items)
-            # H41：有 zhparser 时物化 search_text；q 优先走 FTS，否则子串降级
+            # H41 / G5.3：有 zhparser / pgvector 时物化；q 走 FTS∪向量，否则子串降级
+            from aip.control_plane.registry.vector import (
+                merge_search_ids,
+                search_asset_ids_by_vector,
+                upsert_catalog_embedding,
+            )
+
             for it in items:
                 aid = it.get("asset_id")
                 cid = it.get("company_id")
                 if not aid or not cid:
                     continue
+                st = " ".join(
+                    str(it.get(k) or "")
+                    for k in (
+                        "capability_id",
+                        "title",
+                        "description",
+                        "name",
+                        "connector",
+                        "system_key",
+                        "system_host",
+                    )
+                )
                 try:
                     await upsert_catalog_fts(
                         conn,
                         asset_id=uuid.UUID(str(aid)),
                         company_id=uuid.UUID(str(cid)),
-                        search_text=" ".join(
-                            str(it.get(k) or "")
-                            for k in (
-                                "capability_id",
-                                "title",
-                                "description",
-                                "name",
-                                "connector",
-                                "system_key",
-                                "system_host",
-                            )
-                        ),
+                        search_text=st,
+                    )
+                    await upsert_catalog_embedding(
+                        conn,
+                        asset_id=uuid.UUID(str(aid)),
+                        company_id=uuid.UUID(str(cid)),
+                        search_text=st,
                     )
                 except ValueError:
                     pass
             qq = (q or "").strip()
             if qq:
                 fts_ids = await search_asset_ids(conn, qq)
-                if fts_ids is None:
+                vec_ids = await search_asset_ids_by_vector(conn, qq)
+                merged = merge_search_ids(fts_ids, vec_ids)
+                if merged is None:
                     items = match_in_memory(items, qq)
                 else:
-                    allow = {str(i) for i in fts_ids}
+                    allow = {str(i) for i in merged}
                     ql = qq.lower()
                     items = [
                         it

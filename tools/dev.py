@@ -17,6 +17,7 @@ python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
 python tools/dev.py k8s-check  kubectl kustomize 构建 base 与 prod overlay
 python tools/dev.py loadtest [--workers …]  数据面压测（透传 tools/loadtest.py）
 python tools/dev.py zhparser-up  可选：构建并启动带 zhparser 的 PostgreSQL
+python tools/dev.py pgvector-up  可选：启动带 pgvector 的 PostgreSQL（重建卷）
 python tools/dev.py prod-check 生产清单本地校验（kustomize + 文档章节）
 """
 
@@ -314,6 +315,40 @@ def zhparser_up() -> None:
     print("zhparser postgres ready on 55432")
 
 
+COMPOSE_PGVECTOR = [
+    "docker",
+    "compose",
+    "-f",
+    str(ROOT / "deploy" / "docker-compose.yml"),
+    "-f",
+    str(ROOT / "deploy" / "docker-compose.pgvector.yml"),
+]
+
+
+def pgvector_up() -> None:
+    """启动带 pgvector 的 Postgres 并替换默认库（会重建 postgres 卷）。"""
+    run([*COMPOSE, "stop", "postgres"], check=False)
+    run([*COMPOSE, "rm", "-f", "-v", "postgres"], check=False)
+    run([*COMPOSE_PGVECTOR, "pull", "postgres"], check=False)
+    run([*COMPOSE_PGVECTOR, "up", "-d", "postgres"])
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        if (
+            subprocess.call(
+                [*COMPOSE_PGVECTOR, "exec", "-T", "postgres", "pg_isready", "-U", "aip", "-d", "aip"],
+                cwd=ROOT,
+                stdout=subprocess.DEVNULL,
+            )
+            == 0
+        ):
+            break
+        time.sleep(1)
+    else:
+        sys.exit("pgvector postgres not ready")
+    migrate()
+    print("pgvector postgres ready on 55432")
+
+
 def prod_check() -> None:
     """生产清单本地校验：kustomize + 文档章节 + Settings 环境变量名对照。"""
     from aip.libs.prod_check import run_prod_check
@@ -342,6 +377,7 @@ TASKS = {
     "k8s-check": k8s_check,
     "loadtest": loadtest,  # 实际由 __main__ 传 argv
     "zhparser-up": zhparser_up,
+    "pgvector-up": pgvector_up,
     "prod-check": prod_check,
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,

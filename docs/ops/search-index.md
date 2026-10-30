@@ -45,14 +45,24 @@
 - Opt-in：`tools/dev.py zhparser-up` 后 `pytest -q -m zhparser tests/test_h41_zhparser.py`
 - 其它：`tests/test_m7_search_index.py`、`tests/test_m7_discovery.py`、`tests/test_h17_pg_fts_ha.py`
 
-## 6. pgvector（H58，按需）
+## 6. pgvector opt-in（H58 / G5.3）
 
-架构「之后按需加 pgvector」。本仓库**不**默认安装扩展、不建向量表。
+架构「之后按需加 pgvector」。默认 alpine **不**装扩展；迁移在无 `vector` 时 NOTICE no-op。
 
-建议路径（staging）：
+| 组件 | 路径 |
+| --- | --- |
+| Compose | [`deploy/docker-compose.pgvector.yml`](../../deploy/docker-compose.pgvector.yml)（`pgvector/pgvector:pg16`） |
+| 启动 | `python tools/dev.py pgvector-up`（重建 postgres 卷 → migrate） |
+| 迁移 | `20261030_0029_pgvector`：有扩展时 `CREATE EXTENSION vector`、`registry.catalog_embedding` + HNSW |
+| 代码 | [`src/aip/control_plane/registry/vector.py`](../../src/aip/control_plane/registry/vector.py) |
+| 目录 `q=` | FTS ∪ 向量近邻（`merge_search_ids`）；皆不可用则子串降级 |
+| 测例 | `tests/test_h58_pgvector.py`（`@pytest.mark.pgvector`；无扩展 skip） |
 
-1. `CREATE EXTENSION vector;`（需镜像含 pgvector）
-2. 物化列与 HNSW/IVFFlat 索引挂在独立表，检索仍先 Principal 过滤
-3. 与 zhparser FTS 并存时，混合排序策略单独 ADR
+首期 embedding 为确定性伪向量（`text_to_pseudo_embedding`，dim=32），仅验证写入与近邻通路；生产真 embedding 经 LLM Gateway 后仍写同表，维度保持 `EMBED_DIM`。
 
-成本分摊与双机房见 [wave-c-backlog.md](wave-c-backlog.md)。
+验证：
+
+- 默认栈：`alembic upgrade head`（0029 no-op）+ `pytest -q tests/test_h58_pgvector.py`（pgvector 用例 skip）
+- Opt-in：`tools/dev.py pgvector-up` 后 `pytest -q -m pgvector tests/test_h58_pgvector.py`
+
+成本分摊见 G5.2 / 控制台「成本分摊」；双机房见 [wave-c-backlog.md](wave-c-backlog.md)。

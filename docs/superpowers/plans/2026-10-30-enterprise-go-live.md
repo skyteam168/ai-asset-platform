@@ -307,9 +307,9 @@ flowchart TB
 - Modify: discovery / catalog `q=` 路径双通道（FTS + vector）
 - Test: mark `pgvector`；无扩展 skip；有扩展插入 embedding 可搜到
 
-- [ ] **Step 1:** Dockerfile/compose override 可启 pgvector
-- [ ] **Step 2:** 写入与查询测例
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** Compose override（`pgvector/pgvector:pg16`）+ `pgvector-up`
+- [x] **Step 2:** 写入与查询测例（无扩展 skip；双通道 FTS∪vector）
+- [x] **Step 3:** Commit
 
 ---
 

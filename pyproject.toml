@@ -83,6 +83,7 @@ markers = [
     "infra: needs docker-compose services (python tools/dev.py up)",
     "mysql: needs asyncmy + reachable MySQL (AIP_TEST_MYSQL_URL)",
     "zhparser: needs postgres image with zhparser (tools/dev.py zhparser-up)",
+    "pgvector: needs postgres image with pgvector (tools/dev.py pgvector-up)",
     "smoke: lightweight production-path smoke (no external cert fixtures required)",
     "smtp: live SMTP send (needs AIP_TEST_SMTP_HOST / USER / PASSWORD / TO)",
     "feishu: live Feishu webhook (needs AIP_TEST_FEISHU_WEBHOOK_URL)",

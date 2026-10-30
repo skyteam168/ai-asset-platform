@@ -104,7 +104,7 @@ async def truncate() -> None:
             "registry.selection_eval_settings",
         ]
         await conn.execute(f"TRUNCATE {', '.join(iam_tables + others)} RESTART IDENTITY CASCADE")
-        # H41：仅在 zhparser 迁移创建了表时清理
+        # H41 / G5.3：仅在扩展迁移创建了表时清理
         await conn.execute(
             """
             DO $$
@@ -114,6 +114,12 @@ async def truncate() -> None:
                 WHERE table_schema = 'registry' AND table_name = 'catalog_fts'
               ) THEN
                 TRUNCATE registry.catalog_fts RESTART IDENTITY CASCADE;
+              END IF;
+              IF EXISTS (
+                SELECT 1 FROM information_schema.tables
+                WHERE table_schema = 'registry' AND table_name = 'catalog_embedding'
+              ) THEN
+                TRUNCATE registry.catalog_embedding RESTART IDENTITY CASCADE;
               END IF;
             END $$;
             """

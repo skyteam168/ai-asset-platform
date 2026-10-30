@@ -1308,6 +1308,15 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | `GET /api/v1/console/usage-report` | 通过 | `test_console_usage_report_http` |
 | 控制台「成本分摊」页签 | 通过 | `Risk.tsx` CostShare；en/vi/km |
 
+### G5.3 pgvector 语义检索（opt-in）— 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 迁移无扩展 no-op | 通过 | `20261030_0029_pgvector` |
+| Compose + `pgvector-up` | 通过 | `docker-compose.pgvector.yml`；`tools/dev.py pgvector-up` |
+| 伪向量近邻 + 双通道合并 | 通过 | `test_pseudo_embedding_similarity`；`merge_search_ids`；`-m pgvector` |
+| 文档 | 通过 | [search-index.md](search-index.md) §6 |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

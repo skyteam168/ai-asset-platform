@@ -1,0 +1,6 @@
+# Opt-in：与 deploy/docker-compose.yml 叠加，替换为带 pgvector 的 PostgreSQL。
+# 用法：python tools/dev.py pgvector-up（会重建 postgres 卷）。
+name: aip-dev
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
