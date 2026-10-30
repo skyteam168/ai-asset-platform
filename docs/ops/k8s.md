@@ -29,6 +29,19 @@ kubectl kustomize deploy/k8s/overlays/prod
 3. 先跑 Job `aip-migrate`，再扩控制面 / 数据面。
 4. 数据面 `/readyz` 在快照与策略未齐前保持未就绪（fail closed）。
 
+## 服务间认证密钥（G2）
+
+控制面与数据面必须共享同一签名材料，否则控制面签发的服务 JWT / 快照会被数据面拒绝（表现为 `/todo` 等下游 401）。
+
+| 环境 | 配置 |
+| --- | --- |
+| 本地 `tools/dev.py serve` | 自动写入并注入 `AIP_SIGNING_KEY_PEM`（`.aip-data/dev-signing-key.pem`，已 gitignore）；两进程同 env |
+| staging / prod（local 签名） | Secret 注入**同一** `AIP_SIGNING_KEY_PEM`（或 `signing_backend=transit` 时两端共用 Transit key） |
+| 生产推荐 | `AIP_SERVICE_AUTH_MODE=jwt`（禁止仅靠长期静态令牌）；可选 `AIP_SERVICE_MTLS_CA_PEM` |
+
+本地验证：`pytest -q tests/test_h44_service_auth.py::test_shared_signing_pem_mint_and_verify_across_settings`。  
+逼近生产：`AIP_SERVICE_AUTH_MODE=jwt python tools/dev.py serve` 后，登录控制台确认待办角标非 401。
+
 ## PostgreSQL（生产）
 
 CloudNativePG 示例见 `deploy/k8s/cnpg/` 与 [pg-ha-prod.md](pg-ha-prod.md)；**不**纳入 `base` kustomization。

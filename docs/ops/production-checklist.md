@@ -9,6 +9,7 @@
 
 - [ ] 创建 K8s Secret `aip-secrets`（库连接、OpenBao token、服务令牌、签名/机密后端配置）；**勿**写入 Git。见 [k8s.md](k8s.md)。
 - [ ] `AIP_ENV=prod`（或 staging）下无任何 `dev-only` 默认口令；`signing_backend` / `secret_backend` 按生产策略显式配置。
+- [ ] 控制面与数据面共享同一 `AIP_SIGNING_KEY_PEM`（或 Transit 同名 key）；`AIP_SERVICE_AUTH_MODE=jwt`（生产禁止仅 `static`）。见 [k8s.md](k8s.md)「服务间认证密钥」。
 
 ## 迁移 Job
 

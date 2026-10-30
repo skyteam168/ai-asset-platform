@@ -1216,6 +1216,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | `npm run gen:api`；`types.ts` re-export | 通过 | `console/scripts/gen-api-types.mjs` |
 | `tools/dev.py docs` 校验生成物已提交 | 通过 | `dev.py` git diff 含 generated |
 
+### G2.1 共享 signing_key_pem — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 双 Settings 同 PEM mint/verify | 通过 | `test_shared_signing_pem_mint_and_verify_across_settings` |
+| `dev.py serve` 注入共享 `AIP_SIGNING_KEY_PEM` | 通过 | `dev_env` + serve 打印 kid |
+| k8s / production-checklist 说明 | 通过 | `k8s.md`「服务间认证密钥」 |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

@@ -201,6 +201,17 @@ def activate_equipment() -> None:
 
 def serve(*, with_otel: bool = False) -> None:
     env = dev_env()
+    # G2.1：可选 AIP_SERVICE_AUTH_MODE=jwt 逼近生产；默认 both 兼容静态回退
+    mode = env.get("AIP_SERVICE_AUTH_MODE") or "both"
+    env = {**env, "AIP_SERVICE_AUTH_MODE": mode}
+    kid = ""
+    try:
+        from aip.libs.tokens.keys import SigningKey
+
+        kid = SigningKey.from_pem(env["AIP_SIGNING_KEY_PEM"]).kid
+    except Exception:
+        kid = "?"
+    print(f"service-auth: mode={mode} shared_signing_kid={kid} (.aip-data/dev-signing-key.pem)")
     if with_otel:
         env = {
             **env,

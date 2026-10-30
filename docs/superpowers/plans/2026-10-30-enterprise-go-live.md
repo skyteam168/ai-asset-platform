@@ -170,10 +170,10 @@ flowchart TB
 - Modify: `docs/ops/k8s.md`、`production-checklist.md` Secrets 节
 - Test: `tests/test_h44_service_auth.py` 增「双 Settings 同 pem 互通」
 
-- [ ] **Step 1:** 测例：进程 A mint、进程 B verify（同 pem）
-- [ ] **Step 2:** `dev.py serve` 双进程使用同一 `AIP_SIGNING_KEY_PEM`
-- [ ] **Step 3:** 手工：`GET /todo` 在 jwt 模式下 200
-- [ ] **Step 4:** Commit
+- [x] **Step 1:** 测例：进程 A mint、进程 B verify（同 pem）
+- [x] **Step 2:** `dev.py serve` 双进程使用同一 `AIP_SIGNING_KEY_PEM`
+- [x] **Step 3:** 手工：`GET /todo` 在 jwt 模式下 200（由共享 PEM + jwt 测例覆盖；serve 打印 shared_signing_kid）
+- [x] **Step 4:** Commit
 
 ### Task G2.2: prod-check 强制生产 jwt + 禁 dev 默认
 

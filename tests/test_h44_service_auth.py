@@ -131,3 +131,18 @@ def test_bearer_for_outbound_both_without_shared_key_uses_static() -> None:
         service_token_ttl_s=300,
     )
     assert bearer_for_outbound(settings=s) == "static-xyz"
+
+
+def test_shared_signing_pem_mint_and_verify_across_settings() -> None:
+    """G2.1：控制面与数据面各一份 Settings，同 AIP_SIGNING_KEY_PEM 时 JWT 互通。"""
+    pem = _pem()
+    control = _s(service_auth_mode="jwt", signing_key_pem=pem, internal_service_token="cp-static")
+    data = _s(service_auth_mode="jwt", signing_key_pem=pem, internal_service_token="dp-static")
+    tok = mint_service_token(subject="control-plane", settings=control)
+    assert verify_service_jwt(tok, settings=data) == "control-plane"
+    assert require_service_auth(f"Bearer {tok}", settings=data) == "control-plane"
+    # 不同 PEM 不可互通
+    other = _s(service_auth_mode="jwt", signing_key_pem=_pem())
+    with pytest.raises(PlatformError) as ei:
+        verify_service_jwt(tok, settings=other)
+    assert ei.value.code == ErrorCode.UNAUTHENTICATED
