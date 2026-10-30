@@ -166,7 +166,7 @@ React 18 + Ant Design 5 + Vite，构建产物由控制面挂在 `/console/`（�
 | 组织与用户 | 组织树、按子树过滤用户、新建下级与停用、新建用户（一次性展示 TOTP）、CSV 导入预览与确认 | `/orgs`、`/users`、`/users/import` |
 | 消费方与绑定 | 注册消费方、用户绑定、签发静态 Token（只显示一次）、登记 JWK、断言调试器 | `/consumers`、`/consumers/{id}/bindings`、`/credentials`、`/jwks`、`/assertion-debug` |
 | 系统连接 | 登记连接（system_ca / custom_ca / pinned / insecure / http，例外理由与 ≤ 90 天到期）、审批例外、连接测试（解析地址、白名单、证书链、两种指纹）、生成 pinned 草稿 | `/connections`、`/test`、`/approve-exception`、`/trust-draft` |
-| 资产与门禁 | 资产与版本、Spec 模板、门禁用例、验收单模板、提交 G0、运行 G1 / G2、门禁记录、灰度与全量 | `/assets`、`/assets/{id}/versions`、`/versions/{id}`、`/test-cases`、`/acceptance`、`/submit`、`/run-tests`、`/gates`、`/canary`、`/promote` |
+| 资产与门禁 | 资产与版本、Spec 模板、门禁用例、验收单模板、提交 G0、运行 G1 / G2、门禁记录、灰度与全量、丢弃草稿 / 删除未发布资产 | `/assets`、`DELETE /assets/{id}`、`/assets/{id}/versions`、`/versions/{id}`、`DELETE /versions/{id}`、`/test-cases`、`/acceptance`、`/submit`、`/run-tests`、`/gates`、`/canary`、`/promote` |
 | 审批待办 | G5 / G6 / 使用申请，显示“资产@版本”或“资产（环境）”，G5 填写实测结果，驳回必须写理由 | `/approvals`、`/approvals/{id}/decide` |
 | 授权 | 授权上限、授权（只能选上限内资产）、使用申请、访问复核发起与关闭 | `/grant-ceilings`、`/grants`、`/usage-requests`、`/access-reviews` |
 | 审计 | 按类型、trace_id、时间、条数检索；展开原始记录；校验哈希链与签名锚点 | `/audit-logs`、`/audit-logs/verify` |
@@ -1137,6 +1137,71 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 部分 | 内容 |
 | --- | --- |
 | 不在本片 | 真装 Langfuse；真集群 PITR |
+
+### 资产草稿丢弃 / 未发布资产删除 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `DELETE /versions/{id}` 仅 draft | 通过 | `test_discard_draft_version_and_delete_asset` |
+| `DELETE /assets/{id}` 无发布/授权且版本均为 draft | 通过 | 同上 |
+| 控制台「丢弃草稿」「删除资产」 | 通过 | `Assets.tsx`；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | Active 硬删（走弃用/退役） |
+
+### 弃用/退役 + 连接/实例删除 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `POST …/deprecate` active→deprecated | 通过 | `test_ops_lifecycle_delete` |
+| `POST …/retire`（闲置 / force） | 通过 | 同上 |
+| `DELETE /connections/{id}`、`DELETE /connector-instances/{id}` | 通过 | 同上 + HTTP 路由测例 |
+| 控制台按钮 | 通过 | Assets / Connections / ConnectorInstances；i18n |
+| 浏览器 headed 验收 | 通过 | `.tmp/browser-ops/`（丢弃/删除/弃用/退役） |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 真 SMTP/IdP；调用量按资产维精确计量（`usage_counter` 现为消费方/上限键） |
+
+### 上游 MCP 源登记/禁用/删除 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `POST/GET/DELETE /upstream-mcp-sources`、`POST …/disable` | 通过 | `test_upstream_mcp_source_create_disable_delete_blocks_connection` |
+| 绑源时删连接 → 412 | 通过 | 同上 |
+| 控制台「上游 MCP 源」页签 | 通过 | `Connections.tsx`；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 从源一键生成 Connector 实例；在线 tools/list 拉哈希 |
+
+### 服务凭据失败不踢控制台会话 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `both` 无共享密钥出站用静态令牌 | 通过 | `test_bearer_for_outbound_both_without_shared_key_uses_static` |
+| DataPlane 401 → DOWNSTREAM_UNAVAILABLE | 通过 | `test_dataplane_call_maps_service_401_to_downstream` |
+| 登录用户 `GET /todo` 非 401 | 通过 | `test_todo_does_not_401_logged_in_console_user` |
+| 待办角标独立 fetch | 通过 | `App.tsx` Notifications |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 生产强制 `jwt` + 共享 Transit 密钥联调 |
+
+### P0 Credential 声明式登录握手（RSA+JWT）— 2026-10-22
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| prepare + rsa_encrypt_json + body 换票 | 通过 | `test_credential_login_handshake.py` |
+| ttl_from=jwt_exp 缓存 | 通过 | 同测例 |
+| 旧版明文 login 兼容 | 通过 | `test_plain_login_still_works` |
+| ADR / 架构 9.2 | 通过 | ADR-0027；architecture §9.2 表 |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `connectors/credentials.py`；演示 `tools/activate_equipment_path.py` |
+| 不在本片 | SM2；Cookie 会话；控制台 auth 预设 UI；任意脚本 |
 
 ### O3b AI 生成候选 OpenAPI — 2026-10-22
 

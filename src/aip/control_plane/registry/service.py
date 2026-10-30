@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import json
 import pathlib
@@ -12,7 +13,7 @@ import uuid
 from typing import Any
 
 import jsonschema
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncConnection
 
@@ -22,6 +23,21 @@ from aip.control_plane.registry import tables as t
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
 from aip.libs.tokens.keys import canonical_json
+
+# draft 版本可物理删除（迁移触发器仅保护非 draft）；子表多数无 ON DELETE CASCADE，须按序清理。
+_VERSION_CHILD_DELETES = (
+    "DELETE FROM registry.selection_eval_run WHERE version_id = :v",
+    "DELETE FROM registry.selection_eval_case WHERE version_id = :v",
+    "DELETE FROM registry.selection_eval_settings WHERE version_id = :v",
+    "DELETE FROM registry.skill_script_allowlist WHERE version_id = :v",
+    "DELETE FROM registry.skill_package WHERE version_id = :v",
+    "DELETE FROM registry.probe_result WHERE version_id = :v",
+    "DELETE FROM registry.contract_drift WHERE version_id = :v",
+    "DELETE FROM registry.test_case WHERE version_id = :v",
+    "DELETE FROM registry.gate_result WHERE version_id = :v",
+    "DELETE FROM registry.acceptance_sheet WHERE version_id = :v",
+    "DELETE FROM registry.state_transition WHERE version_id = :v",
+)
 
 SPECS = pathlib.Path(__file__).resolve().parents[4] / "docs" / "specs"
 ASSET_TYPES = frozenset({"tool", "skill", "workflow", "bundle", "prompt", "model_profile", "connector_package"})
@@ -199,6 +215,79 @@ async def update_draft(conn: AsyncConnection, actor: Actor, version_id: uuid.UUI
     )
 
 
+async def _purge_version_children(conn: AsyncConnection, version_id: uuid.UUID) -> None:
+    """清理版本附属表与以 version 为 subject 的审批（无 FK 级联）。"""
+    for sql in _VERSION_CHILD_DELETES:
+        await conn.execute(text(sql), {"v": version_id})
+    await conn.execute(
+        text(
+            """
+            DELETE FROM approval.approval_decision
+            WHERE request_id IN (
+              SELECT id FROM approval.approval_request WHERE subject_id = :v
+            )
+            """
+        ),
+        {"v": version_id},
+    )
+    await conn.execute(text("DELETE FROM approval.approval_request WHERE subject_id = :v"), {"v": version_id})
+
+
+async def delete_draft_version(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID) -> uuid.UUID:
+    """丢弃草稿版本。已离开 draft 的版本不可删，应走 Deprecated → Retired。"""
+    actor.require(actor.has("asset_developer") or actor.has("platform_admin"), "只有资产开发者可以丢弃草稿")
+    v = await version_row(conn, version_id)
+    if v["state"] != "draft":
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "只有草稿版本可以删除；已提交版本请走弃用与退役")
+    if (await conn.execute(select(t.release.c.id).where(t.release.c.version_id == version_id).limit(1))).first():
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "该版本已有发布记录，不能删除")
+    await _purge_version_children(conn, version_id)
+    await conn.execute(t.asset_version.delete().where(t.asset_version.c.id == version_id))
+    await _emit(
+        conn,
+        "version.discarded",
+        v["company_id"],
+        version_id,
+        actor,
+        {"asset_id": str(v["asset_id"]), "semver": v["semver"]},
+    )
+    return uuid.UUID(str(v["asset_id"]))
+
+
+async def delete_asset(conn: AsyncConnection, actor: Actor, asset_id: uuid.UUID) -> None:
+    """删除尚未发布、无授权的资产及其全部草稿版本。"""
+    actor.require(actor.has("asset_developer") or actor.has("platform_admin"), "只有资产开发者可以删除资产")
+    a = await asset_row(conn, asset_id)
+    if (await conn.execute(select(t.release.c.id).where(t.release.c.asset_id == asset_id).limit(1))).first():
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "资产已有发布记录，不能删除；请走弃用与退役")
+    if (await conn.execute(select(t.grant.c.id).where(t.grant.c.asset_id == asset_id).limit(1))).first():
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "资产仍有授权，不能删除")
+    usage = (
+        await conn.execute(
+            text("SELECT id FROM grants.usage_request WHERE asset_id = :a LIMIT 1"),
+            {"a": asset_id},
+        )
+    ).first()
+    if usage is not None:
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "资产仍有使用申请记录，不能删除")
+    versions = (
+        await conn.execute(
+            select(t.asset_version.c.id, t.asset_version.c.state).where(t.asset_version.c.asset_id == asset_id)
+        )
+    ).all()
+    if any(row[1] != "draft" for row in versions):
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "存在非草稿版本，不能删除资产")
+    for row in versions:
+        await _purge_version_children(conn, row[0])
+        await conn.execute(t.asset_version.delete().where(t.asset_version.c.id == row[0]))
+    from aip.control_plane.registry.fts import zhparser_ready
+
+    if await zhparser_ready(conn):
+        await conn.execute(text("DELETE FROM registry.catalog_fts WHERE asset_id = :a"), {"a": asset_id})
+    await conn.execute(t.asset.delete().where(t.asset.c.id == asset_id))
+    await _emit(conn, "asset.deleted", a["company_id"], asset_id, actor, {"name": a["name"], "type": a["type"]})
+
+
 async def transition(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, to_state: str, reason: str) -> str:
     v = await version_row(conn, version_id)
     current = v["state"]
@@ -302,6 +391,57 @@ async def create_release(
     )
     await _emit(conn, "release.created", v["company_id"], rid, actor, {"env": env, "channel": channel})
     return rid
+
+
+_RETIRE_IDLE_DAYS = 30
+
+
+async def deprecate_version(conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, *, reason: str) -> str:
+    """Active → Deprecated（architecture.md 7.4）；需平台管理员。"""
+    actor.require(actor.has("platform_admin"), "弃用由平台管理员执行")
+    why = reason.strip()
+    if len(why) < 3:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "弃用理由至少 3 个字符")
+    v = await version_row(conn, version_id)
+    if v["state"] != "active":
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, f"只有 active 版本可以弃用（当前 {v['state']}）")
+    return await transition(conn, actor, version_id, "deprecated", why)
+
+
+async def retire_version(
+    conn: AsyncConnection, actor: Actor, version_id: uuid.UUID, *, reason: str, force: bool = False
+) -> str:
+    """Deprecated → Retired。默认要求近期无调用；force=true 时总部强制下线并写入理由。"""
+    actor.require(actor.has("platform_admin"), "退役由平台管理员执行")
+    why = reason.strip()
+    if len(why) < 3:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "退役理由至少 3 个字符")
+    v = await version_row(conn, version_id)
+    if v["state"] != "deprecated":
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, f"只有 deprecated 版本可以退役（当前 {v['state']}）")
+    if not force:
+        cutoff = utcnow() - dt.timedelta(days=_RETIRE_IDLE_DAYS)
+        recent = (
+            await conn.execute(
+                select(t.grant.c.id)
+                .where(
+                    and_(
+                        t.grant.c.asset_id == v["asset_id"],
+                        t.grant.c.status == "active",
+                        t.grant.c.last_used_at.is_not(None),
+                        t.grant.c.last_used_at > cutoff,
+                    )
+                )
+                .limit(1)
+            )
+        ).first()
+        if recent is not None:
+            raise PlatformError(
+                ErrorCode.PRECONDITION_FAILED,
+                f"近 {_RETIRE_IDLE_DAYS} 天仍有授权调用，不得退役；可 force=true 并记录强制下线原因",
+            )
+    note = why if not force else f"[force] {why}"
+    return await transition(conn, actor, version_id, "retired", note)
 
 
 async def rollback(conn: AsyncConnection, actor: Actor, release_id: uuid.UUID) -> uuid.UUID:

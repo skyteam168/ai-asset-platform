@@ -138,9 +138,18 @@ def require_service_auth(
 
 
 def bearer_for_outbound(*, subject: str = "control-plane", settings: Settings | None = None) -> str:
-    """控制面出站调用数据面时的 Bearer。"""
+    """控制面出站调用数据面时的 Bearer。
+
+    - jwt：始终签发短期 JWT（要求两端共享 signing_key_pem / Transit）。
+    - static：静态令牌。
+    - both：已配置共享签名密钥时用 JWT；否则用静态令牌（开发多进程各自 platform_keys 无法互验）。
+    """
     s = settings or get_settings()
-    if s.service_auth_mode in ("jwt", "both"):
+    if s.service_auth_mode == "static":
+        return s.internal_service_token
+    if s.service_auth_mode == "jwt":
+        return mint_service_token(subject=subject, settings=s)
+    if s.signing_key_pem:
         return mint_service_token(subject=subject, settings=s)
     return s.internal_service_token
 

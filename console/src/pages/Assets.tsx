@@ -1,6 +1,6 @@
 import { Alert, Button, Card, Drawer, Form, Input, InputNumber, Modal, Select, Space, Steps, Tabs, Tag, Tooltip, Typography } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { get, post, put, type Page } from "../api";
+import { del, get, post, put, type Page } from "../api";
 import { useAuth } from "../auth";
 import {
   Clearance, GateEvidence, JsonInput, jsonRule, JsonView, matchOrgSystem, matches, OrgName, OrgSystemFilter, PageCard, PAGINATION, parseJson, StateTag, Toolbar, useOrgs,
@@ -11,7 +11,7 @@ import type { Asset, GateRecord, ImpactItem, Release, TestCase, VersionDetail, V
 import { t } from "../i18n";
 import { SkillPackagePanel } from "./SkillEditor";
 
-const LIFECYCLE = ["draft", "testing", "in_review", "approved", "canary", "active"];
+const LIFECYCLE = ["draft", "testing", "in_review", "approved", "canary", "active", "deprecated", "retired"];
 
 function AssetDescCell({ asset }: { asset: Asset }) {
   const title = (asset.title || "").trim();
@@ -136,7 +136,11 @@ export function AssetsPage() {
         ]}
       />
       <NewAsset open={open} onClose={() => setOpen(false)} onDone={assets.reload} />
-      <AssetDrawer asset={selected} onClose={() => setSelected(null)} />
+      <AssetDrawer
+        asset={selected}
+        onClose={() => setSelected(null)}
+        onDeleted={() => { setSelected(null); assets.reload(); }}
+      />
     </PageCard>
   );
 }
@@ -162,20 +166,34 @@ function NewAsset(p: { open: boolean; onClose: () => void; onDone: () => void })
   );
 }
 
-function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => void }) {
+function AssetDrawer({ asset, onClose, onDeleted }: { asset: Asset | null; onClose: () => void; onDeleted: () => void }) {
   const versions = useLoad(() => (asset ? get<Page<VersionSummary>>(`/assets/${asset.id}/versions`) : Promise.resolve(null)), [asset?.id]);
   const [versionId, setVersionId] = useState<string | null>(null);
   const [newOpen, setNewOpen] = useState(false);
   const { has } = useAuth();
+  const act = useAction();
+  const items = versions.data?.items ?? [];
+  const canDeleteAsset =
+    has("platform_admin", "asset_developer") && !versions.loading && items.every((v) => v.state === "draft");
   return (
     <Drawer open={Boolean(asset)} width={980} title={asset?.name} onClose={() => { setVersionId(null); onClose(); }} destroyOnClose>
       {asset && (
         <>
-          <Space style={{ marginBottom: 12 }}>
+          <Space style={{ marginBottom: 12 }} wrap>
             {has("platform_admin", "asset_developer") && <Button onClick={() => setNewOpen(true)}>{t("新建版本")}</Button>}
+            {canDeleteAsset && (
+              <Button danger onClick={() => Modal.confirm({
+                title: t("删除资产？"),
+                content: t("将删除该资产及其全部草稿版本；已发布或已授权的资产不可删除。"),
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                  if (await act(() => del(`/assets/${asset.id}`), t("已删除资产"))) onDeleted();
+                },
+              })}>{t("删除资产")}</Button>
+            )}
           </Space>
           <ListTable<VersionSummary> rowKey="id" size="small" pagination={false} loading={versions.loading}
-            dataSource={versions.data?.items ?? []}
+            dataSource={items}
             rowClassName={(r) => (r.id === versionId ? "ant-table-row-selected" : "")}
             onRow={(r) => ({ onClick: () => setVersionId(r.id), style: { cursor: "pointer" } })}
             columns={[
@@ -185,7 +203,14 @@ function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => v
               { title: t("创建"), dataIndex: "created_at", render: (v: string) => v.slice(0, 16).replace("T", " ") },
             ]} />
           {versionId && (
-            <VersionPanel key={versionId} versionId={versionId} assetId={asset.id} assetType={asset.type} onChanged={versions.reload} />
+            <VersionPanel
+              key={versionId}
+              versionId={versionId}
+              assetId={asset.id}
+              assetType={asset.type}
+              onChanged={versions.reload}
+              onDiscarded={() => { setVersionId(null); versions.reload(); }}
+            />
           )}
           <NewVersion asset={asset} open={newOpen} onClose={() => setNewOpen(false)} onDone={versions.reload} />
         </>
@@ -274,11 +299,13 @@ function VersionPanel({
   assetId,
   assetType,
   onChanged,
+  onDiscarded,
 }: {
   versionId: string;
   assetId: string;
   assetType: string;
   onChanged: () => void;
+  onDiscarded: () => void;
 }) {
   const detail = useLoad(() => get<VersionDetail>(`/versions/${versionId}`), [versionId]);
   const gates = useLoad(() => get<{ items: GateRecord[] }>(`/versions/${versionId}/gates`), [versionId]);
@@ -363,6 +390,16 @@ function VersionPanel({
             }
           }}>{t("提交（G0 静态检查）")}</Button>
         )}
+        {dev && v.state === "draft" && (
+          <Button danger onClick={() => Modal.confirm({
+            title: t("丢弃草稿版本？"),
+            content: t("将永久删除该草稿及其门禁用例、验收单等附属数据，不可恢复。"),
+            okButtonProps: { danger: true },
+            onOk: async () => {
+              if (await act(() => del(`/versions/${versionId}`), t("已丢弃草稿"))) onDiscarded();
+            },
+          })}>{t("丢弃草稿")}</Button>
+        )}
         {dev && v.state === "testing" && (
           <Button type="primary" onClick={async () => {
             const r = await act(() => post<typeof labResult>(`/versions/${versionId}/run-tests`));
@@ -377,6 +414,51 @@ function VersionPanel({
             content: t("将回滚到上一个发布版本，当前灰度或全量版本将下线。"),
             onOk: async () => { if (await act(() => post(`/releases/${activeRelease.id}/rollback`), t("回滚已发起"))) refresh(); },
           })}>{t("一键回滚")}</Button>
+        )}
+        {has("platform_admin") && v.state === "active" && (
+          <Button danger onClick={() => {
+            let reason = t("发布替代版本 / 公告弃用");
+            Modal.confirm({
+              title: t("弃用该版本？"),
+              content: (
+                <Input.TextArea
+                  rows={3}
+                  defaultValue={reason}
+                  placeholder={t("弃用理由")}
+                  onChange={(e) => { reason = e.target.value; }}
+                />
+              ),
+              onOk: async () => {
+                if (await act(() => post(`/versions/${versionId}/deprecate`, { reason }), t("已弃用"))) refresh();
+              },
+            });
+          }}>{t("弃用")}</Button>
+        )}
+        {has("platform_admin") && v.state === "deprecated" && (
+          <Button danger onClick={() => {
+            let reason = t("调用量归零，正式下线");
+            let force = false;
+            Modal.confirm({
+              title: t("退役该版本？"),
+              content: (
+                <Space direction="vertical" style={{ width: "100%" }}>
+                  <Input.TextArea
+                    rows={3}
+                    defaultValue={reason}
+                    placeholder={t("退役理由")}
+                    onChange={(e) => { reason = e.target.value; }}
+                  />
+                  <label>
+                    <input type="checkbox" onChange={(e) => { force = e.target.checked; }} />{" "}
+                    {t("强制下线（近 30 天仍有调用时）")}
+                  </label>
+                </Space>
+              ),
+              onOk: async () => {
+                if (await act(() => post(`/versions/${versionId}/retire`, { reason, force }), t("已退役"))) refresh();
+              },
+            });
+          }}>{t("退役")}</Button>
         )}
       </Space>
       {labResult && (

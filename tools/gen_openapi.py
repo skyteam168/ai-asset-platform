@@ -516,7 +516,7 @@ def control_plane() -> dict[str, Any]:
                 {
                     "id": ID,
                     "name": S,
-                    "kind": {"enum": ["declarative", "kb", "mock", "upstream_mcp"]},
+                    "kind": {"enum": ["declarative", "kb", "mock", "upstream_mcp", "sql_readonly"]},
                     "company_id": SN,
                     "system_connection_id": SN,
                     "config": {"type": "object"},
@@ -526,6 +526,20 @@ def control_plane() -> dict[str, Any]:
                     "status": SN,
                 },
                 ["id", "name", "kind"],
+            ),
+            "UpstreamMcpSource": o(
+                {
+                    "id": ID,
+                    "name": S,
+                    "company_id": SN,
+                    "system_connection_id": ID,
+                    "mcp_path": S,
+                    "tools_manifest_hash": S,
+                    "pinned_tools": {"type": "array", "items": {"type": "object"}},
+                    "status": {"enum": ["active", "disabled"]},
+                    "created_at": SN,
+                },
+                ["id", "name", "system_connection_id", "tools_manifest_hash"],
             ),
             "SkillCatalogItem": o(
                 {
@@ -945,6 +959,11 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["passed"],
             ),
+            "LifecycleReason": o(
+                {"reason": {"type": "string", "minLength": 3, "maxLength": 500}, "force": B},
+                ["reason"],
+            ),
+            "LifecycleState": o({"id": ID, "state": S}, ["id", "state"]),
             "UsageRequestCreated": o(
                 {
                     "id": ID,
@@ -1263,6 +1282,70 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["company_id", "usage_date", "tokens_used", "daily_tokens"],
             ),
+            "LlmProvider": o(
+                {
+                    "base_url": S,
+                    "credential_ref": S,
+                    "models_path": S,
+                    "has_api_key": B,
+                    "api_key_hint": SN,
+                    "synced_at": SN,
+                    "synced_count": INT,
+                },
+                ["base_url", "credential_ref", "models_path", "has_api_key", "synced_count"],
+            ),
+            "LlmProviderPut": o(
+                {
+                    "base_url": S,
+                    "api_key": SN,
+                    "models_path": S,
+                },
+                ["base_url"],
+            ),
+            "LlmUpstreamModel": o(
+                {
+                    "id": S,
+                    "owned_by": SN,
+                    "created": {"type": ["integer", "null"]},
+                    "suggested_profile": S,
+                },
+                ["id", "suggested_profile"],
+            ),
+            "LlmModelProfileRow": o(
+                {
+                    "asset_id": ID,
+                    "name": S,
+                    "version": SN,
+                    "model": SN,
+                    "base_url": SN,
+                    "status": SN,
+                    "company_id": SN,
+                },
+                ["asset_id", "name"],
+            ),
+            "LlmModelProfileCreate": o(
+                {
+                    "model_id": S,
+                    "name": SN,
+                    "version": S,
+                    "owner_org_id": ID,
+                    "temperature": {"type": "number"},
+                    "max_tokens": INT,
+                    "add_to_allowlist_company_id": SN,
+                },
+                ["model_id", "owner_org_id"],
+            ),
+            "LlmModelProfileCreated": o(
+                {
+                    "asset_id": ID,
+                    "version_id": ID,
+                    "name": S,
+                    "version": S,
+                    "ref": S,
+                    "spec": {"type": "object"},
+                },
+                ["asset_id", "version_id", "name", "version", "ref"],
+            ),
             "SelectionEvalCase": o(
                 {
                     "name": S,
@@ -1569,6 +1652,15 @@ def control_plane() -> dict[str, Any]:
                 "createAsset", "registry", "新建资产", req=ref("Asset"), res=ref("Asset"), code="201", idem=True
             ),
         },
+        f"{A}/assets/{{id}}": {
+            "delete": op(
+                "deleteAsset",
+                "registry",
+                "删除资产（仅无发布/授权且版本均为草稿）",
+                code="204",
+                params=["Id"],
+            )
+        },
         f"{A}/versions/{{id}}/submit": {
             "post": op(
                 "submitVersion",
@@ -1653,6 +1745,26 @@ def control_plane() -> dict[str, Any]:
                 params=["Id"],
             )
         },
+        f"{A}/versions/{{id}}/deprecate": {
+            "post": op(
+                "deprecateVersion",
+                "release",
+                "弃用 active 版本（→ deprecated）",
+                req=ref("LifecycleReason"),
+                res=ref("LifecycleState"),
+                params=["Id"],
+            )
+        },
+        f"{A}/versions/{{id}}/retire": {
+            "post": op(
+                "retireVersion",
+                "release",
+                "退役 deprecated 版本（近 30 天无调用，或 force）",
+                req=ref("LifecycleReason"),
+                res=ref("LifecycleState"),
+                params=["Id"],
+            )
+        },
         f"{A}/approval-delegates": {
             "post": op(
                 "addApprovalDelegate",
@@ -1706,7 +1818,14 @@ def control_plane() -> dict[str, Any]:
         f"{A}/versions/{{id}}": {
             "get": op(
                 "getVersion", "registry", "版本详情（含用例与验收单）", res=ref("VersionDetail"), params=["Id"]
-            )
+            ),
+            "delete": op(
+                "deleteDraftVersion",
+                "registry",
+                "丢弃草稿版本（非 draft 拒绝）",
+                code="204",
+                params=["Id"],
+            ),
         },
         f"{A}/grant-ceilings": {
             "get": op("listCeilings", "grant", "授权上限列表", res=page("GrantCeiling")),
@@ -1751,6 +1870,15 @@ def control_plane() -> dict[str, Any]:
                 code="201",
             ),
         },
+        f"{A}/connections/{{id}}": {
+            "delete": op(
+                "deleteConnection",
+                "connection",
+                "删除系统连接（无实例/上游 MCP 绑定时）",
+                code="204",
+                params=["Id"],
+            )
+        },
         f"{A}/connections/{{id}}/approve-exception": {
             "post": op(
                 "approveTransportException",
@@ -1771,6 +1899,15 @@ def control_plane() -> dict[str, Any]:
                 req={"type": "object"},
                 res={"type": "object"},
                 code="201",
+            )
+        },
+        f"{A}/connector-instances/{{id}}": {
+            "delete": op(
+                "deleteConnectorInstance",
+                "connection",
+                "删除 Connector 实例（含其 SQL 模板）",
+                code="204",
+                params=["Id"],
             )
         },
         f"{A}/connector-instances/{{id}}/sql-templates": {
@@ -1808,6 +1945,41 @@ def control_plane() -> dict[str, Any]:
                 "试跑 SQL 只读模板",
                 req={"type": "object"},
                 res={"type": "object"},
+                params=["Id"],
+            )
+        },
+        f"{A}/upstream-mcp-sources": {
+            "get": op(
+                "listUpstreamMcpSources",
+                "connection",
+                "上游 MCP 源列表",
+                res=page("UpstreamMcpSource"),
+                params=LIST,
+            ),
+            "post": op(
+                "createUpstreamMcpSource",
+                "connection",
+                "登记上游 MCP 源（钉住清单哈希）",
+                req=ref("UpstreamMcpSource"),
+                res=ref("UpstreamMcpSource"),
+                code="201",
+            ),
+        },
+        f"{A}/upstream-mcp-sources/{{id}}": {
+            "delete": op(
+                "deleteUpstreamMcpSource",
+                "connection",
+                "删除上游 MCP 源登记",
+                code="204",
+                params=["Id"],
+            )
+        },
+        f"{A}/upstream-mcp-sources/{{id}}/disable": {
+            "post": op(
+                "disableUpstreamMcpSource",
+                "connection",
+                "禁用上游 MCP 源",
+                code="204",
                 params=["Id"],
             )
         },
@@ -2237,6 +2409,53 @@ def control_plane() -> dict[str, Any]:
                 res=None,
                 code="204",
                 params=["Id"],
+            ),
+        },
+        f"{A}/llm/provider": {
+            "get": op(
+                "getLlmProvider",
+                "llm",
+                "平台 LLM 提供方（OpenAI 兼容 base_url；密钥在 OpenBao）",
+                res=ref("LlmProvider"),
+            ),
+            "put": op(
+                "putLlmProvider",
+                "llm",
+                "保存 LLM 提供方 base_url；可选写入 API Key 到 OpenBao",
+                req=ref("LlmProviderPut"),
+                res=ref("LlmProvider"),
+            ),
+        },
+        f"{A}/llm/provider/sync-models": {
+            "post": op(
+                "syncLlmModels",
+                "llm",
+                "调用上游 GET /models 同步模型列表",
+                res=page("LlmUpstreamModel"),
+            ),
+        },
+        f"{A}/llm/provider/synced-models": {
+            "get": op(
+                "listSyncedLlmModels",
+                "llm",
+                "最近一次同步缓存的上游模型",
+                res=page("LlmUpstreamModel"),
+            ),
+        },
+        f"{A}/llm/model-profiles": {
+            "get": op(
+                "listLlmModelProfiles",
+                "llm",
+                "已登记的 model_profile 资产",
+                res=page("LlmModelProfileRow"),
+            ),
+            "post": op(
+                "createLlmModelProfile",
+                "llm",
+                "从上游 model id 创建 model_profile 草稿版本",
+                req=ref("LlmModelProfileCreate"),
+                res=ref("LlmModelProfileCreated"),
+                code="201",
             ),
         },
         f"{A}/companies/{{id}}/llm-allowlist": {

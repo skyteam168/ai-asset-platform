@@ -358,7 +358,17 @@ function Notifications({ onOpen, enabled }: { onOpen: () => void; enabled: boole
   const refresh = useCallback(async () => {
     if (!enabled) return;
     try {
-      const [todo, approvals] = await Promise.all([get<Todo>("/todo"), get<Page<unknown>>("/approvals")]);
+      // 待办依赖数据面；失败时不得走会清会话的 api() 401 处理
+      const token = sessionStorage.getItem("aip.session");
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const [todoRes, approvalsRes] = await Promise.all([
+        fetch("/api/v1/todo", { headers }),
+        fetch("/api/v1/approvals", { headers }),
+      ]);
+      if (!todoRes.ok && !approvalsRes.ok) return;
+      const todo = todoRes.ok ? ((await todoRes.json()) as Todo) : { confirmations: [], tasks: [] };
+      const approvals = approvalsRes.ok ? ((await approvalsRes.json()) as Page<unknown>) : { items: [] };
       setCount((todo.confirmations?.length ?? 0) + (todo.tasks?.length ?? 0) + (approvals.items?.length ?? 0));
     } catch {
       // 提醒失败不影响页面

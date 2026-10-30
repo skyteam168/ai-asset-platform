@@ -90,6 +90,19 @@ connector_instance = Table(
     Column("burst", Integer),
     Column("status", Text),
 )
+upstream_mcp_source = Table(
+    "upstream_mcp_source",
+    md,
+    Column("id", U, primary_key=True),
+    Column("company_id", U),
+    Column("name", Text),
+    Column("system_connection_id", U),
+    Column("mcp_path", Text),
+    Column("tools_manifest_hash", Text),
+    Column("pinned_tools", JSONB),
+    Column("status", Text),
+    Column("created_at", DateTime(timezone=True)),
+)
 
 MAX_EXCEPTION_DAYS = 90
 _SCHEMA = jsonschema.Draft202012Validator(
@@ -247,6 +260,125 @@ async def draft_trust(conn: AsyncConnection, actor: Actor, connection_id: uuid.U
     if last is None:
         raise PlatformError(ErrorCode.PRECONDITION_FAILED, "请先执行连接测试")
     return trust_draft(last[0], "pinned")
+
+
+async def delete_connector_instance(conn: AsyncConnection, actor: Actor, instance_id: uuid.UUID) -> None:
+    """删除 Connector 实例及其 SQL 模板；被 Tool Spec 引用时由调用方自行处理快照失效。"""
+    actor.require(_manages(actor), "连接器由总部 IT 维护")
+    inst = (
+        await conn.execute(select(connector_instance).where(connector_instance.c.id == instance_id))
+    ).mappings().first()
+    if inst is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, "连接器实例不存在或不可见")
+    await conn.execute(
+        text("DELETE FROM conn.sql_query_template WHERE connector_instance_id = :i"), {"i": instance_id}
+    )
+    await conn.execute(connector_instance.delete().where(connector_instance.c.id == instance_id))
+    await notify_change(conn, "connector.deleted", inst["company_id"], instance_id, actor, {"name": inst["name"]})
+
+
+async def delete_connection(conn: AsyncConnection, actor: Actor, connection_id: uuid.UUID) -> None:
+    """删除系统连接。仍有 Connector 实例或上游 MCP 源绑定时拒绝。"""
+    actor.require(_manages(actor), "连接由总部 IT 维护")
+    r = await row(conn, connection_id)
+    bound = (
+        await conn.execute(
+            select(connector_instance.c.id).where(connector_instance.c.system_connection_id == connection_id).limit(1)
+        )
+    ).first()
+    if bound is not None:
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "仍有连接器实例绑定该连接，请先删除实例")
+    upstream = (
+        await conn.execute(
+            select(upstream_mcp_source.c.id).where(upstream_mcp_source.c.system_connection_id == connection_id).limit(1)
+        )
+    ).first()
+    if upstream is not None:
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "仍有上游 MCP 源绑定该连接，请先禁用或删除")
+    await conn.execute(text("DELETE FROM conn.connection_test_run WHERE connection_id = :c"), {"c": connection_id})
+    await conn.execute(system_connection.delete().where(system_connection.c.id == connection_id))
+    await notify_change(
+        conn, "connection.deleted", r["company_id"], connection_id, actor, {"system_key": r["system_key"]}
+    )
+
+
+async def create_upstream_mcp_source(
+    conn: AsyncConnection,
+    actor: Actor,
+    *,
+    name: str,
+    connection_id: uuid.UUID,
+    tools_manifest_hash: str,
+    mcp_path: str = "/mcp",
+    pinned_tools: list[dict[str, Any]] | None = None,
+) -> uuid.UUID:
+    """登记上游 MCP 源（architecture.md 9.1 / ADR-0014）：钉住清单哈希。"""
+    actor.require(_manages(actor), "上游 MCP 源由总部 IT 维护")
+    key = name.strip()
+    if not key or len(key) > 64:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "名称须 1–64 字符")
+    digest = tools_manifest_hash.strip().lower()
+    if len(digest) != 64 or any(c not in "0123456789abcdef" for c in digest):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "tools_manifest_hash 须为 64 位小写十六进制")
+    path = (mcp_path or "/mcp").strip() or "/mcp"
+    if not path.startswith("/"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "mcp_path 须以 / 开头")
+    sc = await row(conn, connection_id)
+    if sc["scheme"] not in ("https", "http"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "上游 MCP 源须绑定 HTTP(S) 系统连接")
+    sid = new_id()
+    await conn.execute(
+        upstream_mcp_source.insert().values(
+            id=sid,
+            company_id=sc["company_id"],
+            name=key,
+            system_connection_id=connection_id,
+            mcp_path=path,
+            tools_manifest_hash=digest,
+            pinned_tools=pinned_tools or [],
+            status="active",
+            created_at=utcnow(),
+        )
+    )
+    await notify_change(
+        conn, "upstream_mcp.registered", sc["company_id"], sid, actor, {"name": key, "hash": digest[:12]}
+    )
+    return sid
+
+
+async def list_upstream_mcp_sources(conn: AsyncConnection, actor: Actor) -> list[dict[str, Any]]:
+    actor.require(_manages(actor) or actor.has("data_owner") or actor.has("auditor"), "无权查看上游 MCP 源")
+    rows = (
+        await conn.execute(select(upstream_mcp_source).order_by(upstream_mcp_source.c.name).limit(200))
+    ).mappings().all()
+    return [dict(x) for x in rows]
+
+
+async def disable_upstream_mcp_source(conn: AsyncConnection, actor: Actor, source_id: uuid.UUID) -> None:
+    actor.require(_manages(actor), "上游 MCP 源由总部 IT 维护")
+    r = (
+        await conn.execute(select(upstream_mcp_source).where(upstream_mcp_source.c.id == source_id))
+    ).mappings().first()
+    if r is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, "上游 MCP 源不存在或不可见")
+    if r["status"] == "disabled":
+        return
+    await conn.execute(
+        update(upstream_mcp_source).where(upstream_mcp_source.c.id == source_id).values(status="disabled")
+    )
+    await notify_change(conn, "upstream_mcp.disabled", r["company_id"], source_id, actor, {"name": r["name"]})
+
+
+async def delete_upstream_mcp_source(conn: AsyncConnection, actor: Actor, source_id: uuid.UUID) -> None:
+    """删除上游 MCP 源登记；不级联 Connector 实例（实例自持 hash）。"""
+    actor.require(_manages(actor), "上游 MCP 源由总部 IT 维护")
+    r = (
+        await conn.execute(select(upstream_mcp_source).where(upstream_mcp_source.c.id == source_id))
+    ).mappings().first()
+    if r is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, "上游 MCP 源不存在或不可见")
+    await conn.execute(upstream_mcp_source.delete().where(upstream_mcp_source.c.id == source_id))
+    await notify_change(conn, "upstream_mcp.deleted", r["company_id"], source_id, actor, {"name": r["name"]})
 
 
 async def create_connector_instance(

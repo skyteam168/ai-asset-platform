@@ -1,6 +1,6 @@
 import { Alert, Button, Drawer, Form, Input, InputNumber, Modal, Select, Space, Tag, Typography } from "antd";
 import { useState } from "react";
-import { get, post, type Page } from "../api";
+import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { JsonInput, jsonRule, JsonView, matches, OrgName, PAGINATION, parseJson, StateTag, Toolbar } from "../components";
 import { ListTable } from "../ListTable";
@@ -52,6 +52,7 @@ export function ConnectorInstancesTab({ connections }: { connections: Connection
   const [kw, setKw] = useState("");
   const byId = new Map(connections.map((c) => [c.id, c]));
   const dev = has("platform_admin", "asset_developer");
+  const act = useAction();
   return (
     <>
       <Toolbar placeholder={t("名称 / 类型")} onSearch={setKw}
@@ -76,10 +77,24 @@ export function ConnectorInstancesTab({ connections }: { connections: Connection
           { title: t("并发 / 速率 / 突发"), key: "limits", render: (_, c) => `${c.concurrency ?? "-"} / ${c.rate_per_s ?? "-"} / ${c.burst ?? "-"}` },
           { title: t("状态"), dataIndex: "status", render: (v) => (v ? <StateTag state={v} /> : "-") },
           {
-            title: t("操作"), key: "ops", width: 120,
-            render: (_, c) => c.kind === "sql_readonly" && dev
-              ? <Button size="small" type="link" onClick={() => setSqlInst(c)}>{t("SQL 模板")}</Button>
-              : null,
+            title: t("操作"), key: "ops", width: 200,
+            render: (_, c) => (
+              <Space>
+                {c.kind === "sql_readonly" && dev && (
+                  <Button size="small" type="link" onClick={() => setSqlInst(c)}>{t("SQL 模板")}</Button>
+                )}
+                {dev && (
+                  <Button size="small" type="link" danger onClick={() => Modal.confirm({
+                    title: t("删除连接器实例？"),
+                    content: t("将同时删除该实例下的 SQL 模板；引用该实例的 Tool 发布快照需重新发布。"),
+                    okButtonProps: { danger: true },
+                    onOk: async () => {
+                      if (await act(() => del(`/connector-instances/${c.id}`), t("已删除连接器实例"))) list.reload();
+                    },
+                  })}>{t("删除")}</Button>
+                )}
+              </Space>
+            ),
           },
         ]} />
       <NewConnector open={open} connections={connections} onClose={() => setOpen(false)} onDone={list.reload} />

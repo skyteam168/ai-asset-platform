@@ -120,3 +120,14 @@ def test_bearer_for_outbound_jwt_mode() -> None:
     s = _s(service_auth_mode="both")
     tok = bearer_for_outbound(settings=s)
     assert verify_service_jwt(tok, settings=s) == "control-plane"
+
+
+def test_bearer_for_outbound_both_without_shared_key_uses_static() -> None:
+    s = Settings(
+        env="test",
+        issuer="https://api.aip.internal",
+        service_auth_mode="both",
+        internal_service_token="static-xyz",
+        service_token_ttl_s=300,
+    )
+    assert bearer_for_outbound(settings=s) == "static-xyz"

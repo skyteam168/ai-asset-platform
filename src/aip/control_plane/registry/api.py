@@ -60,6 +60,11 @@ class GrantIn(BaseModel):
     ceiling_id: uuid.UUID
 
 
+class LifecycleReasonIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+    force: bool = False
+
+
 def _out(row: dict[str, Any]) -> dict[str, Any]:
     return {k: (str(v) if isinstance(v, uuid.UUID | dt.datetime) else v) for k, v in row.items()}
 
@@ -106,6 +111,32 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             vid = await registry.create_version(conn, actor, id, body.semver, body.spec, body.dep_lock)
             return out.AssetVersion.model_validate(_out(await registry.version_row(conn, vid)))
+
+    @r.delete(f"{V}/assets/{{id}}", tags=["registry"], operation_id="deleteAsset", status_code=204)
+    async def delete_asset(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        """删除尚无发布/授权、且仅含草稿版本（或无版本）的资产。"""
+        async with db.tx(actor.db_scope()) as conn:
+            await registry.delete_asset(conn, actor, id)
+        return Response(status_code=204)
+
+    @r.delete(f"{V}/versions/{{id}}", tags=["registry"], operation_id="deleteDraftVersion", status_code=204)
+    async def delete_draft_version(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        """丢弃草稿版本；非 draft 拒绝（已发布走弃用/退役）。"""
+        async with db.tx(actor.db_scope()) as conn:
+            await registry.delete_draft_version(conn, actor, id)
+        return Response(status_code=204)
+
+    @r.post(f"{V}/versions/{{id}}/deprecate", tags=["release"], operation_id="deprecateVersion")
+    async def deprecate_version(id: uuid.UUID, body: LifecycleReasonIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            state = await registry.deprecate_version(conn, actor, id, reason=body.reason)
+        return {"id": str(id), "state": state}
+
+    @r.post(f"{V}/versions/{{id}}/retire", tags=["release"], operation_id="retireVersion")
+    async def retire_version(id: uuid.UUID, body: LifecycleReasonIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:
+        async with db.tx(actor.db_scope()) as conn:
+            state = await registry.retire_version(conn, actor, id, reason=body.reason, force=body.force)
+        return {"id": str(id), "state": state}
 
     @r.post(f"{V}/releases", tags=["release"], operation_id="createRelease", status_code=201)
     async def create_release(body: ReleaseIn, actor: ActorDep, db: DbDep) -> dict[str, Any]:

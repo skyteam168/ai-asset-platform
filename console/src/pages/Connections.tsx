@@ -1,12 +1,12 @@
 import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Tabs, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
-import { get, post, type Page } from "../api";
+import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { matches, OrgName, PageCard, PAGINATION, StateTag, Toolbar, useOrgs } from "../components";
 import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
-import type { Connection, ConnectionTest } from "../types";
+import type { Connection, ConnectionTest, UpstreamMcpSource } from "../types";
 import { t } from "../i18n";
 import { ConnectorInstancesTab } from "./ConnectorInstances";
 
@@ -57,6 +57,16 @@ export function ConnectionsPage() {
                     if (r) { Modal.info({ title: r.status === "active" ? t("已生效") : t("已记录审批，生产连接还需第二位数据 Owner") }); conns.reload(); }
                   }}>{t("审批例外")}</Button>
                 )}
+                {has("platform_admin", "asset_developer") && (
+                  <Button size="small" danger onClick={() => Modal.confirm({
+                    title: t("删除系统连接？"),
+                    content: t("删除前须先移除绑定的连接器实例与上游 MCP 源。"),
+                    okButtonProps: { danger: true },
+                    onOk: async () => {
+                      if (await act(() => del(`/connections/${c.id}`), t("已删除连接"))) conns.reload();
+                    },
+                  })}>{t("删除")}</Button>
+                )}
               </Space>
             ),
           },
@@ -68,10 +78,92 @@ export function ConnectionsPage() {
       <Tabs items={[
         { key: "systems", label: t("系统连接"), children: systems },
         { key: "connectors", label: t("连接器实例"), children: <ConnectorInstancesTab connections={conns.data?.items ?? []} /> },
+        { key: "upstream", label: t("上游 MCP 源"), children: <UpstreamMcpSourcesTab connections={conns.data?.items ?? []} /> },
       ]} />
       <NewConnection open={open} onClose={() => setOpen(false)} onDone={conns.reload} />
       <TestDrawer conn={testing} onClose={() => setTesting(null)} />
     </PageCard>
+  );
+}
+
+function UpstreamMcpSourcesTab({ connections }: { connections: Connection[] }) {
+  const { has } = useAuth();
+  const sources = useLoad(() => get<Page<UpstreamMcpSource>>("/upstream-mcp-sources"), []);
+  const [open, setOpen] = useState(false);
+  const [kw, setKw] = useState("");
+  const act = useAction();
+  const byId = Object.fromEntries(connections.map((c) => [c.id, c]));
+  return (
+    <>
+      <Toolbar placeholder={t("名称 / 哈希")} onSearch={setKw}
+        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("登记上游 MCP 源")}</Button>} />
+      {sources.error && <Alert type="error" message={sources.error} />}
+      <ListTable<UpstreamMcpSource> pagination={PAGINATION} rowKey="id" loading={sources.loading}
+        dataSource={(sources.data?.items ?? []).filter((s) => matches(s, kw, ["name", "tools_manifest_hash", "mcp_path"]))}
+        columns={[
+          { title: t("名称"), dataIndex: "name", render: (v: string) => <Typography.Text strong>{v}</Typography.Text> },
+          { title: t("系统连接"), dataIndex: "system_connection_id", render: (id: string) => byId[id]?.system_key ?? id.slice(0, 8) },
+          { title: t("路径"), dataIndex: "mcp_path", render: (v) => <Typography.Text code>{v}</Typography.Text> },
+          { title: t("清单哈希"), dataIndex: "tools_manifest_hash", render: (v: string) => <Typography.Text code>{v.slice(0, 12)}…</Typography.Text> },
+          { title: t("状态"), dataIndex: "status", render: (v) => <StateTag state={v} /> },
+          {
+            title: t("操作"), key: "ops", render: (_, s) => has("platform_admin", "asset_developer") && (
+              <Space>
+                {s.status === "active" && (
+                  <Button size="small" onClick={async () => {
+                    if (await act(() => post(`/upstream-mcp-sources/${s.id}/disable`), t("已禁用上游 MCP 源"))) sources.reload();
+                  }}>{t("禁用")}</Button>
+                )}
+                <Button size="small" danger onClick={() => Modal.confirm({
+                  title: t("删除上游 MCP 源？"),
+                  content: t("仅删除登记记录；已创建的 upstream_mcp 连接器实例仍自持哈希。"),
+                  okButtonProps: { danger: true },
+                  onOk: async () => {
+                    if (await act(() => del(`/upstream-mcp-sources/${s.id}`), t("已删除上游 MCP 源"))) sources.reload();
+                  },
+                })}>{t("删除")}</Button>
+              </Space>
+            ),
+          },
+        ]} />
+      <NewUpstreamSource open={open} connections={connections} onClose={() => setOpen(false)} onDone={sources.reload} />
+    </>
+  );
+}
+
+function NewUpstreamSource(p: { open: boolean; connections: Connection[]; onClose: () => void; onDone: () => void }) {
+  const [form] = Form.useForm();
+  const act = useAction();
+  const httpConns = p.connections.filter((c) => c.scheme === "http" || c.scheme === "https");
+  return (
+    <Modal open={p.open} title={t("登记上游 MCP 源")} width={560} onCancel={p.onClose} onOk={() => form.submit()} destroyOnClose>
+      <Form form={form} layout="vertical" preserve={false} initialValues={{ mcp_path: "/mcp" }}
+        onFinish={async (v) => {
+          const body = {
+            name: v.name,
+            system_connection_id: v.system_connection_id,
+            mcp_path: v.mcp_path || "/mcp",
+            tools_manifest_hash: String(v.tools_manifest_hash).trim().toLowerCase(),
+            pinned_tools: [],
+          };
+          if (await act(() => post("/upstream-mcp-sources", body), t("已登记上游 MCP 源"))) { p.onClose(); p.onDone(); }
+        }}>
+        <Form.Item name="name" label={t("名称")} rules={[{ required: true, message: t("请输入名称") }]}>
+          <Input placeholder="weather_upstream" />
+        </Form.Item>
+        <Form.Item name="system_connection_id" label={t("系统连接")} rules={[{ required: true, message: t("请选择系统连接") }]}>
+          <Select options={httpConns.map((c) => ({ value: c.id, label: `${c.system_key}（${c.env}）` }))}
+            placeholder={httpConns.length ? undefined : t("请先登记 HTTP(S) 系统连接")} />
+        </Form.Item>
+        <Form.Item name="mcp_path" label={t("MCP 路径")} rules={[{ required: true }]}>
+          <Input placeholder="/mcp" />
+        </Form.Item>
+        <Form.Item name="tools_manifest_hash" label={t("清单哈希（SHA-256）")}
+          rules={[{ required: true, pattern: /^[0-9a-fA-F]{64}$/, message: t("须为 64 位十六进制") }]}>
+          <Input placeholder="64 位小写十六进制" />
+        </Form.Item>
+      </Form>
+    </Modal>
   );
 }
 

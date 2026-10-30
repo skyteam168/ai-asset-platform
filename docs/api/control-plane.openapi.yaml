@@ -1060,6 +1060,19 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/Asset'
+  /api/v1/assets/{id}:
+    delete:
+      operationId: deleteAsset
+      tags:
+      - registry
+      summary: 删除资产（仅无发布/授权且版本均为草稿）
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/versions/{id}/submit:
     post:
       operationId: submitVersion
@@ -1273,6 +1286,52 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/versions/{id}/deprecate:
+    post:
+      operationId: deprecateVersion
+      tags:
+      - release
+      summary: 弃用 active 版本（→ deprecated）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleState'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleReason'
+  /api/v1/versions/{id}/retire:
+    post:
+      operationId: retireVersion
+      tags:
+      - release
+      summary: 退役 deprecated 版本（近 30 天无调用，或 force）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LifecycleState'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LifecycleReason'
   /api/v1/approval-delegates:
     post:
       operationId: addApprovalDelegate
@@ -1415,6 +1474,18 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/VersionDetail'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+    delete:
+      operationId: deleteDraftVersion
+      tags:
+      - registry
+      summary: 丢弃草稿版本（非 draft 拒绝）
+      responses:
+        '204':
+          description: OK
         default:
           $ref: '#/components/responses/Problem'
       parameters:
@@ -1678,6 +1749,19 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SystemConnection'
+  /api/v1/connections/{id}:
+    delete:
+      operationId: deleteConnection
+      tags:
+      - connection
+      summary: 删除系统连接（无实例/上游 MCP 绑定时）
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/connections/{id}/approve-exception:
     post:
       operationId: approveTransportException
@@ -1747,6 +1831,19 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/connector-instances/{id}:
+    delete:
+      operationId: deleteConnectorInstance
+      tags:
+      - connection
+      summary: 删除 Connector 实例（含其 SQL 模板）
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/connector-instances/{id}/sql-templates:
     get:
       operationId: listSqlTemplates
@@ -1832,6 +1929,84 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/upstream-mcp-sources:
+    get:
+      operationId: listUpstreamMcpSources
+      tags:
+      - connection
+      summary: 上游 MCP 源列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/UpstreamMcpSource'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Limit'
+      - $ref: '#/components/parameters/Cursor'
+    post:
+      operationId: createUpstreamMcpSource
+      tags:
+      - connection
+      summary: 登记上游 MCP 源（钉住清单哈希）
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamMcpSource'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpstreamMcpSource'
+  /api/v1/upstream-mcp-sources/{id}:
+    delete:
+      operationId: deleteUpstreamMcpSource
+      tags:
+      - connection
+      summary: 删除上游 MCP 源登记
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+  /api/v1/upstream-mcp-sources/{id}/disable:
+    post:
+      operationId: disableUpstreamMcpSource
+      tags:
+      - connection
+      summary: 禁用上游 MCP 源
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
   /api/v1/sql-templates/{id}/activate:
     post:
       operationId: activateSqlTemplate
@@ -2914,6 +3089,148 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
+  /api/v1/llm/provider:
+    get:
+      operationId: getLlmProvider
+      tags:
+      - llm
+      summary: 平台 LLM 提供方（OpenAI 兼容 base_url；密钥在 OpenBao）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProvider'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: putLlmProvider
+      tags:
+      - llm
+      summary: 保存 LLM 提供方 base_url；可选写入 API Key 到 OpenBao
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmProvider'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmProviderPut'
+  /api/v1/llm/provider/sync-models:
+    post:
+      operationId: syncLlmModels
+      tags:
+      - llm
+      summary: 调用上游 GET /models 同步模型列表
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LlmUpstreamModel'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/llm/provider/synced-models:
+    get:
+      operationId: listSyncedLlmModels
+      tags:
+      - llm
+      summary: 最近一次同步缓存的上游模型
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LlmUpstreamModel'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+  /api/v1/llm/model-profiles:
+    get:
+      operationId: listLlmModelProfiles
+      tags:
+      - llm
+      summary: 已登记的 model_profile 资产
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - items
+                - has_more
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LlmModelProfileRow'
+                  next_cursor:
+                    type:
+                    - string
+                    - 'null'
+                  has_more:
+                    type: boolean
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: createLlmModelProfile
+      tags:
+      - llm
+      summary: 从上游 model id 创建 model_profile 草稿版本
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LlmModelProfileCreated'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LlmModelProfileCreate'
   /api/v1/companies/{id}/llm-allowlist:
     get:
       operationId: getLlmAllowlist
@@ -4381,6 +4698,7 @@ components:
           - kb
           - mock
           - upstream_mcp
+          - sql_readonly
         company_id:
           type:
           - string
@@ -4411,6 +4729,42 @@ components:
       - id
       - name
       - kind
+    UpstreamMcpSource:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        company_id:
+          type:
+          - string
+          - 'null'
+        system_connection_id:
+          type: string
+          description: UUIDv7
+        mcp_path:
+          type: string
+        tools_manifest_hash:
+          type: string
+        pinned_tools:
+          type: array
+          items:
+            type: object
+        status:
+          enum:
+          - active
+          - disabled
+        created_at:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - name
+      - system_connection_id
+      - tools_manifest_hash
     SkillCatalogItem:
       type: object
       properties:
@@ -5508,6 +5862,28 @@ components:
           - 'null'
       required:
       - passed
+    LifecycleReason:
+      type: object
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+        force:
+          type: boolean
+      required:
+      - reason
+    LifecycleState:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        state:
+          type: string
+      required:
+      - id
+      - state
     UsageRequestCreated:
       type: object
       properties:
@@ -6181,6 +6557,143 @@ components:
       - usage_date
       - tokens_used
       - daily_tokens
+    LlmProvider:
+      type: object
+      properties:
+        base_url:
+          type: string
+        credential_ref:
+          type: string
+        models_path:
+          type: string
+        has_api_key:
+          type: boolean
+        api_key_hint:
+          type:
+          - string
+          - 'null'
+        synced_at:
+          type:
+          - string
+          - 'null'
+        synced_count:
+          type: integer
+      required:
+      - base_url
+      - credential_ref
+      - models_path
+      - has_api_key
+      - synced_count
+    LlmProviderPut:
+      type: object
+      properties:
+        base_url:
+          type: string
+        api_key:
+          type:
+          - string
+          - 'null'
+        models_path:
+          type: string
+      required:
+      - base_url
+    LlmUpstreamModel:
+      type: object
+      properties:
+        id:
+          type: string
+        owned_by:
+          type:
+          - string
+          - 'null'
+        created:
+          type:
+          - integer
+          - 'null'
+        suggested_profile:
+          type: string
+      required:
+      - id
+      - suggested_profile
+    LlmModelProfileRow:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        version:
+          type:
+          - string
+          - 'null'
+        model:
+          type:
+          - string
+          - 'null'
+        base_url:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+        company_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - asset_id
+      - name
+    LlmModelProfileCreate:
+      type: object
+      properties:
+        model_id:
+          type: string
+        name:
+          type:
+          - string
+          - 'null'
+        version:
+          type: string
+        owner_org_id:
+          type: string
+          description: UUIDv7
+        temperature:
+          type: number
+        max_tokens:
+          type: integer
+        add_to_allowlist_company_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - model_id
+      - owner_org_id
+    LlmModelProfileCreated:
+      type: object
+      properties:
+        asset_id:
+          type: string
+          description: UUIDv7
+        version_id:
+          type: string
+          description: UUIDv7
+        name:
+          type: string
+        version:
+          type: string
+        ref:
+          type: string
+        spec:
+          type: object
+      required:
+      - asset_id
+      - version_id
+      - name
+      - version
+      - ref
     SelectionEvalCase:
       type: object
       properties:

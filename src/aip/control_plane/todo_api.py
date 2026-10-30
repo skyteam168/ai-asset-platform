@@ -60,6 +60,9 @@ class DataPlane:
         data = r.json() if r.content else None
         if r.status_code >= 400:
             code = (data or {}).get("code", "INTERNAL")
+            # 数据面服务凭据失败不得映射为控制台用户 401（否则前端会清会话登出）
+            if code in ("UNAUTHENTICATED", "FORBIDDEN") or r.status_code in (401, 403):
+                raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "数据面内部认证失败")
             raise PlatformError(
                 ErrorCode(code) if code in ErrorCode.__members__ else ErrorCode.INTERNAL,
                 (data or {}).get("detail", "数据面返回错误"),

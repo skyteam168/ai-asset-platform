@@ -73,6 +73,38 @@ async def test_published_version_is_immutable_at_app_level(db: Database, seeded:
             await registry.create_version(conn, SYS, before["asset_id"], "1.0.0", tool_spec())
 
 
+async def test_discard_draft_version_and_delete_asset(db: Database, seeded: Seed) -> None:
+    """草稿可删；离开 draft 后拒绝；无发布/授权的资产可整删。"""
+    _aid, vid = await _draft(db, seeded, name="mes.discard_me")
+    async with db.tx(DbScope.system()) as conn:
+        await registry.delete_draft_version(conn, SYS, vid)  # type: ignore[arg-type]
+        with pytest.raises(PlatformError) as missing:
+            await registry.version_row(conn, vid)  # type: ignore[arg-type]
+        assert missing.value.code == ErrorCode.NOT_FOUND
+
+    aid2, vid2 = await _draft(db, seeded, name="mes.keep_shell")
+    async with db.tx(DbScope.system()) as conn:
+        await registry.transition(conn, SYS, vid2, "testing", "submit")  # type: ignore[arg-type]
+        with pytest.raises(PlatformError) as e:
+            await registry.delete_draft_version(conn, SYS, vid2)  # type: ignore[arg-type]
+        assert e.value.code == ErrorCode.PRECONDITION_FAILED
+
+    async with db.tx(DbScope.system()) as conn:
+        empty = await registry.create_asset(
+            conn, SYS, type_="tool", name="mes.empty_asset", owner_org_id=seeded.hq, classification=2
+        )
+        await registry.delete_asset(conn, SYS, empty)
+        with pytest.raises(PlatformError) as gone:
+            await registry.asset_row(conn, empty)
+        assert gone.value.code == ErrorCode.NOT_FOUND
+        with pytest.raises(PlatformError) as blocked:
+            await registry.delete_asset(conn, SYS, aid2)  # type: ignore[arg-type]
+        assert blocked.value.code == ErrorCode.PRECONDITION_FAILED
+        # 删掉非草稿后才能清资产：先退回 draft 再删版本与资产
+        await registry.transition(conn, SYS, vid2, "draft", "back")  # type: ignore[arg-type]
+        await registry.delete_asset(conn, SYS, aid2)  # type: ignore[arg-type]
+
+
 async def test_spec_validation_and_classification_consistency(db: Database, seeded: Seed) -> None:
     async with db.tx(DbScope.system()) as conn:
         aid = await registry.create_asset(

@@ -6,7 +6,7 @@ import datetime as dt
 import uuid
 from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -63,6 +63,14 @@ class SqlTemplateTryIn(BaseModel):
     params: dict[str, Any] = Field(default_factory=dict)
 
 
+class UpstreamMcpSourceIn(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    system_connection_id: uuid.UUID
+    tools_manifest_hash: str = Field(min_length=64, max_length=64)
+    mcp_path: str = Field(default="/mcp", min_length=1, max_length=256)
+    pinned_tools: list[dict[str, Any]] = Field(default_factory=list)
+
+
 def _secrets(request: Request) -> SecretStore:
     s: SecretStore | None = getattr(request.app.state, "secrets", None)
     if s is None:
@@ -109,6 +117,12 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             cid = await svc.create_connection(conn, actor, company_id=body.company_id, data=data)
             return out.SystemConnection.model_validate(_out(await svc.row(conn, cid)))
+
+    @r.delete(f"{V}/connections/{{id}}", operation_id="deleteConnection", status_code=204)
+    async def delete_connection(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await svc.delete_connection(conn, actor, id)
+        return Response(status_code=204)
 
     @r.post(
         f"{V}/connections/{{id}}/approve-exception",
@@ -168,6 +182,12 @@ def router() -> APIRouter:
             )
         return {"id": str(iid), **body.model_dump(mode="json")}
 
+    @r.delete(f"{V}/connector-instances/{{id}}", operation_id="deleteConnectorInstance", status_code=204)
+    async def delete_connector(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await svc.delete_connector_instance(conn, actor, id)
+        return Response(status_code=204)
+
     @r.post(
         f"{V}/connector-instances/{{id}}/sql-templates",
         operation_id="createSqlTemplate",
@@ -199,5 +219,52 @@ def router() -> APIRouter:
     async def activate_sql_template(id: uuid.UUID, actor: ActorDep, db: DbDep, request: Request) -> dict[str, Any]:
         async with db.tx(actor.db_scope()) as conn:
             return await sql_tpl.activate_template(conn, actor, _secrets(request), id)
+
+    @r.get(
+        f"{V}/upstream-mcp-sources",
+        operation_id="listUpstreamMcpSources",
+        response_model=Page[out.UpstreamMcpSource],
+    )
+    async def list_upstream_sources(actor: ActorDep, db: DbDep) -> Page[out.UpstreamMcpSource]:
+        async with db.tx(actor.db_scope()) as conn:
+            rows = await svc.list_upstream_mcp_sources(conn, actor)
+        return Page(items=[out.UpstreamMcpSource.model_validate(_out(x)) for x in rows])
+
+    @r.post(
+        f"{V}/upstream-mcp-sources",
+        operation_id="createUpstreamMcpSource",
+        status_code=201,
+        response_model=out.UpstreamMcpSource,
+    )
+    async def create_upstream_source(body: UpstreamMcpSourceIn, actor: ActorDep, db: DbDep) -> out.UpstreamMcpSource:
+        async with db.tx(actor.db_scope()) as conn:
+            sid = await svc.create_upstream_mcp_source(
+                conn,
+                actor,
+                name=body.name,
+                connection_id=body.system_connection_id,
+                tools_manifest_hash=body.tools_manifest_hash,
+                mcp_path=body.mcp_path,
+                pinned_tools=body.pinned_tools,
+            )
+            rows = await svc.list_upstream_mcp_sources(conn, actor)
+        hit = next(x for x in rows if str(x["id"]) == str(sid))
+        return out.UpstreamMcpSource.model_validate(_out(hit))
+
+    @r.post(
+        f"{V}/upstream-mcp-sources/{{id}}/disable",
+        operation_id="disableUpstreamMcpSource",
+        status_code=204,
+    )
+    async def disable_upstream_source(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await svc.disable_upstream_mcp_source(conn, actor, id)
+        return Response(status_code=204)
+
+    @r.delete(f"{V}/upstream-mcp-sources/{{id}}", operation_id="deleteUpstreamMcpSource", status_code=204)
+    async def delete_upstream_source(id: uuid.UUID, actor: ActorDep, db: DbDep) -> Response:
+        async with db.tx(actor.db_scope()) as conn:
+            await svc.delete_upstream_mcp_source(conn, actor, id)
+        return Response(status_code=204)
 
     return r

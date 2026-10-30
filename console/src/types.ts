@@ -229,6 +229,18 @@ export interface ConnectorInstance {
   status: string | null;
 }
 
+export interface UpstreamMcpSource {
+  id: string;
+  name: string;
+  company_id: string | null;
+  system_connection_id: string;
+  mcp_path: string;
+  tools_manifest_hash: string;
+  pinned_tools: Record<string, unknown>[];
+  status: "active" | "disabled";
+  created_at: string | null;
+}
+
 export interface ImporterResult {
   connector_config: Record<string, unknown>;
   tools: Record<string, unknown>[];

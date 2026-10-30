@@ -71,3 +71,17 @@ class ConnectorInstance(BaseModel):
     rate_per_s: float | None = None
     burst: int | None = None
     status: str | None = None
+
+
+class UpstreamMcpSource(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    name: str
+    company_id: str | None = None
+    system_connection_id: str
+    mcp_path: str = "/mcp"
+    tools_manifest_hash: str
+    pinned_tools: list[dict[str, Any]] = Field(default_factory=list)
+    status: Literal["active", "disabled"] = "active"
+    created_at: str | None = None
