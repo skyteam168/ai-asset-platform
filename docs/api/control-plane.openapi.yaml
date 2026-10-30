@@ -1981,6 +1981,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/UpstreamMcpSource'
+  /api/v1/upstream-mcp-sources/preview-hash:
+    post:
+      operationId: previewUpstreamMcpHash
+      tags:
+      - connection
+      summary: 从系统连接拉取 tools/list 并计算清单哈希
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamMcpPreviewHash'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpstreamMcpPreviewIn'
   /api/v1/upstream-mcp-sources/{id}:
     delete:
       operationId: deleteUpstreamMcpSource
@@ -4765,6 +4786,33 @@ components:
       - name
       - system_connection_id
       - tools_manifest_hash
+    UpstreamMcpPreviewHash:
+      type: object
+      properties:
+        tools_manifest_hash:
+          type: string
+        tools:
+          type: array
+          items:
+            type: object
+        mcp_path:
+          type: string
+        system_connection_id:
+          type: string
+          description: UUIDv7
+      required:
+      - tools_manifest_hash
+      - system_connection_id
+    UpstreamMcpPreviewIn:
+      type: object
+      properties:
+        system_connection_id:
+          type: string
+          description: UUIDv7
+        mcp_path:
+          type: string
+      required:
+      - system_connection_id
     SkillCatalogItem:
       type: object
       properties:

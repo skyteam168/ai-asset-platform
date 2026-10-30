@@ -234,6 +234,8 @@ export const kmKH: Record<string, string> = {
   "仅删除登记记录；已创建的 upstream_mcp 连接器实例仍自持哈希。": "លុបតែកំណត់ត្រា; instance upstream_mcp នៅរក្សា hash ផ្ទាល់.",
   "清单哈希": "ហាស់ manifest",
   "清单哈希（SHA-256）": "ហាស់ manifest (SHA-256)",
+  "从连接拉取哈希": "ទាញ hash ពីការតភ្ជាប់",
+  "已拉取清单哈希": "បានទាញហាស់ manifest",
   "MCP 路径": "ផ្លូវ MCP",
   "须为 64 位十六进制": "ត្រូវតែ 64 តួ hex",
   "请先登记 HTTP(S) 系统连接": "សូមចុះឈ្មោះការតភ្ជាប់ HTTP(S) ជាមុន",

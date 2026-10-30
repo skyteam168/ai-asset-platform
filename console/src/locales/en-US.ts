@@ -234,6 +234,8 @@ export const enUS: Record<string, string> = {
   "仅删除登记记录；已创建的 upstream_mcp 连接器实例仍自持哈希。": "Only removes the registry row; existing upstream_mcp connector instances keep their own hash.",
   "清单哈希": "Manifest hash",
   "清单哈希（SHA-256）": "Manifest hash (SHA-256)",
+  "从连接拉取哈希": "Pull hash from connection",
+  "已拉取清单哈希": "Manifest hash pulled",
   "MCP 路径": "MCP path",
   "须为 64 位十六进制": "Must be 64 hex characters",
   "请先登记 HTTP(S) 系统连接": "Register an HTTP(S) system connection first",

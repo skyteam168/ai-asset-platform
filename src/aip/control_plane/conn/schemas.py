@@ -85,3 +85,12 @@ class UpstreamMcpSource(BaseModel):
     pinned_tools: list[dict[str, Any]] = Field(default_factory=list)
     status: Literal["active", "disabled"] = "active"
     created_at: str | None = None
+
+
+class UpstreamMcpPreviewHash(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    tools_manifest_hash: str
+    tools: list[dict[str, Any]] = Field(default_factory=list)
+    mcp_path: str = "/mcp"
+    system_connection_id: str

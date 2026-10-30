@@ -1186,7 +1186,19 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 
 | 部分 | 内容 |
 | --- | --- |
-| 不在本片 | 从源一键生成 Connector 实例；在线 tools/list 拉哈希 |
+| 不在本片 | 从源一键生成 Connector 实例 |
+
+### G1.2 上游 MCP preview-hash — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `POST …/preview-hash` 返回稳定 SHA-256 | 通过 | `test_preview_hash_returns_stable_manifest` |
+| 出站经 `build_client` | 通过 | `conn.service.preview_upstream_mcp_hash` |
+| 控制台「从连接拉取哈希」 | 通过 | `Connections.tsx`；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 从源一键生成 Connector 实例 |
 
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 

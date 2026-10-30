@@ -234,6 +234,8 @@ export const viVN: Record<string, string> = {
   "仅删除登记记录；已创建的 upstream_mcp 连接器实例仍自持哈希。": "Chỉ xóa bản ghi đăng ký; instance connector upstream_mcp vẫn giữ hash riêng.",
   "清单哈希": "Hash manifest",
   "清单哈希（SHA-256）": "Hash manifest (SHA-256)",
+  "从连接拉取哈希": "Lấy hash từ kết nối",
+  "已拉取清单哈希": "Đã lấy hash manifest",
   "MCP 路径": "Đường dẫn MCP",
   "须为 64 位十六进制": "Phải là 64 ký tự hex",
   "请先登记 HTTP(S) 系统连接": "Hãy đăng ký kết nối hệ thống HTTP(S) trước",

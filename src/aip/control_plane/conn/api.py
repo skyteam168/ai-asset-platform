@@ -71,6 +71,11 @@ class UpstreamMcpSourceIn(BaseModel):
     pinned_tools: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class UpstreamMcpPreviewIn(BaseModel):
+    system_connection_id: uuid.UUID
+    mcp_path: str = Field(default="/mcp", min_length=1, max_length=256)
+
+
 def _secrets(request: Request) -> SecretStore:
     s: SecretStore | None = getattr(request.app.state, "secrets", None)
     if s is None:
@@ -229,6 +234,20 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             rows = await svc.list_upstream_mcp_sources(conn, actor)
         return Page(items=[out.UpstreamMcpSource.model_validate(_out(x)) for x in rows])
+
+    @r.post(
+        f"{V}/upstream-mcp-sources/preview-hash",
+        operation_id="previewUpstreamMcpHash",
+        response_model=out.UpstreamMcpPreviewHash,
+    )
+    async def preview_upstream_hash(
+        body: UpstreamMcpPreviewIn, actor: ActorDep, db: DbDep
+    ) -> out.UpstreamMcpPreviewHash:
+        async with db.tx(actor.db_scope()) as conn:
+            result = await svc.preview_upstream_mcp_hash(
+                conn, actor, connection_id=body.system_connection_id, mcp_path=body.mcp_path
+            )
+        return out.UpstreamMcpPreviewHash.model_validate(result)
 
     @r.post(
         f"{V}/upstream-mcp-sources",

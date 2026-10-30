@@ -541,6 +541,22 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["id", "name", "system_connection_id", "tools_manifest_hash"],
             ),
+            "UpstreamMcpPreviewHash": o(
+                {
+                    "tools_manifest_hash": S,
+                    "tools": {"type": "array", "items": {"type": "object"}},
+                    "mcp_path": S,
+                    "system_connection_id": ID,
+                },
+                ["tools_manifest_hash", "system_connection_id"],
+            ),
+            "UpstreamMcpPreviewIn": o(
+                {
+                    "system_connection_id": ID,
+                    "mcp_path": S,
+                },
+                ["system_connection_id"],
+            ),
             "SkillCatalogItem": o(
                 {
                     "name": S,
@@ -1964,6 +1980,15 @@ def control_plane() -> dict[str, Any]:
                 res=ref("UpstreamMcpSource"),
                 code="201",
             ),
+        },
+        f"{A}/upstream-mcp-sources/preview-hash": {
+            "post": op(
+                "previewUpstreamMcpHash",
+                "connection",
+                "从系统连接拉取 tools/list 并计算清单哈希",
+                req=ref("UpstreamMcpPreviewIn"),
+                res=ref("UpstreamMcpPreviewHash"),
+            )
         },
         f"{A}/upstream-mcp-sources/{{id}}": {
             "delete": op(

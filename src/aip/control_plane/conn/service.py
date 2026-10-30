@@ -31,7 +31,8 @@ from aip.control_plane.iam.orgs import get_org
 from aip.control_plane.registry.service import SPECS, notify_change
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
-from aip.libs.httpclient import ConnectionConfig, NetworkAllowlist, probe, trust_draft
+from aip.connectors.upstream_mcp import pin_from_tools_list
+from aip.libs.httpclient import ConnectionConfig, NetworkAllowlist, build_client, map_error, probe, trust_draft
 from aip.libs.httpclient.config import Resolver
 
 md = MetaData(schema="conn")
@@ -300,6 +301,62 @@ async def delete_connection(conn: AsyncConnection, actor: Actor, connection_id: 
     await notify_change(
         conn, "connection.deleted", r["company_id"], connection_id, actor, {"system_key": r["system_key"]}
     )
+
+
+async def preview_upstream_mcp_hash(
+    conn: AsyncConnection,
+    actor: Actor,
+    *,
+    connection_id: uuid.UUID,
+    mcp_path: str = "/mcp",
+) -> dict[str, Any]:
+    """对系统连接发起 tools/list，计算钉住哈希（ADR-0014）；出站经 build_client。"""
+    actor.require(_manages(actor), "上游 MCP 源由总部 IT 维护")
+    sc = await row(conn, connection_id)
+    if sc["scheme"] not in ("https", "http"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "上游 MCP 预览须绑定 HTTP(S) 系统连接")
+    path = (mcp_path or "/mcp").strip() or "/mcp"
+    if not path.startswith("/"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "mcp_path 须以 / 开头")
+    cfg = to_config(sc)
+    if cfg.status == "pending_approval":
+        cfg.status = "active"
+    elif cfg.status != "active":
+        raise PlatformError(ErrorCode.TRANSPORT_EXCEPTION_EXPIRED, "连接已停用")
+    allow = await allowlist(conn)
+    rpc = {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    try:
+        async with build_client(cfg, allowlist=allow, trace_id="upstream-mcp-preview") as client:
+            resp = await client.post(path, json=rpc)
+    except Exception as e:
+        raise map_error(e) from e
+    if resp.status_code >= 400:
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, f"上游 MCP HTTP {resp.status_code}")
+    try:
+        payload = resp.json()
+    except ValueError as e:
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "上游 MCP 返回非 JSON") from e
+    if not isinstance(payload, dict):
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "上游 MCP 响应格式错误")
+    if "error" in payload:
+        err_obj = payload["error"] if isinstance(payload["error"], dict) else {}
+        raise PlatformError(
+            ErrorCode.DOWNSTREAM_UNAVAILABLE,
+            f"上游 MCP 错误：{err_obj.get('message', err_obj)}",
+        )
+    result = payload.get("result")
+    if not isinstance(result, dict):
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "上游 MCP 缺少 result")
+    tools_raw = result.get("tools")
+    if not isinstance(tools_raw, list):
+        raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "上游 tools/list 无效")
+    pin = pin_from_tools_list([t for t in tools_raw if isinstance(t, dict)])
+    return {
+        "tools_manifest_hash": pin["tools_manifest_hash"],
+        "tools": pin["pinned_tools"],
+        "mcp_path": path,
+        "system_connection_id": str(connection_id),
+    }
 
 
 async def create_upstream_mcp_source(

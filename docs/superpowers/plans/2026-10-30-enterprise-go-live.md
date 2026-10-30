@@ -128,11 +128,11 @@ flowchart TB
 - Produces: `POST /api/v1/upstream-mcp-sources/preview-hash` → `{ tools_manifest_hash, tools }`
 - Consumes: 系统连接 + `libs/httpclient.build_client`
 
-- [ ] **Step 1:** 失败测例：对 FakeUpstream `preview-hash` 返回稳定 hash
-- [ ] **Step 2:** 实现 preview（出站经 httpclient；沙箱拒 live 写无关）
-- [ ] **Step 3:** 控制台登记表单「从连接拉取哈希」按钮
-- [ ] **Step 4:** i18n + pytest + typecheck
-- [ ] **Step 5:** Commit
+- [x] **Step 1:** 失败测例：对 FakeUpstream `preview-hash` 返回稳定 hash
+- [x] **Step 2:** 实现 preview（出站经 httpclient；沙箱拒 live 写无关）
+- [x] **Step 3:** 控制台登记表单「从连接拉取哈希」按钮
+- [x] **Step 4:** i18n + pytest + typecheck
+- [x] **Step 5:** Commit
 
 ### Task G1.3: 控制台状态码 / 连接状态多语言映射
 

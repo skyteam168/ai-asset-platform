@@ -134,9 +134,37 @@ function UpstreamMcpSourcesTab({ connections }: { connections: Connection[] }) {
 function NewUpstreamSource(p: { open: boolean; connections: Connection[]; onClose: () => void; onDone: () => void }) {
   const [form] = Form.useForm();
   const act = useAction();
+  const [pulling, setPulling] = useState(false);
+  const [pinnedTools, setPinnedTools] = useState<Record<string, unknown>[]>([]);
   const httpConns = p.connections.filter((c) => c.scheme === "http" || c.scheme === "https");
+  const pullHash = async () => {
+    try {
+      await form.validateFields(["system_connection_id", "mcp_path"]);
+    } catch {
+      return;
+    }
+    const cid = form.getFieldValue("system_connection_id") as string;
+    const path = (form.getFieldValue("mcp_path") as string) || "/mcp";
+    setPulling(true);
+    try {
+      const r = await act(
+        () => post<{ tools_manifest_hash: string; tools: Record<string, unknown>[] }>(
+          "/upstream-mcp-sources/preview-hash",
+          { system_connection_id: cid, mcp_path: path },
+        ),
+        t("已拉取清单哈希"),
+      );
+      if (r) {
+        form.setFieldsValue({ tools_manifest_hash: r.tools_manifest_hash });
+        setPinnedTools(r.tools ?? []);
+      }
+    } finally {
+      setPulling(false);
+    }
+  };
   return (
-    <Modal open={p.open} title={t("登记上游 MCP 源")} width={560} onCancel={p.onClose} onOk={() => form.submit()} destroyOnClose>
+    <Modal open={p.open} title={t("登记上游 MCP 源")} width={560} onCancel={p.onClose} onOk={() => form.submit()} destroyOnClose
+      afterClose={() => setPinnedTools([])}>
       <Form form={form} layout="vertical" preserve={false} initialValues={{ mcp_path: "/mcp" }}
         onFinish={async (v) => {
           const body = {
@@ -144,7 +172,7 @@ function NewUpstreamSource(p: { open: boolean; connections: Connection[]; onClos
             system_connection_id: v.system_connection_id,
             mcp_path: v.mcp_path || "/mcp",
             tools_manifest_hash: String(v.tools_manifest_hash).trim().toLowerCase(),
-            pinned_tools: [],
+            pinned_tools: pinnedTools,
           };
           if (await act(() => post("/upstream-mcp-sources", body), t("已登记上游 MCP 源"))) { p.onClose(); p.onDone(); }
         }}>
@@ -159,7 +187,10 @@ function NewUpstreamSource(p: { open: boolean; connections: Connection[]; onClos
           <Input placeholder="/mcp" />
         </Form.Item>
         <Form.Item name="tools_manifest_hash" label={t("清单哈希（SHA-256）")}
-          rules={[{ required: true, pattern: /^[0-9a-fA-F]{64}$/, message: t("须为 64 位十六进制") }]}>
+          rules={[{ required: true, pattern: /^[0-9a-fA-F]{64}$/, message: t("须为 64 位十六进制") }]}
+          extra={<Button type="link" size="small" loading={pulling} onClick={pullHash} style={{ padding: 0 }}>
+            {t("从连接拉取哈希")}
+          </Button>}>
           <Input placeholder="64 位小写十六进制" />
         </Form.Item>
       </Form>
