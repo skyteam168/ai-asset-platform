@@ -97,6 +97,7 @@ class Settings(BaseSettings):
     # Notifier（H43 / H56）：通用 IM Webhook / 飞书；SMTP 生产投递（空则 LogMail）
     notify_im_webhook_url: str | None = None
     notify_feishu_webhook_url: str | None = None
+    notify_feishu_secret: str | None = None  # 自定义机器人签名校验密钥（可选）
     notify_flush_interval_s: float = Field(default=2.0, ge=0.5, le=60)
     smtp_host: str = ""
     smtp_port: int = Field(default=587, ge=1, le=65535)

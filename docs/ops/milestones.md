@@ -1274,6 +1274,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 真发 `-m smtp`（无密钥 skip） | 通过 | `test_live_smtp_send` |
 | 运维说明 | 通过 | `docs/ops/smtp-staging.md` |
 
+### G4.2 飞书签名与容错 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| secret → timestamp/sign | 通过 | `test_feishu_signed_payload` |
+| 非法 URL 抛 ValueError | 通过 | `test_feishu_bad_url_does_not_crash_loop` |
+| 真推 `-m feishu`（无 URL skip） | 通过 | `test_live_feishu_webhook` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

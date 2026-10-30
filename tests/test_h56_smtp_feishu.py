@@ -110,3 +110,30 @@ async def test_feishu_payload_shape(feishu_server: Any) -> None:
     assert payloads[0]["msg_type"] == "text"
     assert "磁盘满" in payloads[0]["content"]["text"]
     assert "@ops" in payloads[0]["content"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_feishu_signed_payload(feishu_server: Any) -> None:
+    """G4.2：配置 secret 时 payload 含 timestamp + sign。"""
+    payloads, url = feishu_server
+    await FeishuChannel(url, secret="sec").send("ops", "s", "b")
+    assert "timestamp" in payloads[-1] and "sign" in payloads[-1]
+
+
+@pytest.mark.asyncio
+async def test_feishu_bad_url_does_not_crash_loop() -> None:
+    """错误 URL 抛业务异常，不拖垮调用方。"""
+    with pytest.raises(ValueError):
+        await FeishuChannel("not-a-url").send("x", "s", "b")
+
+
+@pytest.mark.feishu
+@pytest.mark.asyncio
+async def test_live_feishu_webhook() -> None:
+    import os
+
+    url = os.environ.get("AIP_TEST_FEISHU_WEBHOOK_URL", "").strip()
+    if not url:
+        pytest.skip("AIP_TEST_FEISHU_WEBHOOK_URL not set")
+    secret = os.environ.get("AIP_TEST_FEISHU_SECRET", "")
+    await FeishuChannel(url, secret=secret).send("ops", "[AIP] staging", "G4.2 feishu live sample")

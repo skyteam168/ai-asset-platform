@@ -46,7 +46,7 @@
 ## Notifier 环境变量
 
 - [ ] 邮件：未配 SMTP 时 `LogMailChannel`；生产设 `AIP_SMTP_HOST` / `AIP_SMTP_PORT` / `AIP_SMTP_USER` / `AIP_SMTP_PASSWORD` / `AIP_SMTP_FROM` / `AIP_SMTP_STARTTLS`。
-- [ ] IM：`AIP_NOTIFY_IM_WEBHOOK_URL`（通用 Webhook JSON）；或飞书 `AIP_NOTIFY_FEISHU_WEBHOOK_URL`（优先）。
+- [ ] IM：`AIP_NOTIFY_IM_WEBHOOK_URL`（通用 Webhook JSON）；或飞书 `AIP_NOTIFY_FEISHU_WEBHOOK_URL`（优先）；签名机器人另配 `AIP_NOTIFY_FEISHU_SECRET`。
 - [ ] `AIP_NOTIFY_FLUSH_INTERVAL_S`（默认 2）；本地可用 `POST /api/v1/notify/flush`（platform_admin）。
 
 ## SLO / 故障演练

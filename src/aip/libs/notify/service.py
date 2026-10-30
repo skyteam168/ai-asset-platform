@@ -101,13 +101,25 @@ class SmtpMailChannel:
         log.info("notify.smtp to=%s subject=%s bytes=%s", recipient, subject, len(body))
 
 
+def _feishu_sign(secret: str, timestamp: str) -> str:
+    """飞书自定义机器人签名：HMAC-SHA256(timestamp\\nsecret) → base64。"""
+    import base64
+    import hashlib
+    import hmac
+
+    string_to_sign = f"{timestamp}\n{secret}".encode()
+    digest = hmac.new(string_to_sign, digestmod=hashlib.sha256).digest()
+    return base64.b64encode(digest).decode("ascii")
+
+
 class FeishuChannel:
-    """飞书自定义机器人：msg_type=text（经 httpclient；channel 名仍为 im 以便 outbox 复用）。"""
+    """飞书自定义机器人：msg_type=text（经 httpclient；可选签名密钥）。"""
 
     name = "im"
 
-    def __init__(self, webhook_url: str) -> None:
+    def __init__(self, webhook_url: str, *, secret: str = "") -> None:
         self.webhook_url = webhook_url
+        self.secret = secret
 
     async def send(self, recipient: str, subject: str, body: str) -> None:
         parsed = urlparse(self.webhook_url)
@@ -121,6 +133,11 @@ class FeishuChannel:
         text_body = f"[{subject}] {body}" if subject else body
         if recipient:
             text_body = f"@{recipient} {text_body}"
+        payload: dict[str, Any] = {"msg_type": "text", "content": {"text": text_body[:4000]}}
+        if self.secret:
+            ts = str(int(dt.datetime.now(dt.UTC).timestamp()))
+            payload["timestamp"] = ts
+            payload["sign"] = _feishu_sign(self.secret, ts)
         cfg = ConnectionConfig(
             id="notify-feishu",
             base_url=base,
@@ -129,9 +146,13 @@ class FeishuChannel:
             transport_exception_reason="notify Feishu webhook" if scheme == "http" else None,
             transport_exception_expires_at=dt.datetime(2099, 1, 1, tzinfo=dt.UTC) if scheme == "http" else None,
         )
-        async with build_client(cfg) as client:
-            r = await client.post(path, json={"msg_type": "text", "content": {"text": text_body[:4000]}})
-            r.raise_for_status()
+        try:
+            async with build_client(cfg) as client:
+                r = await client.post(path, json=payload)
+                r.raise_for_status()
+        except Exception as e:
+            log.warning("notify.feishu_failed err=%s", type(e).__name__)
+            raise
 
 
 class ImWebhookChannel:
@@ -247,6 +268,7 @@ def build_notifier(
     *,
     im_webhook_url: str | None = None,
     feishu_webhook_url: str | None = None,
+    feishu_secret: str | None = None,
     smtp_host: str = "",
     smtp_port: int = 587,
     smtp_user: str = "",
@@ -270,7 +292,7 @@ def build_notifier(
     else:
         channels.append(LogMailChannel())
     if feishu_webhook_url:
-        channels.append(FeishuChannel(feishu_webhook_url))
+        channels.append(FeishuChannel(feishu_webhook_url, secret=feishu_secret or ""))
     elif im_webhook_url:
         channels.append(ImWebhookChannel(im_webhook_url))
     return Notifier(channels)
@@ -280,6 +302,7 @@ def build_notifier_from_settings(settings: Settings) -> Notifier:
     return build_notifier(
         im_webhook_url=settings.notify_im_webhook_url,
         feishu_webhook_url=settings.notify_feishu_webhook_url,
+        feishu_secret=settings.notify_feishu_secret,
         smtp_host=settings.smtp_host,
         smtp_port=settings.smtp_port,
         smtp_user=settings.smtp_user,

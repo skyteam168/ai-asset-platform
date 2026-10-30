@@ -257,9 +257,9 @@ flowchart TB
 - Modify: `src/aip/libs/notify/` FeishuChannel（若缺签名则按飞书文档补）
 - Test: mark `feishu` 真推
 
-- [ ] **Step 1:** 真机器人收到文本
-- [ ] **Step 2:** 错误 URL 不导致请求线程崩溃
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** 真机器人收到文本（`-m feishu`；无 URL skip）
+- [x] **Step 2:** 错误 URL 不导致请求线程崩溃
+- [x] **Step 3:** Commit
 
 ### Task G4.3: 真 LLM + 可选 Langfuse
 
