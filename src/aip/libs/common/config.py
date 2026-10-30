@@ -144,6 +144,9 @@ class Settings(BaseSettings):
                 leaked[leaked.index("secret_box_key")] = "secret_box_key（或 secret_backend=transit）"
             if "dev-only" in self.database_url or "dev-only" in self.app_database_url:
                 leaked.append("database_url")
+            # G2.2：生产/staging 禁止仅靠长期静态服务令牌
+            if self.service_auth_mode == "static":
+                leaked.append("service_auth_mode（须 jwt 或 both，禁止 static）")
             if leaked:
                 raise ValueError(f"{self.env} 环境必须显式配置：{', '.join(leaked)}")
         return self

@@ -1224,6 +1224,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | `dev.py serve` 注入共享 `AIP_SIGNING_KEY_PEM` | 通过 | `dev_env` + serve 打印 kid |
 | k8s / production-checklist 说明 | 通过 | `k8s.md`「服务间认证密钥」 |
 
+### G2.2 prod 禁 static 服务认证 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| prod + static → Settings ValidationError | 通过 | `test_prod_rejects_static_service_auth` |
+| 缺 PEM / Transit key → check 失败 | 通过 | `test_check_service_auth_settings_flags_static_and_missing_pem` |
+| 清单提及 `AIP_SIGNING_KEY_PEM` | 通过 | `production-checklist.md` + `REQUIRED_ENV_NAMES` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

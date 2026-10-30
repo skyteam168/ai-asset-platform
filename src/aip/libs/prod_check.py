@@ -45,6 +45,7 @@ REQUIRED_ENV_NAMES = (
     "AIP_SERVICE_AUTH_MODE",
     "AIP_SERVICE_TOKEN_TTL_S",
     "AIP_SERVICE_MTLS_CA_PEM",
+    "AIP_SIGNING_KEY_PEM",
     "AIP_LANGFUSE_HOST",
     "AIP_CONNECTOR_WORKER_MODE",
 )
@@ -59,6 +60,20 @@ def _settings_env_names() -> set[str]:
     for field_name in Settings.model_fields:
         names.add(f"AIP_{field_name.upper()}")
     return names
+
+
+def check_service_auth_settings(settings: Settings) -> list[str]:
+    """G2.2：staging/prod 服务认证硬门禁（供测例与 prod-check 复用）。"""
+    if settings.env not in ("staging", "prod"):
+        return []
+    problems: list[str] = []
+    if settings.service_auth_mode == "static":
+        problems.append(f"{settings.env}: AIP_SERVICE_AUTH_MODE=static 禁止，须 jwt 或 both")
+    if settings.signing_backend == "local" and not str(settings.signing_key_pem or "").strip():
+        problems.append(f"{settings.env}: 缺 AIP_SIGNING_KEY_PEM（或 AIP_SIGNING_BACKEND=transit）")
+    if settings.signing_backend == "transit" and not str(settings.transit_signing_key or "").strip():
+        problems.append(f"{settings.env}: signing_backend=transit 时须配置 AIP_TRANSIT_SIGNING_KEY")
+    return problems
 
 
 def run_prod_check(root: Path) -> list[str]:

@@ -181,9 +181,9 @@ flowchart TB
 - Modify: `src/aip/libs/prod_check.py`
 - Test: `tests/test_h42_prod_checklist.py` / `test_h50_prod_depth.py`
 
-- [ ] **Step 1:** `AIP_ENV=prod` 且 `service_auth_mode=static` → prod-check 失败
-- [ ] **Step 2:** 缺 `signing_key_pem` / Transit 配置 → 失败
-- [ ] **Step 3:** 文档勾选说明；Commit
+- [x] **Step 1:** `AIP_ENV=prod` 且 `service_auth_mode=static` → prod-check 失败
+- [x] **Step 2:** 缺 `signing_key_pem` / Transit 配置 → 失败
+- [x] **Step 3:** 文档勾选说明；Commit
 
 ### Task G2.3: service mTLS CA 路径联调说明 + 可选 compose
 

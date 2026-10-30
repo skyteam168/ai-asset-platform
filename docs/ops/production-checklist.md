@@ -56,7 +56,8 @@
 
 ## 服务间认证
 
-- [ ] 生产 `AIP_SERVICE_AUTH_MODE=jwt`（或 `both` 过渡）；`AIP_SERVICE_TOKEN_TTL_S` 合理。
+- [ ] 生产 `AIP_SERVICE_AUTH_MODE=jwt`（或 `both` 过渡；**禁止 `static`**）；`AIP_SERVICE_TOKEN_TTL_S` 合理。`Settings` / `prod-check` 在 `AIP_ENV=prod|staging` 下拒绝 `static`。
+- [ ] 本地签名须有 `AIP_SIGNING_KEY_PEM`（两端相同）；Transit 则配 `AIP_SIGNING_BACKEND=transit` + `AIP_TRANSIT_SIGNING_KEY`。
 - [ ] 入口/sidecar 终止 mTLS 时配置 `AIP_SERVICE_MTLS_CA_PEM`（或等价信任包）。见 [task.md](task.md) H44。
 
 ## GenAI / Langfuse
