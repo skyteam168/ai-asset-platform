@@ -60,3 +60,35 @@ async def test_register_and_authenticate_stub(cp: httpx.AsyncClient, seeded: See
     assert af.status_code == 200, af.text
     assert af.json()["verified"] is True
     assert af.json()["user_id"] == uid
+
+
+async def test_sign_count_replay_rejected(cp: httpx.AsyncClient, seeded: Seed) -> None:
+    """G3.3：sign_count 不递增则拒绝（防重放）。"""
+    headers = await login(cp, seeded, "vn_admin")
+    uid = str(seeded.users["vn_admin"])
+    begin = await cp.post(f"/api/v1/users/{uid}/webauthn/register/begin", headers=headers)
+    challenge_id = begin.json()["challenge_id"]
+    pk = base64.urlsafe_b64encode(b"\xa1\x01\x02cose-stub-sc").decode().rstrip("=")
+    await cp.post(
+        f"/api/v1/users/{uid}/webauthn/register/finish",
+        headers=headers,
+        json={
+            "challenge_id": challenge_id,
+            "credential_id": "cred-sc-1",
+            "public_key_cose_b64": pk,
+            "nickname": "SC",
+        },
+    )
+    ab = await cp.post("/api/v1/auth/webauthn/authenticate/begin", json={"login_name": "vn_admin"})
+    ok = await cp.post(
+        "/api/v1/auth/webauthn/authenticate/finish",
+        json={"challenge_id": ab.json()["challenge_id"], "credential_id": "cred-sc-1", "sign_count": 1},
+    )
+    assert ok.status_code == 200, ok.text
+    ab2 = await cp.post("/api/v1/auth/webauthn/authenticate/begin", json={"login_name": "vn_admin"})
+    replay = await cp.post(
+        "/api/v1/auth/webauthn/authenticate/finish",
+        json={"challenge_id": ab2.json()["challenge_id"], "credential_id": "cred-sc-1", "sign_count": 1},
+    )
+    assert replay.status_code == 401, replay.text
+    assert replay.json()["code"] == "UNAUTHENTICATED"

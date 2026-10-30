@@ -1257,6 +1257,15 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 缺 verifier 400；重放 code 401 | 通过 | 同上 |
 | 运维说明 | 通过 | `docs/ops/pkce-staging.md` |
 
+### G3.3 WebAuthn sign_count + 控制台登记 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 注册 / 认证 stub | 通过 | `test_register_and_authenticate_stub` |
+| sign_count 重放拒绝 | 通过 | `test_sign_count_replay_rejected` |
+| 控制台「安全密钥」页签 | 通过 | `Orgs.tsx` UserWebAuthnTab；en/vi/km |
+| 运维说明 | 通过 | `docs/ops/webauthn-staging.md` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

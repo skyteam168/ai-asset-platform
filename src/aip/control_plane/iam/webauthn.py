@@ -191,9 +191,10 @@ async def stub_verify_authentication(
     *,
     challenge_id: uuid.UUID,
     credential_id: str,
+    sign_count: int | None = None,
     settings: Settings | None = None,
 ) -> uuid.UUID:
-    """stub：确认挑战未过期且 credential 属于该用户，返回 user_id。"""
+    """确认挑战未过期且 credential 属于该用户；sign_count 必须严格递增（防重放）。"""
     s = settings or get_settings()
     if not s.webauthn_stub:
         raise PlatformError(ErrorCode.PRECONDITION_FAILED, "非 stub 需校验 assertion 签名")
@@ -215,12 +216,19 @@ async def stub_verify_authentication(
     ).mappings().first()
     if cred is None:
         raise PlatformError(ErrorCode.UNAUTHENTICATED, "凭证未知")
+    stored = int(cred["sign_count"])
+    if sign_count is None:
+        next_count = stored + 1
+    else:
+        if sign_count <= stored:
+            raise PlatformError(ErrorCode.UNAUTHENTICATED, "sign_count 重放或回退")
+        next_count = sign_count
     await conn.execute(
         update(t.webauthn_challenge).where(t.webauthn_challenge.c.id == challenge_id).values(consumed_at=now)
     )
     await conn.execute(
         update(t.webauthn_credential)
         .where(t.webauthn_credential.c.id == cred["id"])
-        .values(sign_count=int(cred["sign_count"]) + 1, last_used_at=now)
+        .values(sign_count=next_count, last_used_at=now)
     )
     return uuid.UUID(str(chal["user_id"]))

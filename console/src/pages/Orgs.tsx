@@ -270,8 +270,52 @@ function UserDrawer({ user, canManage, orgList, onClose }: {
       <Tabs items={[
         { key: "roles", label: t("角色"), children: <UserRolesTab userId={user.id} canManage={canManage} orgList={orgList} /> },
         { key: "clearance", label: t("密级申请"), children: <UserClearanceTab userId={user.id} canManage={canManage} /> },
+        { key: "webauthn", label: t("安全密钥"), children: <UserWebAuthnTab userId={user.id} canManage={canManage} /> },
       ]} />
     </Drawer>
+  );
+}
+
+function UserWebAuthnTab({ userId, canManage }: { userId: string; canManage: boolean }) {
+  const creds = useLoad(
+    () => get<Page<{ id: string; credential_id: string; nickname: string; sign_count: number }>>(`/users/${userId}/webauthn/credentials`),
+    [userId],
+  );
+  const act = useAction();
+  const registerStub = async () => {
+    const begin = await act(() => post<{ challenge_id: string }>(`/users/${userId}/webauthn/register/begin`));
+    if (!begin) return;
+    const pk = btoa("\xa1\x01\x02cose-ui").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+    const id = `ui-${Date.now().toString(36)}`;
+    if (await act(
+      () => post(`/users/${userId}/webauthn/register/finish`, {
+        challenge_id: begin.challenge_id,
+        credential_id: id,
+        public_key_cose_b64: pk,
+        nickname: t("控制台登记"),
+      }),
+      t("已登记安全密钥"),
+    )) creds.reload();
+  };
+  return (
+    <Space direction="vertical" style={{ width: "100%" }}>
+      {creds.error && <Alert type="error" message={creds.error} />}
+      <ListTable rowKey="id" size="small" loading={creds.loading} pagination={false}
+        dataSource={creds.data?.items ?? []}
+        locale={{ emptyText: t("尚未登记安全密钥") }}
+        columns={[
+          { title: t("凭证"), dataIndex: "credential_id", render: (v: string) => <Typography.Text code>{v}</Typography.Text> },
+          { title: t("备注"), dataIndex: "nickname" },
+          { title: t("签名计数"), dataIndex: "sign_count" },
+        ]}
+      />
+      {canManage && (
+        <Button onClick={registerStub}>{t("登记安全密钥（stub）")}</Button>
+      )}
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        {t("生产环境由浏览器 WebAuthn 创建真实密钥；此处 stub 仅用于联调登记与列表。")}
+      </Typography.Paragraph>
+    </Space>
   );
 }
 

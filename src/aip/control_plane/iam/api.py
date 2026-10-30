@@ -90,6 +90,7 @@ class WebAuthnAuthBeginIn(BaseModel):
 class WebAuthnAuthFinishIn(BaseModel):
     challenge_id: uuid.UUID
     credential_id: str = Field(min_length=1, max_length=512)
+    sign_count: int | None = Field(default=None, ge=0, description="认证器计数；须严格大于已存值，防重放")
 
 
 class OrgIn(BaseModel):
@@ -459,7 +460,10 @@ def router() -> APIRouter:
         """stub：校验挑战后返回 user_id；完整登录仍须口令或后续与 session 衔接。"""
         async with db.tx(DbScope.system()) as conn:
             uid = await webauthn.stub_verify_authentication(
-                conn, challenge_id=body.challenge_id, credential_id=body.credential_id
+                conn,
+                challenge_id=body.challenge_id,
+                credential_id=body.credential_id,
+                sign_count=body.sign_count,
             )
         return {"user_id": str(uid), "verified": True}
 

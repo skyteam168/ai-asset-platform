@@ -232,9 +232,9 @@ flowchart TB
 - Modify: `src/aip/control_plane/iam/webauthn.py` + 控制台绑定 UI
 - Test: 真器手工 + 虚拟 authenticator e2e（Playwright）
 
-- [ ] **Step 1:** 注册 → 登录挑战成功
-- [ ] **Step 2:** sign_count 重放拒绝
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** 注册 → 登录挑战成功
+- [x] **Step 2:** sign_count 重放拒绝
+- [x] **Step 3:** Commit
 
 ---
 
