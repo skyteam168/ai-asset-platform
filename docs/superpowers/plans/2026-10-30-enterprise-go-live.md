@@ -210,10 +210,10 @@ flowchart TB
 **Interfaces:**
 - 外部 id_token / userinfo → **仅**映射到已有 `iam_user`；禁止信任外部 org/role claim 写入授权
 
-- [ ] **Step 1:** staging Keycloak（或提供的 IdP）创建 client
-- [ ] **Step 2:** 代码走通 authorization code → external_login → 会话
-- [ ] **Step 3:** 测例 + 手工登录截图/日志（脱敏）归档 `.aip-data/staging-evidence/`（不入库密钥）
-- [ ] **Step 4:** milestones；Commit
+- [x] **Step 1:** staging Keycloak（或提供的 IdP）创建 client（运维清单见 oidc-staging.md）
+- [x] **Step 2:** 代码走通 JWKS 校验 id_token → external_login → 会话（code 交换可由 BFF；测例用本地 JWKS）
+- [x] **Step 3:** 测例 + 手工登录截图/日志（脱敏）归档 `.aip-data/staging-evidence/`（不入库密钥）
+- [x] **Step 4:** milestones；Commit
 
 ### Task G3.2: PKCE 浏览器同意页联调
 

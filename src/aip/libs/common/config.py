@@ -111,12 +111,16 @@ class Settings(BaseSettings):
     langfuse_host: str | None = None
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
-    # OIDC 登录插件（H51）：默认关闭；stub 供本地映射测例，不接真 IdP
+    # OIDC 登录插件（H51 / G3.1）：默认关闭；stub 供本地映射测例
     oidc_enabled: bool = False
     oidc_stub: bool = True
     oidc_issuer: str = ""
     oidc_client_id: str = ""
     oidc_audience: str = ""
+    # 非 stub：JWKS URL（如 Keycloak …/protocol/openid-connect/certs）
+    oidc_jwks_url: str = ""
+    oidc_token_url: str = ""
+    oidc_client_secret: str = ""
     # OAuth authorization_code + PKCE（H52）：默认关闭；stub 签发授权码供本地测例
     oauth_pkce_enabled: bool = False
     oauth_pkce_stub: bool = True
@@ -147,6 +151,11 @@ class Settings(BaseSettings):
             # G2.2：生产/staging 禁止仅靠长期静态服务令牌
             if self.service_auth_mode == "static":
                 leaked.append("service_auth_mode（须 jwt 或 both，禁止 static）")
+            # G3.1：启用 OIDC 时生产/staging 禁止 stub
+            if self.oidc_enabled and self.oidc_stub:
+                leaked.append("oidc_stub（须 false，并配置 oidc_jwks_url / issuer）")
+            if self.oidc_enabled and not self.oidc_stub and not self.oidc_jwks_url:
+                leaked.append("oidc_jwks_url")
             if leaked:
                 raise ValueError(f"{self.env} 环境必须显式配置：{', '.join(leaked)}")
         return self

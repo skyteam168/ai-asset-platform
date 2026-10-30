@@ -1240,6 +1240,15 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 进程内 CA 冒烟 jwt+mTLS | 通过 | `test_mtls_smoke_ephemeral_ca` |
 | 可选 compose 骨架 | 通过 | `deploy/docker-compose.mtls-smoke.yml` |
 
+### G3.1 OIDC JWKS 非 stub — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| JWKS 拉取经 `build_client` | 通过 | `oidc_verify.fetch_oidc_jwks` |
+| 只映射 `sub`；忽略 roles/org claim | 通过 | `test_verify_ignores_external_roles` |
+| 本地 JWKS 冒烟 + staging 文档 | 通过 | `test_g31_oidc_jwks`；`docs/ops/oidc-staging.md` |
+| prod 启用 OIDC 时禁 stub | 通过 | Settings 校验 |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
