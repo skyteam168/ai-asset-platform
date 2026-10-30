@@ -105,7 +105,7 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     smtp_starttls: bool = True
-    # Connector worker（H57）：inline=同进程；rpc=独立池（骨架，未接线）
+    # Connector worker（H57 / G5.1）：inline=同进程；rpc=独立池 HTTP JSON
     connector_worker_mode: str = Field(default="inline", pattern="^(inline|rpc)$")
     connector_worker_url: str = ""
     # Langfuse（H50）：可选登记，不强制接线

@@ -82,7 +82,7 @@
 
 ## Connector worker
 
-- [ ] 默认 `AIP_CONNECTOR_WORKER_MODE=inline`；拆池时用 `rpc` + `AIP_CONNECTOR_WORKER_URL`（见 [connector-worker.md](connector-worker.md)）。
+- [ ] 默认 `AIP_CONNECTOR_WORKER_MODE=inline`；拆池时用 `rpc` + `AIP_CONNECTOR_WORKER_URL`，并部署 `deploy/k8s/base/connector-worker.yaml`（见 [connector-worker.md](connector-worker.md)）。
 - [ ] RPA 类连接器首期不做；若启用须独立池且沙箱拒 live 写。
 
 ## pgvector / 双机房

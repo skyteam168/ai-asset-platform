@@ -1291,6 +1291,15 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 真 chat `-m llm`（无密钥 skip） | 通过 | `test_live_llm_chat_completions` |
 | Langfuse 接线步骤 | 通过 | `docs/ops/observability.md` GenAI / Langfuse |
 
+### G5.1 Connector worker 真 RPC — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `mode=rpc` 进程间 execute | 通过 | `test_rpc_execute_roundtrip` |
+| worker 挂掉 → DOWNSTREAM_UNAVAILABLE | 通过 | `test_rpc_worker_down_maps_unavailable` |
+| worker 入口 + K8s 草稿 | 通过 | `aip.workers.connector_main`；`deploy/k8s/base/connector-worker.yaml` |
+| 运维说明 | 通过 | `docs/ops/connector-worker.md` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |

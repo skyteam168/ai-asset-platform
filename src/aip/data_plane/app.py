@@ -47,6 +47,7 @@ from aip.libs.audit.store import anchor, ship
 from aip.libs.common import web
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
+from aip.libs.connector_worker import build_connector_worker
 from aip.libs.httpclient.config import Resolver
 from aip.libs.tokens.keys import SigningKey, platform_keys
 from aip.libs.tokens.replay import ReplayStore, ValkeyReplayStore
@@ -277,6 +278,7 @@ def create_app(
     app.state.runtime = runtime
     app.state.events = forwarder
     app.state.workflows = workflows
+    app.state.connector_worker = build_connector_worker(settings)
     store = exec_store
     app.include_router(oauth_router(ctx))
     app.include_router(mcp_router(McpGateway(ctx, runtime)))

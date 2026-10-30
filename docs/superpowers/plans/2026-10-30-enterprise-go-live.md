@@ -284,9 +284,9 @@ flowchart TB
 - Test: `tests/test_h57_*.py` 进程间 invoke 冒烟
 - Docs: `connector-worker.md` 去掉「真 RPC 未接线」
 
-- [ ] **Step 1:** `mode=rpc` 下 Tool 调用经 worker 返回
-- [ ] **Step 2:** worker 挂掉 → 明确错误码（非悬挂）
-- [ ] **Step 3:** Commit
+- [x] **Step 1:** `mode=rpc` 下经 HTTP JSON 调用 worker 返回（`test_rpc_execute_roundtrip`）
+- [x] **Step 2:** worker 挂掉 → `DOWNSTREAM_UNAVAILABLE`（非悬挂）
+- [x] **Step 3:** Commit
 
 ### Task G5.2: 成本分摊报表 API + 控制台只读页
 

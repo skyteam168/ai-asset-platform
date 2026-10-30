@@ -1,0 +1,50 @@
+# 草稿：独立 Connector worker 池（architecture.md 9.5 / H57）。
+# 默认不挂入 kustomization；拆池时加入 resources，并在数据面 ConfigMap 设：
+#   AIP_CONNECTOR_WORKER_MODE=rpc
+#   AIP_CONNECTOR_WORKER_URL=http://connector-worker.aip.svc:18090
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: connector-worker
+  labels: {app: connector-worker}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: connector-worker}
+  template:
+    metadata:
+      labels: {app: connector-worker}
+    spec:
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: connector-worker
+          image: aip
+          command: ["python", "-m", "aip.workers.connector_main"]
+          ports: [{containerPort: 18090, name: http}]
+          env:
+            - name: AIP_CONNECTOR_WORKER_HOST
+              value: "0.0.0.0"
+            - name: AIP_CONNECTOR_WORKER_PORT
+              value: "18090"
+          envFrom:
+            - configMapRef: {name: aip-config}
+            - secretRef: {name: aip-secrets}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          resources:
+            requests: {cpu: 200m, memory: 256Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true,
+                            capabilities: {drop: [ALL]}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: connector-worker
+spec:
+  selector: {app: connector-worker}
+  ports: [{port: 18090, targetPort: http, name: http}]
