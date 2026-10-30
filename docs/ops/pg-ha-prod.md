@@ -48,8 +48,12 @@ CNPG + barmanObjectStore 提供 WAL 归档与定时全备；恢复演练在 stag
 3. 准备 Secret 后 `kubectl apply -f deploy/k8s/cnpg/cluster.yaml`
 4. PITR：确认 `ScheduledBackup` 与对象存储；在**空**命名空间做 Bootstrap from backup 演练
 
+## 演练记录模板（G6.1）
+
+见 [evidence/g6-cnpg-pitr.md](evidence/g6-cnpg-pitr.md)。本机 2026-10-30：`cnpg_kind_smoke.py` → `skip: no kube context`（有 kubectl 客户端、无集群）。
+
 ## 不在本片
 
-- 真实集群安装 operator 与恢复演练的自动化
+- 真实集群安装 operator 与恢复演练的自动化（需 staging kube）
 - Patroni 完整 Helm
 - 把 CNPG 并进默认 kustomize base

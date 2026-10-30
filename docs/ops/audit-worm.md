@@ -37,8 +37,18 @@ python tools/dev.py serve
 | `libs/storage/worm.py` | `MemoryWormStore` / `S3WormStore`、`sync_anchors` / `verify_worm` |
 | `libs/audit/store.anchor(..., worm=)` | 锚定后可选同步 |
 
+## Object Lock 合规桶（G6.4 / staging）
+
+应用层 `put_if_absent` 已拒绝同键异内容覆写（`test_memory_worm_put_if_absent_conflict` / SeaweedFS 往返）。生产另配桶级 Object Lock：
+
+1. 桶开启 **Object Lock 合规模式** + 默认保留期（对照集团合规天数）。
+2. `AIP_WORM_BUCKET` 指向该桶；账号仅允许 `PutObject`（无覆盖）、`GetObject`；禁止无条件 `DeleteObject`。
+3. 校验：写入锚点后，同键覆写应被存储层或 `put_if_absent` 拒绝；`verify_worm` 无问题列表。
+4. 证据目录建议：`.tmp/g6-worm/`（策略截图、拒绝日志、`verify_worm` 输出）。
+
+本地 SeaweedFS 开发栈未必暴露原生 Object Lock；以应用层 WORM + staging 合规桶为准。
+
 ## 不在本片
 
-- SeaweedFS / RGW 原生 Object Lock 策略配置（合规桶）
 - 控制台「WORM 校验」按钮
 - 全量审计 JSONL 归档到对象存储（仅锚点）

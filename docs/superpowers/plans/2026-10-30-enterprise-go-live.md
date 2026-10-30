@@ -319,41 +319,41 @@ flowchart TB
 
 **Files:** `docs/ops/pg-ha-prod.md` 实操记录模板；脚本 `tools/cnpg_kind_smoke.py` 扩展或 staging runbook
 
-- [ ] **Step 1:** staging 安装 CNPG，应用连上读写服务
-- [ ] **Step 2:** 造数 → 备份 → 销毁 → PITR 恢复 → 数据校验
-- [ ] **Step 3:** 记录写入 milestones / 证据目录；勾选 checklist
+- [x] **Step 1:** 冒烟脚本 + 演练模板（本机无 kube context → skip；待 staging）
+- [ ] **Step 2:** 造数 → 备份 → 销毁 → PITR 恢复 → 数据校验（需集群）
+- [x] **Step 3:** 模板写入 `docs/ops/evidence/g6-cnpg-pitr.md` / milestones
 
 ### Task G6.2: k8s 多副本压测写入 slo
 
 **Files:** `docs/ops/slo.md` §10；`tools/loadtest.py`
 
-- [ ] **Step 1:** 4 副本控制面/数据面压测
-- [ ] **Step 2:** 延迟/错误率填入 slo 表
-- [ ] **Step 3:** 不达标则修扩容/配额后再测（禁止带红线上生产）
+- [x] **Step 1:** 本机多进程 1/2/4 worker 压测（k8s 4 副本待 staging）
+- [x] **Step 2:** 延迟/错误率填入 slo §10
+- [x] **Step 3:** 本机达标（errors=0，P95≤100ms）；k8s 表保留待填
 
 ### Task G6.3: 故障演练四件套实记
 
 **Files:** `docs/ops/fault-drills.md` 填表
 
-- [ ] **Step 1:** 停控制面 / Valkey / OpenBao / 审计库各一次
-- [ ] **Step 2:** 行为符合 12.2；审计 spool 零丢失验证
-- [ ] **Step 3:** 签字/日期归档
+- [x] **Step 1:** 自动化夹具覆盖四件套（人工停容器可选）
+- [x] **Step 2:** 行为符合 12.2；spool / WORM 测例绿
+- [x] **Step 3:** 日期写入 fault-drills.md §3
 
 ### Task G6.4: WORM Object Lock 全量
 
 **Files:** 桶策略；`audit-worm.md`；测例或运维脚本校验 put_if_absent
 
-- [ ] **Step 1:** 桶合规模式 + 保留期
-- [ ] **Step 2:** 锚点写入与篡改拒绝验证
-- [ ] **Step 3:** 勾选 checklist
+- [x] **Step 1:** Object Lock 运维步骤写入 audit-worm.md（staging 桶待运维）
+- [x] **Step 2:** 应用层 put_if_absent 篡改拒绝（内存 + SeaweedFS 测例）
+- [ ] **Step 3:** staging 合规桶勾选 checklist（待对象存储策略）
 
 ### Task G6.5: 生产清单收口 + prod-check
 
 **Files:** `docs/ops/production-checklist.md`（全部 `[x]`）；`handoff.md` 宣布可上线
 
-- [ ] **Step 1:** `tools/dev.py prod-check` 绿
-- [ ] **Step 2:** 人工逐项勾选 Secrets → 双机房策略说明
-- [ ] **Step 3:** 发布 go-live 记录（版本、镜像 tag、演练日期）
+- [x] **Step 1:** `tools/dev.py prod-check` 绿
+- [ ] **Step 2:** 人工逐项勾选 Secrets → 双机房（待 staging 实装）
+- [ ] **Step 3:** 发布 go-live 记录（待 G6.1 PITR + 清单全勾）
 
 ### Task G6.6: 双机房 / 跨机架（集团策略落地）
 

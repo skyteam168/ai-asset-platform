@@ -28,3 +28,10 @@
 5. **PostgreSQL 主从切换**：见 [pg-failover.md](pg-failover.md)（opt-in compose profile `pg-ha` + 促升从库）。
 
 演练后 `dev.py up` 恢复依赖。
+
+## 3. 演练记录（G6.3）
+
+| 日期 | 方式 | 结果 | 证据 |
+| --- | --- | --- | --- |
+| 2026-10-30 | 自动化夹具 | 通过 | `pytest tests/test_m7_fault_drills.py tests/test_h14_worm.py`（6 passed：控制面/Valkey/OpenBao/审计 spool 与 WORM） |
+| _待填_ | 人工停容器四件套 | | 第 2 节步骤签字 |

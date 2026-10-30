@@ -1317,6 +1317,17 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 伪向量近邻 + 双通道合并 | 通过 | `test_pseudo_embedding_similarity`；`merge_search_ids`；`-m pgvector` |
 | 文档 | 通过 | [search-index.md](search-index.md) §6 |
 
+### G6.1–G6.5 集群演练与清单（部分）— 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| CNPG 冒烟 | skip | 无 kube context；模板 [evidence/g6-cnpg-pitr.md](evidence/g6-cnpg-pitr.md) |
+| 本机多进程压测填 slo §10 | 通过 | `loadtest --workers 1,2,4`；errors=0；P95≤100ms |
+| 故障演练自动化 | 通过 | `test_m7_fault_drills` + WORM；[fault-drills.md](fault-drills.md) §3 |
+| WORM put_if_absent + Object Lock 说明 | 通过 | `test_h14_worm`；[audit-worm.md](audit-worm.md) |
+| prod-check | 通过 | `tools/dev.py prod-check` |
+| staging k8s 4 副本 / PITR 真恢复 / 清单全勾 | 待集群 | G6 出口未宣称上线 |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
