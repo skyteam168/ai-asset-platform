@@ -176,9 +176,12 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **H40–H43（已完成）**：压测巩固、zhparser opt-in、生产清单 `prod-check`、Notifier 邮件+通用 IM Webhook。
 - **生产深度执行清单**：[task.md](task.md)（**H40–H58 Wave A/B/C 骨架已完成**）。
 - **Wave O（运营向导）**：O1–O4 / O3b 已完成（真连接点测、五步向导、AI 生成候选 OpenAPI、接入管道）。
-- **当前下一步**：本地验收 O3b 后提交；或真环境联调（IdP / SMTP / 真 LLM）；或架构「后做」新切片。
+- **P0 登录握手**：Credential Manager 支持 RSA 加密口令换 JWT（ADR-0027）；设备管家演示 `tools/activate_equipment_path.py`。
+- **运营缺口（已提交 a77b16a）**：草稿删除 / 弃用退役 / 连接与实例删除 / 上游 MCP 源 CRUD；服务凭据失败不踢会话（`both` 无共享密钥用静态令牌）。
+- **企业级上线主线**：**Wave G0→G6**（不后置），总计划见 [enterprise-go-live](../superpowers/plans/2026-10-30-enterprise-go-live.md)；出口 = [production-checklist.md](production-checklist.md) 全勾。
+- **当前下一步**：G0 已完成 → G1 资产维计量与运营补齐 → … → G6 集群/压测/演练。架构「首期不做」项（RPA、分公司命名空间发布等）进 Wave X，改 ADR 前先提问。
 
-完整的未完成清单与原因见 milestones.md 各节“仍未完成”。
+完整的未完成清单与原因见 milestones.md 各节「仍未完成」与上线总计划。
 
 ## 8. Nike 导入 → Active → Grant → MCP（演示）
 

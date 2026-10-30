@@ -3,6 +3,8 @@
 本地自动化：`python tools/dev.py prod-check`（kustomize + 本章节标题存在性 + `Settings` 环境变量名对照）。  
 **不**代替真实集群部署与演练。
 
+执行顺序与任务拆分见企业级上线总计划：[2026-10-30-enterprise-go-live.md](../superpowers/plans/2026-10-30-enterprise-go-live.md)（Wave G0→G6）。本清单为 **G6 出口验收表**，须全部勾选方可宣布上线。
+
 ## Secrets
 
 - [ ] 创建 K8s Secret `aip-secrets`（库连接、OpenBao token、服务令牌、签名/机密后端配置）；**勿**写入 Git。见 [k8s.md](k8s.md)。

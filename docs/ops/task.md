@@ -6,9 +6,11 @@
 进度同步：[milestones.md](milestones.md)、[handoff.md](handoff.md) §7。  
 切片节奏：代码 → 测试 → OpenAPI（若有路由）→ milestones →（你确认后）单独提交。
 
+**企业级上线（现行主线）**：骨架 H44–H58 / O1–O4 已完成后，按 [企业级上线总计划](../superpowers/plans/2026-10-30-enterprise-go-live.md) **Wave G0→G6** 逐项真实现、真联调、真演练；`production-checklist.md` 须全部勾选。不再把 IdP / SMTP / 压测 / 计量等标为「后置」。
+
 ```mermaid
 flowchart TB
-  subgraph waveA [Wave A 本地可验]
+  subgraph waveA [Wave A 本地可验 已完成]
     H44[H44 服务 JWT/mTLS]
     H45[H45 km-KH]
     H46[H46 漂移 API]
@@ -17,18 +19,28 @@ flowchart TB
     H49[H49 Prism UI + 错误 i18n]
     H50[H50 生产收口文档]
   end
-  subgraph waveB [Wave B 需外部依赖]
+  subgraph waveB [Wave B 骨架已完成]
     H51[H51 OIDC/SAML]
     H52[H52 PKCE]
     H53[H53 WebAuthn]
     H54[H54 真集群 CNPG/Patroni]
     H55[H55 多副本压测]
   end
-  subgraph waveC [Wave C 明确后做]
+  subgraph waveC [Wave C 骨架已完成]
     H56[H56 SMTP/飞书]
-    H57[H57 connector worker/RPA]
+    H57[H57 connector worker]
+    H58[H58 pgvector/分摊]
   end
-  waveA --> waveB --> waveC
+  subgraph waveG [Wave G 上线主线]
+    G0[G0 提交运营缺口]
+    G1[G1 计量与运营]
+    G2[G2 服务认证生产态]
+    G3[G3 身份真联调]
+    G4[G4 通知与 LLM]
+    G5[G5 RPC/分摊/向量]
+    G6[G6 集群压测演练清单]
+  end
+  waveA --> waveB --> waveC --> waveG
 ```
 
 ---
@@ -167,6 +179,21 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | O2 | **完成**（控制台五步 + `/wizard`） |
 | O3 | **完成**（O3b：AI 生成候选 OpenAPI） |
 | O4 | **完成**（ops-summary.pipeline + 运营概览） |
+| P0 登录握手 | **完成**（RSA prepare/transform + jwt_exp；设备管家演示脚本） |
+| **Wave G** | **进行中** — 见 [2026-10-30-enterprise-go-live.md](../superpowers/plans/2026-10-30-enterprise-go-live.md) |
+
+### Wave G 状态（上线主线）
+
+| ID | 主题 | 状态 |
+| --- | --- | --- |
+| G0 | 提交运营缺口（lifecycle / upstream MCP / session-auth） | **完成** a77b16a |
+| G1 | 资产维计量退役、上游拉哈希、状态 i18n、OpenAPI 类型 | 待做 |
+| G2 | 共享签名密钥、prod jwt 检查、mTLS 联调 | 待做 |
+| G3 | OIDC / PKCE / WebAuthn 真环境 | 待做 |
+| G4 | SMTP / 飞书 / 真 LLM+Langfuse | 待做 |
+| G5 | Connector RPC 真池、成本分摊、pgvector | 待做 |
+| G6 | CNPG+PITR、多副本压测、故障演练、WORM、双机房、清单全勾 | 待做 |
+| X | RPA / 分公司命名空间等（架构首期不做） | 需先 ADR |
 
 ---
 
