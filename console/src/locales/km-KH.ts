@@ -144,6 +144,8 @@ export const kmKH: Record<string, string> = {
   "已保存": "Saved",
   "已停用": "Disabled",
   "已关闭": "Closed",
+  "已撤销": "បានដកហូត",
+  "已离职": "បានចាកចេញ",
   "已关闭，回收授权 {0} 条": "Closed; {0} grants revoked",
   "已创建": "Created",
   "已发起": "Started",

@@ -141,10 +141,10 @@ flowchart TB
 - Modify: `console/src/components.tsx` `StateTag` 或统一 `statusLabel()`
 - Test: `console/src/i18n.test.tsx`（键齐全）
 
-- [ ] **Step 1:** 枚举源码中未映射的 status（含 `pending_approval`）
-- [ ] **Step 2:** 补译文；`StateTag` 对已知态走 `t()`
-- [ ] **Step 3:** `npm test` i18n 通过
-- [ ] **Step 4:** Commit
+- [x] **Step 1:** 枚举源码中未映射的 status（含 `pending_approval`）
+- [x] **Step 2:** 补译文；`StateTag` 对已知态走 `t()`
+- [x] **Step 3:** `npm test` i18n 通过
+- [x] **Step 4:** Commit
 
 ### Task G1.4: 控制台类型从 OpenAPI 生成（最小可用）
 

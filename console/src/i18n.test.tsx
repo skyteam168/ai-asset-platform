@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { setLang, t } from "./i18n";
 import { collectKeys } from "./i18nKeys";
+import { statusLabel } from "./components";
 import { enUS } from "./locales/en-US";
 import { kmKH } from "./locales/km-KH";
 import { viVN } from "./locales/vi-VN";
@@ -41,6 +42,18 @@ describe("多语言", () => {
     expect(t("没有收录的句子")).toBe("没有收录的句子");
     setLang("vi-VN");
     expect(t("退出")).toBe("Đăng xuất");
+  });
+
+  it("StateTag 状态码走多语言（含 pending_approval / 风控态）", () => {
+    setLang("zh-CN");
+    expect(statusLabel("pending_approval")).toBe("待审批");
+    expect(statusLabel("resume_requested")).toBe("恢复复核中");
+    expect(statusLabel("revoked")).toBe("已撤销");
+    setLang("en-US");
+    expect(statusLabel("pending_approval")).toBe("Pending approval");
+    expect(statusLabel("active")).toBe("Active");
+    expect(statusLabel("acknowledged")).toBe("Acknowledged");
+    expect(statusLabel("unknown_state_xyz")).toBe("unknown_state_xyz");
   });
 
   it("英文界面：登录页按英文渲染", async () => {

@@ -58,38 +58,55 @@ const STATE_COLOR: Record<string, string> = {
   passed: "green", failed: "red", pending: "gold", running: "processing", waiting: "gold",
   succeeded: "green", compensated: "orange", rejected: "red", cancelled: "default", started: "processing",
   done: "green",
+  open: "red", acknowledged: "orange", resume_requested: "blue", resolved: "green",
+  revoked: "red", left: "default", pass: "green", fail: "red",
 };
 
-const STATE_LABEL: Record<string, string> = {
-  draft: t("草稿"),
-  testing: t("测试中"),
-  in_review: t("评审中"),
-  approved: t("已批准"),
-  canary: t("灰度中"),
-  active: t("已生效"),
-  deprecated: t("已弃用"),
-  retired: t("已退役"),
-  suspended: t("已熔断"),
-  pending_approval: t("待审批"),
-  disabled: t("已停用"),
-  passed: t("通过"),
-  failed: t("失败"),
-  pending: t("待处理"),
-  running: t("运行中"),
-  waiting: t("等待中"),
-  succeeded: t("成功"),
-  compensated: t("已补偿"),
-  rejected: t("已驳回"),
-  cancelled: t("已取消"),
-  started: t("执行中"),
-  done: t("完成"),
+/** 状态码 → 中文原文键；渲染时再 t()，保证切换语言后标签正确 */
+const STATE_KEYS: Record<string, string> = {
+  draft: "草稿",
+  testing: "测试中",
+  in_review: "评审中",
+  approved: "已批准",
+  canary: "灰度中",
+  active: "已生效",
+  deprecated: "已弃用",
+  retired: "已退役",
+  suspended: "已熔断",
+  pending_approval: "待审批",
+  disabled: "已停用",
+  passed: "通过",
+  failed: "失败",
+  pending: "待处理",
+  running: "运行中",
+  waiting: "等待中",
+  succeeded: "成功",
+  compensated: "已补偿",
+  rejected: "已驳回",
+  cancelled: "已取消",
+  started: "执行中",
+  done: "完成",
+  open: "待处理",
+  acknowledged: "已确认",
+  resume_requested: "恢复复核中",
+  resolved: "已关闭",
+  revoked: "已撤销",
+  left: "已离职",
+  pass: "通过",
+  fail: "失败",
 };
+
+/** 已知状态码的译名；未知码原样返回（title 仍可看原始值） */
+export function statusLabel(state: string): string {
+  const key = STATE_KEYS[state];
+  return key ? t(key) : state;
+}
 
 /** 状态标签：显示译名，原始状态码放在提示里便于排查 */
 export function StateTag({ state }: { state: string }) {
   return (
     <Tag color={STATE_COLOR[state] ?? "default"} title={state}>
-      {STATE_LABEL[state] ?? state}
+      {statusLabel(state)}
     </Tag>
   );
 }

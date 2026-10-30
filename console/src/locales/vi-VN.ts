@@ -144,6 +144,8 @@ export const viVN: Record<string, string> = {
   "已保存": "Đã lưu",
   "已停用": "Đã vô hiệu hóa",
   "已关闭": "Đã đóng",
+  "已撤销": "Đã thu hồi",
+  "已离职": "Đã nghỉ việc",
   "已关闭，回收授权 {0} 条": "Đã đóng, thu hồi {0} ủy quyền",
   "已创建": "Đã tạo",
   "已发起": "Đã khởi tạo",

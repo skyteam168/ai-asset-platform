@@ -2,7 +2,7 @@ import { Alert, Button, Form, Input, InputNumber, Modal, Segmented, Space, Switc
 import { useState } from "react";
 import { get, post, put, query, type Page } from "../api";
 import { useAuth } from "../auth";
-import { JsonView, OrgName, PageCard, PAGINATION } from "../components";
+import { JsonView, OrgName, PageCard, PAGINATION, StateTag } from "../components";
 import { ListTable } from "../ListTable";
 import { useAction, useLoad } from "../hooks";
 import { t } from "../i18n";
@@ -45,13 +45,6 @@ interface UsageRow {
 }
 
 const SEVERITY_COLOR: Record<string, string> = { low: "default", medium: "orange", high: "red" };
-const STATUS_COLOR: Record<string, string> = { open: "red", acknowledged: "orange", resume_requested: "blue", resolved: "green" };
-const STATUS_LABEL: Record<string, string> = {
-  open: t("待处理"),
-  acknowledged: t("已确认"),
-  resume_requested: t("恢复复核中"),
-  resolved: t("已关闭"),
-};
 const SEVERITY_LABEL: Record<string, string> = { low: t("低"), medium: t("中"), high: t("高") };
 const time = (v: string) => v.slice(0, 19).replace("T", " ");
 
@@ -114,7 +107,7 @@ function Events() {
           { title: t("观测值 / 阈值"), key: "obs", render: (_, e) => `${e.observed} / ${e.threshold}` },
           { title: t("公司"), dataIndex: "company_id", render: (v: string | null) => (v ? <OrgName id={v} /> : "-") },
           { title: t("动作"), dataIndex: "action", render: (v: string) => (v === "suspend_asset" ? <Tag color="red">{t("自动熔断")}</Tag> : <Tag>{t("告警")}</Tag>) },
-          { title: t("状态"), dataIndex: "status", render: (v: string) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v] ?? v}</Tag> },
+          { title: t("状态"), dataIndex: "status", render: (v: string) => <StateTag state={v} /> },
           { title: t("操作"), key: "ops", render: (_, e) => canHandle && (e.status === "open" || e.status === "acknowledged") && (
             <Space>
               {e.status === "open" && <Button size="small" onClick={() => setCurrent({ ev: e, kind: "ack" })}>{e.action === "alert" ? t("关闭") : t("确认")}</Button>}

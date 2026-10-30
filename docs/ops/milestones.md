@@ -1200,6 +1200,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | --- | --- |
 | 不在本片 | 从源一键生成 Connector 实例 |
 
+### G1.3 状态码多语言映射 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `statusLabel` / `StateTag` 渲染时 `t()` | 通过 | `components.tsx` |
+| 含 pending_approval、风控态、revoked/left | 通过 | `i18n.test.tsx` |
+| Risk 页复用 StateTag | 通过 | `Risk.tsx` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
