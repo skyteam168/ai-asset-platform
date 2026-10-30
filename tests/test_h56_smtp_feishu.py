@@ -31,14 +31,53 @@ def test_build_notifier_prefers_feishu_over_im() -> None:
 
 @pytest.mark.asyncio
 async def test_smtp_send_calls_smtplib() -> None:
-    ch = SmtpMailChannel(host="smtp.test", port=587, user="u", password="p", mail_from="f@t")
+    ch = SmtpMailChannel(host="smtp.test", port=587, user="u", password="secret-pw-xyz", mail_from="f@t")
     with patch("smtplib.SMTP") as smtp_cls:
         smtp = MagicMock()
         smtp_cls.return_value.__enter__.return_value = smtp
         await ch.send("to@t", "subj", "body")
         smtp.starttls.assert_called_once()
-        smtp.login.assert_called_once_with("u", "p")
+        smtp.login.assert_called_once_with("u", "secret-pw-xyz")
         smtp.send_message.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_smtp_retries_then_succeeds(caplog: pytest.LogCaptureFixture) -> None:
+    """G4.1：失败重试；日志不含明文密码。"""
+    import logging
+
+    ch = SmtpMailChannel(host="smtp.test", port=587, user="u", password="secret-pw-xyz", mail_from="f@t")
+    with patch("smtplib.SMTP") as smtp_cls:
+        smtp = MagicMock()
+        smtp_cls.return_value.__enter__.return_value = smtp
+        smtp.send_message.side_effect = [OSError("temp"), None]
+        with caplog.at_level(logging.WARNING, logger="aip.libs.notify.service"):
+            await ch.send("to@t", "subj", "body")
+        assert smtp.send_message.call_count == 2
+    joined = " ".join(r.getMessage() for r in caplog.records)
+    assert "secret-pw-xyz" not in joined
+    assert "notify.smtp_retry" in joined
+
+
+@pytest.mark.smtp
+@pytest.mark.asyncio
+async def test_live_smtp_send() -> None:
+    """真发一封（需 AIP_TEST_SMTP_*）；无配置则 skip。"""
+    import os
+
+    host = os.environ.get("AIP_TEST_SMTP_HOST", "").strip()
+    to = os.environ.get("AIP_TEST_SMTP_TO", "").strip()
+    if not host or not to:
+        pytest.skip("AIP_TEST_SMTP_HOST / AIP_TEST_SMTP_TO not set")
+    ch = SmtpMailChannel(
+        host=host,
+        port=int(os.environ.get("AIP_TEST_SMTP_PORT", "587")),
+        user=os.environ.get("AIP_TEST_SMTP_USER", ""),
+        password=os.environ.get("AIP_TEST_SMTP_PASSWORD", ""),
+        mail_from=os.environ.get("AIP_TEST_SMTP_FROM") or os.environ.get("AIP_TEST_SMTP_USER", ""),
+        starttls=os.environ.get("AIP_TEST_SMTP_STARTTLS", "1") not in ("0", "false", "False"),
+    )
+    await ch.send(to, "[AIP] staging SMTP sample", "G4.1 notify.smtp live sample; no secrets in body.")
 
 
 @pytest.fixture

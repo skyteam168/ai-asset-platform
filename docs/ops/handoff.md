@@ -179,7 +179,7 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **P0 登录握手**：Credential Manager 支持 RSA 加密口令换 JWT（ADR-0027）；设备管家演示 `tools/activate_equipment_path.py`。
 - **运营缺口（已提交 a77b16a）**：草稿删除 / 弃用退役 / 连接与实例删除 / 上游 MCP 源 CRUD；服务凭据失败不踢会话（`both` 无共享密钥用静态令牌）。
 - **企业级上线主线**：**Wave G0→G6**（不后置），总计划见 [enterprise-go-live](../superpowers/plans/2026-10-30-enterprise-go-live.md)；出口 = [production-checklist.md](production-checklist.md) 全勾。
-- **当前下一步**：Wave G3 已完成 → **G4 通知与 LLM 生产接通** → G5…G6。架构「首期不做」项（RPA、分公司命名空间发布等）进 Wave X，改 ADR 前先提问。
+- **当前下一步**：G4.1 SMTP 已完成 → G4.2 飞书 → G4.3 LLM → G5…G6。架构「首期不做」项（RPA、分公司命名空间发布等）进 Wave X，改 ADR 前先提问。
 
 完整的未完成清单与原因见 milestones.md 各节「仍未完成」与上线总计划。
 

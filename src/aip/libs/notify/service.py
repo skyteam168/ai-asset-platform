@@ -84,7 +84,20 @@ class SmtpMailChannel:
                     smtp.login(self.user, self.password)
                 smtp.send_message(msg)
 
-        await asyncio.to_thread(_send)
+        last: BaseException | None = None
+        for attempt in range(3):
+            try:
+                await asyncio.to_thread(_send)
+                last = None
+                break
+            except Exception as e:
+                last = e
+                # 不把 password / 连接串写入日志
+                log.warning("notify.smtp_retry attempt=%s to=%s err=%s", attempt + 1, recipient, type(e).__name__)
+                if attempt < 2:
+                    await asyncio.sleep(0.4 * (attempt + 1))
+        if last is not None:
+            raise last
         log.info("notify.smtp to=%s subject=%s bytes=%s", recipient, subject, len(body))
 
 

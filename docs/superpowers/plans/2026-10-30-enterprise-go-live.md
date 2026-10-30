@@ -247,9 +247,9 @@ flowchart TB
 - Test: `tests/test_h56_smtp_feishu.py` 增 `@pytest.mark.smtp` 真发（需 `AIP_TEST_SMTP_*`）
 - Evidence: 收件箱证明（脱敏）
 
-- [ ] **Step 1:** staging SMTP 发一封平台告警样例
-- [ ] **Step 2:** 失败重试与无密码泄漏日志检查
-- [ ] **Step 3:** production-checklist SMTP 勾选；Commit 文档/测例
+- [x] **Step 1:** staging SMTP 发一封平台告警样例（`-m smtp` 真发；无密钥 skip）
+- [x] **Step 2:** 失败重试与无密码泄漏日志检查
+- [x] **Step 3:** production-checklist SMTP 勾选；Commit 文档/测例
 
 ### Task G4.2: 飞书 Webhook（签名校验策略）
 

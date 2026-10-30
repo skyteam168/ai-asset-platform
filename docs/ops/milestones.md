@@ -1266,6 +1266,14 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 控制台「安全密钥」页签 | 通过 | `Orgs.tsx` UserWebAuthnTab；en/vi/km |
 | 运维说明 | 通过 | `docs/ops/webauthn-staging.md` |
 
+### G4.1 SMTP 重试与真发夹具 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 失败重试 3 次；日志无密码 | 通过 | `test_smtp_retries_then_succeeds` |
+| 真发 `-m smtp`（无密钥 skip） | 通过 | `test_live_smtp_send` |
+| 运维说明 | 通过 | `docs/ops/smtp-staging.md` |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
