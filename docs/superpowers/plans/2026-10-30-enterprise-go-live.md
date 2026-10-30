@@ -110,11 +110,11 @@ flowchart TB
 - Produces: `async def recent_asset_version_calls(conn, asset_id, version_id, *, since: datetime) -> int`
 - Consumes: 现有 `exec.usage_counter (day, key, company_id, count)`
 
-- [ ] **Step 1:** 写失败测例：`test_retire_blocked_when_usage_counter_recent`（插入近 30 日 `asset:…:version:…` 计数 >0 → 非 force 退役 PRECONDITION_FAILED）
-- [ ] **Step 2:** pytest 确认失败
-- [ ] **Step 3:** Runtime 成功路径写计量键；`retire_version` 查 sum(count) since cutoff；保留 grant.last_used_at 作为并列条件（任一命中即拦）
-- [ ] **Step 4:** pytest 通过；更新 milestones
-- [ ] **Step 5:** Commit（用户确认后）
+- [x] **Step 1:** 写失败测例：`test_retire_blocked_when_usage_counter_recent`（插入近 30 日 `asset:…:version:…` 计数 >0 → 非 force 退役 PRECONDITION_FAILED）
+- [x] **Step 2:** pytest 确认失败
+- [x] **Step 3:** Runtime 成功路径写计量键；`retire_version` 查 sum(count) since cutoff；保留 grant.last_used_at 作为并列条件（任一命中即拦）
+- [x] **Step 4:** pytest 通过；更新 milestones
+- [x] **Step 5:** Commit（用户确认后）
 
 ### Task G1.2: 上游 MCP 在线 tools/list 拉哈希 + 一键登记
 

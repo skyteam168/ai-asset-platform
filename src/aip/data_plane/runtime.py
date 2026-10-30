@@ -38,7 +38,7 @@ from aip.data_plane.confirmation import (
 from aip.data_plane.iam_cache import IamCache
 from aip.data_plane.pdp import Decision, PolicyService
 from aip.data_plane.principal import Principal
-from aip.data_plane.quota import MemoryQuotaStore, QuotaItem, QuotaStore
+from aip.data_plane.quota import MemoryQuotaStore, QuotaItem, QuotaStore, asset_version_meter_key
 from aip.data_plane.release_cache import ReleaseCache
 from aip.libs.audit.spool import AuditSpool
 from aip.libs.common.errors import ErrorCode, PlatformError
@@ -643,6 +643,21 @@ class ToolRuntime:
         items = self._quota_items(principal, release, write)
         return await self.quota.take(_now().date(), items) if items else None
 
+    async def _record_asset_version_meter(self, release: dict[str, Any], company_id: str) -> None:
+        """成功调用计入资产版本计量（退役门禁；失败不影响主路径）。"""
+        aid = release.get("asset_id")
+        vid = release.get("version_id") or release.get("asset_version_id")
+        if not aid or not vid:
+            return
+        try:
+            await self.quota.record(
+                _now().date(),
+                asset_version_meter_key(str(aid), str(vid)),
+                str(company_id),
+            )
+        except Exception:
+            log.exception("asset version meter record failed")
+
     async def _reject_quota(self, rec: dict[str, Any], key: str) -> dict[str, Any]:
         scope = {"consumer": "消费方每日调用", "consumer_write": "消费方每日写操作", "ceiling": "授权上限每日调用"}
         rec.update(
@@ -954,6 +969,7 @@ class ToolRuntime:
                 data, truncated = result_guard(res.data, spec, principal)
                 rec.update(status="succeeded", result=data, retry_count=attempt - 1)
                 await self.store.update(rec)
+                await self._record_asset_version_meter(release, rec["company_id"])
                 await self.audit.append_async("tool.execution", company_id=rec["company_id"], record=self._audit(rec))
                 return _result(rec, next_cursor=res.next_cursor, truncated=truncated)
             except (TimeoutError, PlatformError) as e:
@@ -1013,6 +1029,7 @@ class ToolRuntime:
         outcome = await inst.connector.reconcile(spec["connector_ref"]["operation"], rec["idempotency_key"], ctx)
         if outcome.outcome == "succeeded":
             rec.update(status="succeeded", result=outcome.data, error_code=None, reconcile_status="confirmed")
+            await self._record_asset_version_meter(release, rec["company_id"])
         elif outcome.outcome == "not_executed":
             rec.update(status="failed", error_code=str(ErrorCode.DOWNSTREAM_TIMEOUT), reconcile_status="not_executed")
         else:

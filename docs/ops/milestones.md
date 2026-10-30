@@ -1162,7 +1162,19 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 
 | 部分 | 内容 |
 | --- | --- |
-| 不在本片 | 真 SMTP/IdP；调用量按资产维精确计量（`usage_counter` 现为消费方/上限键） |
+| 不在本片 | 真 SMTP/IdP |
+
+### G1.1 资产/版本维计量 + 退役门禁 — 2026-10-30
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 成功调用记 `asset:{id}:version:{vid}` | 通过 | `runtime._record_asset_version_meter` + `QuotaStore.record` |
+| 近 30 日计量 >0 非 force 退役 → 412 | 通过 | `test_retire_blocked_when_usage_counter_recent` |
+| grant.last_used_at 并列门禁保留 | 通过 | `retire_version` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 不在本片 | 控制台展示调用量曲线；force 退役审计细化 |
 
 ### 上游 MCP 源登记/禁用/删除 — 2026-10-30
 

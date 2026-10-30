@@ -440,6 +440,22 @@ async def retire_version(
                 ErrorCode.PRECONDITION_FAILED,
                 f"近 {_RETIRE_IDLE_DAYS} 天仍有授权调用，不得退役；可 force=true 并记录强制下线原因",
             )
+        meter_key = f"asset:{v['asset_id']}:version:{version_id}"
+        meter_row = (
+            await conn.execute(
+                text(
+                    "SELECT COALESCE(SUM(count), 0) FROM exec.usage_counter "
+                    "WHERE key = :k AND day >= :since"
+                ),
+                {"k": meter_key, "since": cutoff.date()},
+            )
+        ).first()
+        meter = int(meter_row[0]) if meter_row else 0
+        if meter > 0:
+            raise PlatformError(
+                ErrorCode.PRECONDITION_FAILED,
+                f"近 {_RETIRE_IDLE_DAYS} 天调用量未归零（usage_counter={meter}），不得退役；可 force=true 并记录强制下线原因",
+            )
     note = why if not force else f"[force] {why}"
     return await transition(conn, actor, version_id, "retired", note)
 

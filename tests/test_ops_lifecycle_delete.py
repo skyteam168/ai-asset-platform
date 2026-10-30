@@ -66,6 +66,30 @@ async def test_retire_blocked_when_recently_used_unless_force(db: Database, seed
         assert state == "retired"
 
 
+async def test_retire_blocked_when_usage_counter_recent(db: Database, seeded: Seed) -> None:
+    """近 30 日 usage_counter 有资产版本调用量时，非 force 不得退役（architecture.md 7.4）。"""
+    pub = await publish_tool(db, seeded, name="ops.retire_metered")
+    key = f"asset:{pub.asset_id}:version:{pub.version_id}"
+    async with db.tx(DbScope.system()) as conn:
+        await registry.deprecate_version(conn, SYS, pub.version_id, reason="公告弃用计量")
+        await conn.execute(
+            text(
+                "INSERT INTO exec.usage_counter (day, key, company_id, count) "
+                "VALUES (CURRENT_DATE, :key, :co, 3) "
+                "ON CONFLICT (day, key) DO UPDATE SET count = EXCLUDED.count"
+            ),
+            {"key": key, "co": seeded.hq},
+        )
+        with pytest.raises(PlatformError) as e:
+            await registry.retire_version(conn, SYS, pub.version_id, reason="计量未归零不得退")
+        assert e.value.code == ErrorCode.PRECONDITION_FAILED
+        assert "调用量" in e.value.detail
+        state = await registry.retire_version(
+            conn, SYS, pub.version_id, reason="总部强制下线：计量忽略", force=True
+        )
+        assert state == "retired"
+
+
 async def test_deprecate_rejects_non_active(db: Database, seeded: Seed) -> None:
     async with db.tx(DbScope.system()) as conn:
         aid = await registry.create_asset(
