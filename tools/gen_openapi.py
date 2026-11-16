@@ -117,6 +117,7 @@ COMMON_COMPONENTS: dict[str, Any] = {
     },
     "parameters": {
         "Id": {"name": "id", "in": "path", "required": True, "schema": S},
+        "CaseId": {"name": "case_id", "in": "path", "required": True, "schema": S},
         "Provider": {"name": "provider", "in": "path", "required": True, "schema": S},
         "ExternalId": {"name": "external_id", "in": "path", "required": True, "schema": S},
         "VersionId": {"name": "version_id", "in": "path", "required": True, "schema": S},
@@ -153,8 +154,28 @@ def control_plane() -> dict[str, Any]:
                 {"login_name": S, "password": {"type": "string", "format": "password"}, "totp": SN},
                 ["login_name", "password"],
             ),
-            "OidcCallbackRequest": o({"id_token": S}, ["id_token"]),
-            "AuthProviderInfo": o({"name": S, "enabled": B}, ["name", "enabled"]),
+            "OidcCallbackRequest": o(
+                {
+                    "id_token": SN,
+                    "code": SN,
+                    "code_verifier": SN,
+                    "redirect_uri": SN,
+                },
+            ),
+            "OidcStartResponse": o(
+                {"authorization_url": S, "state": S, "code_verifier": S},
+                ["authorization_url", "state", "code_verifier"],
+            ),
+            "AuthProviderInfo": o(
+                {
+                    "name": S,
+                    "enabled": B,
+                    "stub": {"type": ["boolean", "null"]},
+                    "authorization_url": SN,
+                    "redirect_uri": SN,
+                },
+                ["name", "enabled"],
+            ),
             "ExternalLogin": o(
                 {
                     "provider": S,
@@ -181,13 +202,23 @@ def control_plane() -> dict[str, Any]:
                     "challenge_id": S,
                     "credential_id": S,
                     "public_key_cose_b64": S,
+                    "public_key_spki_b64": S,
+                    "client_data_json_b64": S,
                     "nickname": S,
                 },
-                ["challenge_id", "credential_id", "public_key_cose_b64"],
+                ["challenge_id", "credential_id"],
             ),
             "WebAuthnAuthBeginRequest": o({"login_name": S}, ["login_name"]),
             "WebAuthnAuthFinishRequest": o(
-                {"challenge_id": S, "credential_id": S}, ["challenge_id", "credential_id"]
+                {
+                    "challenge_id": S,
+                    "credential_id": S,
+                    "sign_count": {"type": ["integer", "null"], "minimum": 0},
+                    "client_data_json_b64": S,
+                    "authenticator_data_b64": S,
+                    "signature_b64": S,
+                },
+                ["challenge_id", "credential_id"],
             ),
             "Session": o(
                 {"session_token": S, "expires_at": DT, "user": ref("User")}, ["session_token", "expires_at", "user"]
@@ -436,6 +467,36 @@ def control_plane() -> dict[str, Any]:
                 ["results"],
             ),
             "NotifyFlushResult": o({"sent": INT}, ["sent"]),
+            "MailSettings": o(
+                {
+                    "enabled": B,
+                    "host": S,
+                    "port": INT,
+                    "user": S,
+                    "mail_from": S,
+                    "starttls": B,
+                    "subject_template": S,
+                    "public_base_url": S,
+                    "credential_ref": S,
+                    "has_password": B,
+                },
+                ["enabled", "host", "port", "user", "mail_from", "starttls", "subject_template", "public_base_url", "credential_ref", "has_password"],
+            ),
+            "MailSettingsIn": o(
+                {
+                    "enabled": B,
+                    "host": S,
+                    "port": INT,
+                    "user": S,
+                    "mail_from": S,
+                    "password": SN,
+                    "starttls": B,
+                    "subject_template": S,
+                    "public_base_url": S,
+                },
+            ),
+            "MailTestIn": o({"to": S}, ["to"]),
+            "MailTestResult": o({"ok": B, "detail": S}, ["ok", "detail"]),
             "SkillPackageUploaded": o(
                 {
                     "version_id": ID,
@@ -488,6 +549,40 @@ def control_plane() -> dict[str, Any]:
                     },
                 },
                 ["name", "description"],
+            ),
+            "SkillAiDraftIn": o(
+                {
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string", "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$"},
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "description": "勾选的 Tool@版本（写入候选 tools）",
+                    },
+                    "model_profile": {
+                        "type": "string",
+                        "pattern": r"^[\w.-]+@\d+\.\d+\.\d+$",
+                    },
+                    "scenario": {
+                        "type": "string",
+                        "maxLength": 4000,
+                        "default": "",
+                        "description": "运维场景说明（可选）",
+                    },
+                    "hint_name": {"type": ["string", "null"], "maxLength": 64},
+                },
+                ["tools", "model_profile"],
+            ),
+            "SkillAiDraft": o(
+                {
+                    "name": S,
+                    "description": S,
+                    "body": S,
+                    "tools": {"type": "array", "items": S},
+                    "allowed_tools": {"type": "array", "items": S},
+                    "warnings": {"type": "array", "items": S},
+                },
+                ["name", "description", "body"],
             ),
             "SkillSource": o(
                 {
@@ -868,6 +963,28 @@ def control_plane() -> dict[str, Any]:
                     "approval_id": S,
                 }
             ),
+            "ConnectionCredentialsIn": o(
+                {
+                    "username": SN,
+                    "password": SN,
+                    "api_key": SN,
+                    "token": SN,
+                    "credential_ref": SN,
+                }
+            ),
+            "CredentialRefOut": o({"id": ID, "credential_ref": S}, ["id", "credential_ref"]),
+            "ConnectionTestAuthIn": o({"auth": {"type": "object", "additionalProperties": True}}, ["auth"]),
+            "AuthTestResult": o(
+                {
+                    "ok": B,
+                    "mode": S,
+                    "detail": SN,
+                    "cookie_name": SN,
+                    "expires_in_s": {"type": ["integer", "null"]},
+                    "error_code": SN,
+                },
+                ["ok", "mode"],
+            ),
             "Approval": o(
                 {
                     "id": ID,
@@ -885,6 +1002,8 @@ def control_plane() -> dict[str, Any]:
                     "subject": SN,
                     "subject_id": SN,
                     "company_id": SN,
+                    "approver_role": SN,
+                    "required_approvals": {"type": ["integer", "null"]},
                     "payload": {"type": "object"},
                     "due_at": SN,
                     "created_at": SN,
@@ -1178,6 +1297,47 @@ def control_plane() -> dict[str, Any]:
                 },
                 ["ok", "operation", "mode", "item_count", "truncated"],
             ),
+            "ImporterManualRequest": o(
+                {
+                    "connector_name": {
+                        "type": "string",
+                        "pattern": "^[a-z][a-z0-9_]{2,63}$",
+                    },
+                    "domain": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "default": "imported"},
+                    "system": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "default": "imported"},
+                    "operations": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 100,
+                        "items": o(
+                            {
+                                "operation": {
+                                    "type": "string",
+                                    "pattern": "^[a-z][a-z0-9_]{1,63}$",
+                                },
+                                "method": {
+                                    "type": "string",
+                                    "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"],
+                                    "default": "GET",
+                                },
+                                "path": {"type": "string", "minLength": 1, "maxLength": 512},
+                                "mode": {"type": ["string", "null"], "enum": ["read", "write"]},
+                                "success_when": SN,
+                                "data": {"type": "string", "default": "$.data"},
+                                "title": SN,
+                                "description": SN,
+                                "query": {"type": "object", "additionalProperties": S},
+                            },
+                            ["operation", "path"],
+                        ),
+                    },
+                    "auth": {"type": ["object", "null"], "additionalProperties": True},
+                    "persist": {"type": "boolean", "default": False},
+                    "connection_id": SN,
+                    "owner_org_id": SN,
+                },
+                ["connector_name", "operations"],
+            ),
             "ImporterGenerateRequest": o(
                 {
                     "description": {
@@ -1429,11 +1589,20 @@ def control_plane() -> dict[str, Any]:
                 security=PUBLIC,
             )
         },
+        f"{A}/auth/oidc/start": {
+            "post": op(
+                "oidcStart",
+                "auth",
+                "OIDC 授权跳转（PKCE）；返回 authorization_url 与 code_verifier",
+                res=ref("OidcStartResponse"),
+                security=PUBLIC,
+            )
+        },
         f"{A}/auth/oidc/callback": {
             "post": op(
                 "oidcCallback",
                 "auth",
-                "OIDC 回调（stub：id_token=stub:<sub>；经 external_login 映射）",
+                "OIDC 回调（id_token 或 code+code_verifier 换票；经 external_login 映射）",
                 req=ref("OidcCallbackRequest"),
                 res=ref("Session"),
                 security=PUBLIC,
@@ -1539,7 +1708,7 @@ def control_plane() -> dict[str, Any]:
             "post": op(
                 "webauthnRegisterFinish",
                 "auth",
-                "完成 WebAuthn 注册（stub 跳过 attestation）",
+                "完成 WebAuthn 注册（非 stub 须 SPKI + clientDataJSON）",
                 req=ref("WebAuthnFinishRequest"),
                 res=ref("WebAuthnCredential"),
                 code="201",
@@ -1560,7 +1729,7 @@ def control_plane() -> dict[str, Any]:
             "post": op(
                 "webauthnAuthenticateFinish",
                 "auth",
-                "完成 WebAuthn 认证（stub）",
+                "完成 WebAuthn 认证（非 stub 校验 assertion）",
                 req=ref("WebAuthnAuthFinishRequest"),
                 res={"type": "object"},
                 security=PUBLIC,
@@ -1715,6 +1884,23 @@ def control_plane() -> dict[str, Any]:
                 code="201",
                 params=["Id"],
             )
+        },
+        f"{A}/versions/{{id}}/test-cases/{{case_id}}": {
+            "put": op(
+                "updateTestCase",
+                "release",
+                "更新门禁用例（仅 draft）",
+                req={"type": "object"},
+                res=ref("TestCase"),
+                params=["Id", "CaseId"],
+            ),
+            "delete": op(
+                "deleteTestCase",
+                "release",
+                "删除门禁用例（仅 draft）",
+                code="204",
+                params=["Id", "CaseId"],
+            ),
         },
         f"{A}/versions/{{id}}/selection-eval": {
             "get": op(
@@ -2041,6 +2227,26 @@ def control_plane() -> dict[str, Any]:
                 "testConnection", "connection", "连接测试（真实握手）", res=ref("ConnectionTestResult"), params=["Id"]
             )
         },
+        f"{A}/connections/{{id}}/credentials": {
+            "put": op(
+                "putConnectionCredentials",
+                "connection",
+                "写入下游凭据到 OpenBao（不回显明文）",
+                req=ref("ConnectionCredentialsIn"),
+                res=ref("CredentialRefOut"),
+                params=["Id"],
+            )
+        },
+        f"{A}/connections/{{id}}/test-auth": {
+            "post": op(
+                "testConnectionAuth",
+                "connection",
+                "测登录（Cookie/Token；不回传会话明文）",
+                req=ref("ConnectionTestAuthIn"),
+                res=ref("AuthTestResult"),
+                params=["Id"],
+            )
+        },
         f"{A}/connections/{{id}}/trust-draft": {
             "post": op(
                 "draftTrust",
@@ -2192,6 +2398,30 @@ def control_plane() -> dict[str, Any]:
                 res=ref("NotifyFlushResult"),
             )
         },
+        f"{A}/notify/mail-settings": {
+            "get": op(
+                "getMailSettings",
+                "notify",
+                "读取控制台邮件（SMTP）配置（不含密码明文）",
+                res=ref("MailSettings"),
+            ),
+            "put": op(
+                "putMailSettings",
+                "notify",
+                "保存控制台邮件配置；密码写入 OpenBao",
+                req=ref("MailSettingsIn"),
+                res=ref("MailSettings"),
+            ),
+        },
+        f"{A}/notify/mail-settings/test": {
+            "post": op(
+                "testMailSettings",
+                "notify",
+                "按当前配置发送测试邮件",
+                req=ref("MailTestIn"),
+                res=ref("MailTestResult"),
+            )
+        },
         f"{A}/console/catalog": {
             "get": op(
                 "consoleCatalog",
@@ -2280,6 +2510,16 @@ def control_plane() -> dict[str, Any]:
                 res=ref("SkillSourceSaved"),
                 params=["Id"],
             ),
+        },
+        f"{A}/versions/{{id}}/skill-ai-draft": {
+            "post": op(
+                "generateSkillAiDraft",
+                "skill",
+                "经 LLM Gateway 按勾选 Tool 与可选场景生成 Skill 候选草稿（不落库；须人工改后再保存）",
+                req=ref("SkillAiDraftIn"),
+                res=ref("SkillAiDraft"),
+                params=["Id"],
+            )
         },
         f"{A}/versions/{{id}}/skill-script-allowlist": {
             "get": op(
@@ -2427,6 +2667,15 @@ def control_plane() -> dict[str, Any]:
                 "经 LLM Gateway 生成候选 OpenAPI（须人工预览；附录仅纯文本，不解析图片）",
                 req=ref("ImporterGenerateRequest"),
                 res=ref("ImporterGenerateResult"),
+            )
+        },
+        f"{A}/importer/manual": {
+            "post": op(
+                "importManualOperations",
+                "importer",
+                "手工登记 REST 操作生成声明式 Connector 与 Tool 草稿（简易接入）",
+                req=ref("ImporterManualRequest"),
+                res=ref("ImporterResult"),
             )
         },
         f"{A}/prism-mocks": {

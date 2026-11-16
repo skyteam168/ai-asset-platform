@@ -108,4 +108,12 @@ def get_provider(name: str) -> AuthProvider:
 
 def list_providers(settings: Settings | None = None) -> list[dict[str, Any]]:
     s = settings or get_settings()
-    return [{"name": p.name, "enabled": p.enabled(s)} for p in _REGISTRY.values()]
+    out: list[dict[str, Any]] = []
+    for p in _REGISTRY.values():
+        item: dict[str, Any] = {"name": p.name, "enabled": p.enabled(s)}
+        if p.name == "oidc":
+            item["stub"] = bool(s.oidc_stub)
+            item["authorization_url"] = (s.oidc_authorization_url or "").strip() or None
+            item["redirect_uri"] = (s.oidc_redirect_uri or "").strip() or None
+        out.append(item)
+    return out

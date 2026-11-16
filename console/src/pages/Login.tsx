@@ -4,20 +4,77 @@ import {
   SafetyOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Dropdown, Form, Input, Popover, Tag, Typography } from "antd";
-import { useState } from "react";
-import { describeError } from "../api";
+import { Alert, Button, Divider, Dropdown, Form, Input, Popover, Tag, Typography } from "antd";
+import { useEffect, useState } from "react";
+import { describeError, get, post } from "../api";
 import { useAuth } from "../auth";
 import { Logo, PRODUCT_NAME } from "../brand";
 import { LANGS, lang, switchLang, t, type Lang } from "../i18n";
 import { ThemePanel, useThemePrefs } from "../theme";
 import { LoginHub } from "./LoginHub";
 
+type AuthProvider = {
+  name: string;
+  enabled: boolean;
+  stub?: boolean | null;
+  authorization_url?: string | null;
+  redirect_uri?: string | null;
+};
+
+const OIDC_PKCE_KEY = "aip.oidc.pkce";
+
 export function LoginPage() {
-  const { login } = useAuth();
+  const { login, loginWithSession } = useAuth();
   const prefs = useThemePrefs();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oidc, setOidc] = useState<AuthProvider | null>(null);
+
+  useEffect(() => {
+    get<{ items: AuthProvider[] }>("/auth/providers")
+      .then((page) => {
+        const p = page.items.find((x) => x.name === "oidc" && x.enabled);
+        setOidc(p ?? null);
+      })
+      .catch(() => setOidc(null));
+  }, []);
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const code = q.get("code");
+    const state = q.get("state");
+    if (!code || !state) return;
+    const raw = sessionStorage.getItem(OIDC_PKCE_KEY);
+    if (!raw) {
+      setError(t("企业登录状态丢失，请重试"));
+      return;
+    }
+    let stored: { state: string; code_verifier: string; redirect_uri: string };
+    try {
+      stored = JSON.parse(raw) as { state: string; code_verifier: string; redirect_uri: string };
+    } catch {
+      setError(t("企业登录状态无效，请重试"));
+      return;
+    }
+    if (stored.state !== state) {
+      setError(t("企业登录 state 不匹配"));
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    post<{ session_token: string }>("/auth/oidc/callback", {
+      code,
+      code_verifier: stored.code_verifier,
+      redirect_uri: stored.redirect_uri,
+    })
+      .then(async (res) => {
+        sessionStorage.removeItem(OIDC_PKCE_KEY);
+        window.history.replaceState({}, "", window.location.pathname);
+        await loginWithSession(res.session_token);
+      })
+      .catch((e) => setError(describeError(e)))
+      .finally(() => setBusy(false));
+  }, [loginWithSession]);
 
   const submit = async (v: { login_name: string; password: string; totp: string }) => {
     setBusy(true);
@@ -27,6 +84,32 @@ export function LoginPage() {
     } catch (e) {
       setError(describeError(e));
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const startOidc = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const start = await post<{ authorization_url: string; state: string; code_verifier: string }>(
+        "/auth/oidc/start",
+        {},
+      );
+      const redirect =
+        oidc?.redirect_uri ||
+        `${window.location.origin}${window.location.pathname}`;
+      sessionStorage.setItem(
+        OIDC_PKCE_KEY,
+        JSON.stringify({
+          state: start.state,
+          code_verifier: start.code_verifier,
+          redirect_uri: redirect,
+        }),
+      );
+      window.location.href = start.authorization_url;
+    } catch (e) {
+      setError(describeError(e));
       setBusy(false);
     }
   };
@@ -132,6 +215,16 @@ export function LoginPage() {
               {t("登录")}
             </Button>
           </Form>
+          {oidc?.authorization_url && (
+            <>
+              <Divider plain style={{ margin: "18px 0 12px" }}>
+                {t("或")}
+              </Divider>
+              <Button block loading={busy} onClick={startOidc}>
+                {t("企业登录（OIDC）")}
+              </Button>
+            </>
+          )}
           <p className="login-stage-panel-hint">{t("登录后按角色进入审批、资产、接入与风控等生产治理能力。")}</p>
         </aside>
       </div>

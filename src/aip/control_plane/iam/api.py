@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import datetime as dt
+import hashlib
+import secrets
 import uuid
 from typing import Annotated, Any, Literal
 
@@ -26,6 +29,7 @@ from aip.control_plane.iam import (
 from aip.control_plane.iam import schemas as out
 from aip.control_plane.iam import tables as t
 from aip.control_plane.iam.authz import Actor
+from aip.control_plane.iam.oidc_verify import build_oidc_authorization_url, exchange_oidc_code
 from aip.libs.common.config import get_settings
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.paging import Page
@@ -66,9 +70,18 @@ class LoginIn(BaseModel):
 
 
 class OidcCallbackIn(BaseModel):
-    """OIDC 回调骨架：stub 接受 id_token=stub:<sub>；真 IdP 联调后再接 code 交换。"""
+    """OIDC 回调：id_token 直传，或 authorization_code + PKCE 服务端换票。"""
 
-    id_token: str = Field(min_length=1, max_length=8192)
+    id_token: str | None = Field(default=None, max_length=8192)
+    code: str | None = Field(default=None, max_length=2048)
+    code_verifier: str | None = Field(default=None, max_length=128)
+    redirect_uri: str | None = Field(default=None, max_length=2048)
+
+
+class OidcStartOut(BaseModel):
+    authorization_url: str
+    state: str
+    code_verifier: str
 
 
 class ExternalLoginIn(BaseModel):
@@ -79,7 +92,9 @@ class ExternalLoginIn(BaseModel):
 class WebAuthnFinishIn(BaseModel):
     challenge_id: uuid.UUID
     credential_id: str = Field(min_length=1, max_length=512)
-    public_key_cose_b64: str = Field(min_length=1, max_length=8192)
+    public_key_cose_b64: str = Field(default="", max_length=8192)
+    public_key_spki_b64: str = Field(default="", max_length=8192)
+    client_data_json_b64: str = Field(default="", max_length=8192)
     nickname: str = ""
 
 
@@ -91,6 +106,9 @@ class WebAuthnAuthFinishIn(BaseModel):
     challenge_id: uuid.UUID
     credential_id: str = Field(min_length=1, max_length=512)
     sign_count: int | None = Field(default=None, ge=0, description="认证器计数；须严格大于已存值，防重放")
+    client_data_json_b64: str = Field(default="", max_length=8192)
+    authenticator_data_b64: str = Field(default="", max_length=8192)
+    signature_b64: str = Field(default="", max_length=8192)
 
 
 class OrgIn(BaseModel):
@@ -225,15 +243,47 @@ def router() -> APIRouter:
         return Page(items=items)
 
     @r.post(
+        f"{V}/auth/oidc/start",
+        tags=["auth"],
+        operation_id="oidcStart",
+        response_model=OidcStartOut,
+    )
+    async def oidc_start() -> OidcStartOut:
+        """返回 PKCE 跳转 URL；code_verifier 由浏览器 sessionStorage 持有。"""
+        s = get_settings()
+        if not s.oidc_enabled:
+            raise PlatformError(ErrorCode.PRECONDITION_FAILED, "OIDC 登录未启用")
+        verifier = secrets.token_urlsafe(64)[:128]
+        challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest())
+            .rstrip(b"=")
+            .decode("ascii")
+        )
+        state = secrets.token_urlsafe(24)
+        url = build_oidc_authorization_url(s, state=state, code_challenge=challenge)
+        return OidcStartOut(authorization_url=url, state=state, code_verifier=verifier)
+
+    @r.post(
         f"{V}/auth/oidc/callback",
         tags=["auth"],
         operation_id="oidcCallback",
         response_model=out.Session,
     )
     async def oidc_callback(body: OidcCallbackIn, db: DbDep) -> out.Session:
+        s = get_settings()
+        id_token = (body.id_token or "").strip()
+        if not id_token and body.code and body.code_verifier:
+            id_token = await exchange_oidc_code(
+                code=body.code.strip(),
+                code_verifier=body.code_verifier.strip(),
+                settings=s,
+                redirect_uri=body.redirect_uri,
+            )
+        if not id_token:
+            raise PlatformError(ErrorCode.INVALID_ARGUMENT, "须提供 id_token 或 code+code_verifier")
         async with db.tx(DbScope.system()) as conn:
             token, expires, user_id = await auth.login_via_provider(
-                conn, "oidc", {"id_token": body.id_token}
+                conn, "oidc", {"id_token": id_token}
             )
             u = await users.user_row(conn, user_id)
             clearance = await users.effective_clearance(conn, user_id)
@@ -446,6 +496,8 @@ def router() -> APIRouter:
                 challenge_id=body.challenge_id,
                 credential_id=body.credential_id,
                 public_key_cose_b64=body.public_key_cose_b64,
+                public_key_spki_b64=body.public_key_spki_b64,
+                client_data_json_b64=body.client_data_json_b64,
                 nickname=body.nickname,
             )
         return out.WebAuthnCredential.model_validate(row)
@@ -457,13 +509,16 @@ def router() -> APIRouter:
 
     @r.post(f"{V}/auth/webauthn/authenticate/finish", tags=["auth"], operation_id="webauthnAuthenticateFinish")
     async def webauthn_auth_finish(body: WebAuthnAuthFinishIn, db: DbDep) -> dict[str, Any]:
-        """stub：校验挑战后返回 user_id；完整登录仍须口令或后续与 session 衔接。"""
+        """校验 WebAuthn assertion；返回 user_id（完整会话仍可经口令登录衔接）。"""
         async with db.tx(DbScope.system()) as conn:
-            uid = await webauthn.stub_verify_authentication(
+            uid = await webauthn.verify_authentication(
                 conn,
                 challenge_id=body.challenge_id,
                 credential_id=body.credential_id,
                 sign_count=body.sign_count,
+                client_data_json_b64=body.client_data_json_b64,
+                authenticator_data_b64=body.authenticator_data_b64,
+                signature_b64=body.signature_b64,
             )
         return {"user_id": str(uid), "verified": True}
 

@@ -181,19 +181,50 @@ milestones 增加 H44–H55 节；handoff §7 指向本文（Wave A/B 骨架已�
 | O4 | **完成**（ops-summary.pipeline + 运营概览） |
 | P0 登录握手 | **完成**（RSA prepare/transform + jwt_exp；设备管家演示脚本） |
 | **Wave G** | **进行中** — 见 [2026-10-30-enterprise-go-live.md](../superpowers/plans/2026-10-30-enterprise-go-live.md) |
+| **Wave P** | **进行中** — 约 200 人试点（单机房）；见下方与 [pilot-200.md](pilot-200.md) |
 
 ### Wave G 状态（上线主线）
 
 | ID | 主题 | 状态 |
 | --- | --- | --- |
 | G0 | 提交运营缺口（lifecycle / upstream MCP / session-auth） | **完成** a77b16a |
-| G1 | 资产维计量退役、上游拉哈希、状态 i18n、OpenAPI 类型 | 待做 |
-| G2 | 共享签名密钥、prod jwt 检查、mTLS 联调 | 待做 |
-| G3 | OIDC / PKCE / WebAuthn 真环境 | 待做 |
-| G4 | SMTP / 飞书 / 真 LLM+Langfuse | 待做 |
-| G5 | Connector RPC 真池、成本分摊、pgvector | 待做 |
-| G6 | CNPG+PITR、多副本压测、故障演练、WORM、双机房、清单全勾 | 待做 |
+| G1 | 资产维计量退役、上游拉哈希、状态 i18n、OpenAPI 类型 | **完成**（见 milestones G1.1–G1.4） |
+| G2 | 共享签名密钥、prod jwt 检查、mTLS 说明 | **完成**（见 milestones G2.1–G2.3；staging 共享 Transit 联调仍属运维勾选） |
+| G3 | OIDC / PKCE / WebAuthn | **代码完成**；真 IdP / 真密钥器 staging 联调记录待填 |
+| G4 | SMTP / 飞书 / 真 LLM+Langfuse | **代码+夹具完成**；生产 SMTP/飞书/Langfuse 清单勾选待运维 |
+| G5 | Connector RPC、成本分摊、pgvector | **完成**（见 milestones G5.1–G5.3） |
+| G6 | CNPG+PITR、多副本压测、故障演练、WORM、双机房、清单全勾 | **进行中**：本机压测/故障演练/prod-check/region overlay/PG dump 演练/WORM 应用层脚本已齐；**待 staging**：CNPG PITR 真恢复、k8s 4 副本、合规桶、双活切流、清单全勾 |
 | X | RPA / 分公司命名空间等（架构首期不做） | 需先 ADR |
+
+### Wave P 状态（约 200 人试点 · 单机房）
+
+> **staging 是什么**：预发/准生产配置（`AIP_ENV=staging`），形态接近真实用户环境；可以就是给这 200 人用的那台机，**不必**先上双机房或 CNPG。安装步骤见 [pilot-200.md](pilot-200.md)。
+
+**本波明确不做（按业务确认）**：CNPG/PITR 真恢复、k8s 多副本压测、双机房、正式 production-checklist 全勾 / go-live 仪式。
+
+| ID | 主题 | 状态 | 说明 / 缺什么 |
+| --- | --- | --- | --- |
+| P0 | staging 含义 + 试点安装说明 | **完成** | [pilot-200.md](pilot-200.md) |
+| P1 | 单机 Compose/VM 部署路径（非 K8s 强制） | **完成** | 同上；有集群可走 [k8s.md](k8s.md)，非必须 |
+| P2 | 密钥门禁：staging/prod 禁 `dev-only` + `pilot_check` | **完成** | `tools/pilot_check.py`；`tests/test_pilot_check.py`；`tools/dev.py pilot-check` |
+| P3 | 服务间 `jwt` + 两端共享签名密钥 | **完成（代码+测例）** | 已有 `tests/test_h44_service_auth.py`；试点机须注入同一 `AIP_SIGNING_KEY_PEM` 或 Transit |
+| P4 | 单实例依赖健康（PG/Valkey/OpenBao/OPA/S3） | **完成** | `pilot_check` 检查 compose + healthz；**不要求** HA |
+| P5 | 用户 TOTP 开通运营说明 | **完成（文档）** | [pilot-200.md](pilot-200.md)；控制台创建用户一次性 URI；**不靠** `dev_login.py` |
+| P6 | 生产 SMTP 发信 | **阻塞** | 代码与控制台「邮件配置」已有；**缺**：公司 SMTP 主机/账号/发件域名。未配时审批仍走站内铃铛。验收：`pytest -m smtp` 或控制台试发 |
+| P7 | 飞书/IM Webhook | **可选·未配则跳过** | 缺 Webhook URL 则跳过；不挡试点 |
+| P8 | OIDC / WebAuthn 真 IdP | **完成（代码+测例）** | 非 stub：JWKS + code/PKCE 换票、WebAuthn SPKI/assertion；控制台企业登录与真密钥登记。staging/prod 禁 stub。运维填 IdP 见 [oidc-staging.md](oidc-staging.md) |
+| P9 | WORM 合规 Object Lock 桶 | **完成（代码+测例）** | `AIP_WORM_OBJECT_LOCK_MODE=COMPLIANCE\|GOVERNANCE` 写入保留期头；`worm_object_lock_check.py`；桶须开 Object Lock（见 [audit-worm.md](audit-worm.md)） |
+| P10 | OTel / Langfuse | **可选·暂缓** | 本地 `otel-up` 可演练；生产需 Collector 地址；**不挡上线** |
+| P11 | LLM Gateway 真模型 | **可选·暂缓** | 已有夹具；缺公司模型则 AI 草稿不可用，主业务不挡 |
+
+**试点验收命令**
+
+```bash
+.venv/Scripts/python tools/dev.py up
+.venv/Scripts/python tools/dev.py pilot-check
+.venv/Scripts/python -m pytest -q tests/test_pilot_check.py tests/test_h44_service_auth.py
+# 切试点机前：设 AIP_ENV=staging + 非 dev-only 口令 + AIP_SERVICE_AUTH_MODE=jwt 后再 pilot-check
+```
 
 ---
 

@@ -107,12 +107,28 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
       security: []
+  /api/v1/auth/oidc/start:
+    post:
+      operationId: oidcStart
+      tags:
+      - auth
+      summary: OIDC 授权跳转（PKCE）；返回 authorization_url 与 code_verifier
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcStartResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+      security: []
   /api/v1/auth/oidc/callback:
     post:
       operationId: oidcCallback
       tags:
       - auth
-      summary: OIDC 回调（stub：id_token=stub:<sub>；经 external_login 映射）
+      summary: OIDC 回调（id_token 或 code+code_verifier 换票；经 external_login 映射）
       responses:
         '200':
           description: OK
@@ -582,7 +598,7 @@ paths:
       operationId: webauthnRegisterFinish
       tags:
       - auth
-      summary: 完成 WebAuthn 注册（stub 跳过 attestation）
+      summary: 完成 WebAuthn 注册（非 stub 须 SPKI + clientDataJSON）
       responses:
         '201':
           description: OK
@@ -627,7 +643,7 @@ paths:
       operationId: webauthnAuthenticateFinish
       tags:
       - auth
-      summary: 完成 WebAuthn 认证（stub）
+      summary: 完成 WebAuthn 认证（非 stub 校验 assertion）
       responses:
         '200':
           description: OK
@@ -1113,6 +1129,43 @@ paths:
           application/json:
             schema:
               type: object
+  /api/v1/versions/{id}/test-cases/{case_id}:
+    put:
+      operationId: updateTestCase
+      tags:
+      - release
+      summary: 更新门禁用例（仅 draft）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TestCase'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/CaseId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+    delete:
+      operationId: deleteTestCase
+      tags:
+      - release
+      summary: 删除门禁用例（仅 draft）
+      responses:
+        '204':
+          description: OK
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/CaseId'
   /api/v1/versions/{id}/selection-eval:
     get:
       operationId: getSelectionEval
@@ -2062,6 +2115,52 @@ paths:
           $ref: '#/components/responses/Problem'
       parameters:
       - $ref: '#/components/parameters/Id'
+  /api/v1/connections/{id}/credentials:
+    put:
+      operationId: putConnectionCredentials
+      tags:
+      - connection
+      summary: 写入下游凭据到 OpenBao（不回显明文）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CredentialRefOut'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionCredentialsIn'
+  /api/v1/connections/{id}/test-auth:
+    post:
+      operationId: testConnectionAuth
+      tags:
+      - connection
+      summary: 测登录（Cookie/Token；不回传会话明文）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTestResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionTestAuthIn'
   /api/v1/connections/{id}/trust-draft:
     post:
       operationId: draftTrust
@@ -2517,6 +2616,62 @@ paths:
                 $ref: '#/components/schemas/NotifyFlushResult'
         default:
           $ref: '#/components/responses/Problem'
+  /api/v1/notify/mail-settings:
+    get:
+      operationId: getMailSettings
+      tags:
+      - notify
+      summary: 读取控制台邮件（SMTP）配置（不含密码明文）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailSettings'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: putMailSettings
+      tags:
+      - notify
+      summary: 保存控制台邮件配置；密码写入 OpenBao
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailSettings'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailSettingsIn'
+  /api/v1/notify/mail-settings/test:
+    post:
+      operationId: testMailSettings
+      tags:
+      - notify
+      summary: 按当前配置发送测试邮件
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MailTestResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MailTestIn'
   /api/v1/console/catalog:
     get:
       operationId: consoleCatalog
@@ -2695,6 +2850,29 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/SkillSourceIn'
+  /api/v1/versions/{id}/skill-ai-draft:
+    post:
+      operationId: generateSkillAiDraft
+      tags:
+      - skill
+      summary: 经 LLM Gateway 按勾选 Tool 与可选场景生成 Skill 候选草稿（不落库；须人工改后再保存）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillAiDraft'
+        default:
+          $ref: '#/components/responses/Problem'
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SkillAiDraftIn'
   /api/v1/versions/{id}/skill-script-allowlist:
     get:
       operationId: listSkillScriptAllowlist
@@ -3051,6 +3229,27 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ImporterGenerateRequest'
+  /api/v1/importer/manual:
+    post:
+      operationId: importManualOperations
+      tags:
+      - importer
+      summary: 手工登记 REST 操作生成声明式 Connector 与 Tool 草稿（简易接入）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImporterResult'
+        default:
+          $ref: '#/components/responses/Problem'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImporterManualRequest'
   /api/v1/prism-mocks:
     get:
       operationId: listPrismMocks
@@ -3609,6 +3808,12 @@ components:
       required: true
       schema:
         type: string
+    CaseId:
+      name: case_id
+      in: path
+      required: true
+      schema:
+        type: string
     Provider:
       name: provider
       in: path
@@ -3738,9 +3943,34 @@ components:
       type: object
       properties:
         id_token:
+          type:
+          - string
+          - 'null'
+        code:
+          type:
+          - string
+          - 'null'
+        code_verifier:
+          type:
+          - string
+          - 'null'
+        redirect_uri:
+          type:
+          - string
+          - 'null'
+    OidcStartResponse:
+      type: object
+      properties:
+        authorization_url:
+          type: string
+        state:
+          type: string
+        code_verifier:
           type: string
       required:
-      - id_token
+      - authorization_url
+      - state
+      - code_verifier
     AuthProviderInfo:
       type: object
       properties:
@@ -3748,6 +3978,18 @@ components:
           type: string
         enabled:
           type: boolean
+        stub:
+          type:
+          - boolean
+          - 'null'
+        authorization_url:
+          type:
+          - string
+          - 'null'
+        redirect_uri:
+          type:
+          - string
+          - 'null'
       required:
       - name
       - enabled
@@ -3812,12 +4054,15 @@ components:
           type: string
         public_key_cose_b64:
           type: string
+        public_key_spki_b64:
+          type: string
+        client_data_json_b64:
+          type: string
         nickname:
           type: string
       required:
       - challenge_id
       - credential_id
-      - public_key_cose_b64
     WebAuthnAuthBeginRequest:
       type: object
       properties:
@@ -3831,6 +4076,17 @@ components:
         challenge_id:
           type: string
         credential_id:
+          type: string
+        sign_count:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        client_data_json_b64:
+          type: string
+        authenticator_data_b64:
+          type: string
+        signature_b64:
           type: string
       required:
       - challenge_id
@@ -4541,6 +4797,80 @@ components:
           type: integer
       required:
       - sent
+    MailSettings:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+        user:
+          type: string
+        mail_from:
+          type: string
+        starttls:
+          type: boolean
+        subject_template:
+          type: string
+        public_base_url:
+          type: string
+        credential_ref:
+          type: string
+        has_password:
+          type: boolean
+      required:
+      - enabled
+      - host
+      - port
+      - user
+      - mail_from
+      - starttls
+      - subject_template
+      - public_base_url
+      - credential_ref
+      - has_password
+    MailSettingsIn:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        host:
+          type: string
+        port:
+          type: integer
+        user:
+          type: string
+        mail_from:
+          type: string
+        password:
+          type:
+          - string
+          - 'null'
+        starttls:
+          type: boolean
+        subject_template:
+          type: string
+        public_base_url:
+          type: string
+    MailTestIn:
+      type: object
+      properties:
+        to:
+          type: string
+      required:
+      - to
+    MailTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        detail:
+          type: string
+      required:
+      - ok
+      - detail
     SkillPackageUploaded:
       type: object
       properties:
@@ -4672,6 +5002,58 @@ components:
       required:
       - name
       - description
+    SkillAiDraftIn:
+      type: object
+      properties:
+        tools:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z0-9_.]+@\d+\.\d+\.\d+$
+          minItems: 1
+          maxItems: 20
+          description: 勾选的 Tool@版本（写入候选 tools）
+        model_profile:
+          type: string
+          pattern: ^[\w.-]+@\d+\.\d+\.\d+$
+        scenario:
+          type: string
+          maxLength: 4000
+          default: ''
+          description: 运维场景说明（可选）
+        hint_name:
+          type:
+          - string
+          - 'null'
+          maxLength: 64
+      required:
+      - tools
+      - model_profile
+    SkillAiDraft:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        body:
+          type: string
+        tools:
+          type: array
+          items:
+            type: string
+        allowed_tools:
+          type: array
+          items:
+            type: string
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+      - name
+      - description
+      - body
     SkillSource:
       type: object
       properties:
@@ -5675,6 +6057,74 @@ components:
           - 'null'
         approval_id:
           type: string
+    ConnectionCredentialsIn:
+      type: object
+      properties:
+        username:
+          type:
+          - string
+          - 'null'
+        password:
+          type:
+          - string
+          - 'null'
+        api_key:
+          type:
+          - string
+          - 'null'
+        token:
+          type:
+          - string
+          - 'null'
+        credential_ref:
+          type:
+          - string
+          - 'null'
+    CredentialRefOut:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUIDv7
+        credential_ref:
+          type: string
+      required:
+      - id
+      - credential_ref
+    ConnectionTestAuthIn:
+      type: object
+      properties:
+        auth:
+          type: object
+          additionalProperties: true
+      required:
+      - auth
+    AuthTestResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        mode:
+          type: string
+        detail:
+          type:
+          - string
+          - 'null'
+        cookie_name:
+          type:
+          - string
+          - 'null'
+        expires_in_s:
+          type:
+          - integer
+          - 'null'
+        error_code:
+          type:
+          - string
+          - 'null'
+      required:
+      - ok
+      - mode
     Approval:
       type: object
       properties:
@@ -5712,6 +6162,14 @@ components:
         company_id:
           type:
           - string
+          - 'null'
+        approver_role:
+          type:
+          - string
+          - 'null'
+        required_approvals:
+          type:
+          - integer
           - 'null'
         payload:
           type: object
@@ -6379,6 +6837,92 @@ components:
       - mode
       - item_count
       - truncated
+    ImporterManualRequest:
+      type: object
+      properties:
+        connector_name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{2,63}$
+        domain:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          default: imported
+        system:
+          type: string
+          pattern: ^[a-z][a-z0-9_]*$
+          default: imported
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: object
+            properties:
+              operation:
+                type: string
+                pattern: ^[a-z][a-z0-9_]{1,63}$
+              method:
+                type: string
+                enum:
+                - GET
+                - POST
+                - PUT
+                - PATCH
+                - DELETE
+                - HEAD
+                default: GET
+              path:
+                type: string
+                minLength: 1
+                maxLength: 512
+              mode:
+                type:
+                - string
+                - 'null'
+                enum:
+                - read
+                - write
+              success_when:
+                type:
+                - string
+                - 'null'
+              data:
+                type: string
+                default: $.data
+              title:
+                type:
+                - string
+                - 'null'
+              description:
+                type:
+                - string
+                - 'null'
+              query:
+                type: object
+                additionalProperties:
+                  type: string
+            required:
+            - operation
+            - path
+        auth:
+          type:
+          - object
+          - 'null'
+          additionalProperties: true
+        persist:
+          type: boolean
+          default: false
+        connection_id:
+          type:
+          - string
+          - 'null'
+        owner_org_id:
+          type:
+          - string
+          - 'null'
+      required:
+      - connector_name
+      - operations
     ImporterGenerateRequest:
       type: object
       properties:

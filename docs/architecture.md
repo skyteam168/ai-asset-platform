@@ -619,9 +619,9 @@ errors:
 | 固定 API Key | OpenBao KV 存放，调用时注入 |
 | Bearer Token | 缓存并按有效期续期 |
 | OAuth 2.0 | 按授权模式获取与刷新，校验 scope |
-| 用户名密码换 Token | 后端登录，按系统机制续期 |
-| Cookie / Session | 会话管理器处理过期与重新登录 |
-| HMAC / 自定义签名 | 代码 Connector 实现签名插件 |
+| 用户名密码换 Token | 后端登录，按系统机制续期；支持声明式握手（`prepare` 取公钥/nonce → 白名单 `transform` 如 RSA 加密口令 → 可配 `body`；`ttl_from: jwt_exp`）；见 ADR-0027 |
+| Cookie / Session | 会话管理器处理过期与重新登录；声明式 `mode=cookie`（`body_encoding=form|json`、`cookie_name`、可选 `success_when`，TTL 优先 Set-Cookie Max-Age）；见 ADR-0028 |
+| HMAC / 自定义签名 | 代码 Connector 实现签名插件（请求级签名，非换票） |
 | 验证码、动态验证 | 要求系统方提供服务账号或正式 API |
 
 ### 9.3 身份模式与下游账号映射

@@ -55,9 +55,22 @@ def create_app(db: Database | None = None) -> FastAPI:
             else None
         )
         delivery = asyncio.create_task(deliver_forever(app.state.db, 5.0))
+        from aip.connectors.credentials import OpenBaoSecretStore
+        from aip.libs.notify.service import build_notifier_resolved
+
+        secrets = OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token)
         notifier = build_notifier_from_settings(settings)
+
+        async def _resolve_notifier():  # noqa: ANN202
+            return await build_notifier_resolved(settings, secrets)
+
         notify_flush = asyncio.create_task(
-            flush_forever(app.state.db.engine, notifier, settings.notify_flush_interval_s)
+            flush_forever(
+                app.state.db.engine,
+                notifier,
+                settings.notify_flush_interval_s,
+                resolve=_resolve_notifier,
+            )
         )
         yield
         notify_flush.cancel()

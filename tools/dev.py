@@ -14,11 +14,12 @@ python tools/dev.py activate-equipment  设备管家 RSA+JWT 真连接 → Tool 
 python tools/dev.py serve     本地运行控制面(18081)与数据面(18082)
 python tools/dev.py otel-up   启动 OTel Collector / Tempo / Prometheus / Grafana
 python tools/dev.py serve-otel  同上 serve，并开启 AIP_OTEL_EXPORTER=otlp
-python tools/dev.py k8s-check  kubectl kustomize 构建 base 与 prod overlay
+python tools/dev.py k8s-check  kubectl kustomize 构建 base / prod / region-a / region-b
 python tools/dev.py loadtest [--workers …]  数据面压测（透传 tools/loadtest.py）
 python tools/dev.py zhparser-up  可选：构建并启动带 zhparser 的 PostgreSQL
 python tools/dev.py pgvector-up  可选：启动带 pgvector 的 PostgreSQL（重建卷）
 python tools/dev.py prod-check 生产清单本地校验（kustomize + 文档章节）
+python tools/dev.py pilot-check 约 200 人试点自检（见 docs/ops/pilot-200.md）
 """
 
 from __future__ import annotations
@@ -66,10 +67,37 @@ def wait_postgres(timeout: float = 60) -> None:
     sys.exit("postgres not ready")
 
 
+def ensure_openbao_kv() -> None:
+    """dev OpenBao 默认只有 secret/；应用凭据约定用 kv/（KV v2）。缺挂载则补上。"""
+    import urllib.error
+    import urllib.request
+
+    addr = os.environ.get("AIP_OPENBAO_ADDR", "http://127.0.0.1:58200").rstrip("/")
+    token = os.environ.get("AIP_OPENBAO_TOKEN", "aip-dev-root-token")
+    req = urllib.request.Request(
+        f"{addr}/v1/sys/mounts/kv",
+        data=b'{"type":"kv","options":{"version":"2"}}',
+        headers={"X-Vault-Token": token, "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:  # noqa: S310 — 仅本地 OpenBao
+            print(f"openbao: enabled kv/ mount ({resp.status})")
+    except urllib.error.HTTPError as e:
+        # 已存在时 Vault/OpenBao 常返回 400 path is already in use
+        if e.code in (204, 400):
+            print("openbao: kv/ mount ready")
+        else:
+            print(f"openbao: ensure kv failed HTTP {e.code}（邮件/连接凭据写入可能 404）")
+    except OSError as e:
+        print(f"openbao: unreachable ({e}) — 先 tools/dev.py up")
+
+
 def up() -> None:
     run([*COMPOSE, "up", "-d"])
     wait_postgres()
     migrate()
+    ensure_openbao_kv()
 
 
 def down() -> None:
@@ -202,6 +230,7 @@ def activate_equipment() -> None:
 
 def serve(*, with_otel: bool = False) -> None:
     env = dev_env()
+    ensure_openbao_kv()
     # G2.1：可选 AIP_SERVICE_AUTH_MODE=jwt 逼近生产；默认 both 兼容静态回退
     mode = env.get("AIP_SERVICE_AUTH_MODE") or "both"
     env = {**env, "AIP_SERVICE_AUTH_MODE": mode}
@@ -221,14 +250,39 @@ def serve(*, with_otel: bool = False) -> None:
         }
         print(f"otel: exporter=otlp endpoint={env['AIP_OTEL_ENDPOINT']}")
         print("grafana: http://127.0.0.1:13000/  （需先 otel-up）")
+    # 默认 127.0.0.1；企业 Agent 平台经局域网联调时设 AIP_SERVE_HOST=0.0.0.0
+    host = (os.environ.get("AIP_SERVE_HOST") or env.get("AIP_SERVE_HOST") or "127.0.0.1").strip()
+    print(f"serve bind host={host}  (control :18081 / data :18082)")
     procs = [
         subprocess.Popen(
-            [PY, "-m", "uvicorn", "aip.control_plane.app:app", "--port", "18081", "--app-dir", "src"],
+            [
+                PY,
+                "-m",
+                "uvicorn",
+                "aip.control_plane.app:app",
+                "--host",
+                host,
+                "--port",
+                "18081",
+                "--app-dir",
+                "src",
+            ],
             cwd=ROOT,
             env=env,
         ),
         subprocess.Popen(
-            [PY, "-m", "uvicorn", "aip.data_plane.app:app", "--port", "18082", "--app-dir", "src"],
+            [
+                PY,
+                "-m",
+                "uvicorn",
+                "aip.data_plane.app:app",
+                "--host",
+                host,
+                "--port",
+                "18082",
+                "--app-dir",
+                "src",
+            ],
             cwd=ROOT,
             env=env,
         ),
@@ -264,6 +318,8 @@ def k8s_check() -> None:
     for path in (
         ROOT / "deploy" / "k8s" / "base",
         ROOT / "deploy" / "k8s" / "overlays" / "prod",
+        ROOT / "deploy" / "k8s" / "overlays" / "region-a",
+        ROOT / "deploy" / "k8s" / "overlays" / "region-b",
     ):
         cmd = [kubectl, "kustomize", str(path)]
         print("$", " ".join(cmd), flush=True)
@@ -351,6 +407,9 @@ def pgvector_up() -> None:
 
 def prod_check() -> None:
     """生产清单本地校验：kustomize + 文档章节 + Settings 环境变量名对照。"""
+    src = str(ROOT / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
     from aip.libs.prod_check import run_prod_check
 
     k8s_check()
@@ -360,6 +419,11 @@ def prod_check() -> None:
             print(f"FAIL: {p}", flush=True)
         raise SystemExit(1)
     print("prod-check ok")
+
+
+def pilot_check() -> None:
+    """约 200 人试点自检（Wave P）；透传 tools/pilot_check.py。"""
+    raise SystemExit(subprocess.call([PY, str(ROOT / "tools" / "pilot_check.py")], cwd=ROOT))
 
 
 TASKS = {
@@ -379,6 +443,7 @@ TASKS = {
     "zhparser-up": zhparser_up,
     "pgvector-up": pgvector_up,
     "prod-check": prod_check,
+    "pilot-check": pilot_check,
     "bootstrap": bootstrap,
     "seed-demo": seed_demo,
     "activate-nike": activate_nike,

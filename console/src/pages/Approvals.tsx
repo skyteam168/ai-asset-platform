@@ -1,6 +1,6 @@
 import { Alert, Badge, Button, Descriptions, Drawer, Form, Input, Modal, Radio, Space, Tabs, Tag, Typography } from "antd";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { get, post, type Page } from "../api";
 import { JsonInput, jsonRule, JsonView, PageCard, PAGINATION, parseJson, StateTag } from "../components";
 import { ListTable } from "../ListTable";
@@ -9,7 +9,13 @@ import type { Approval, ClearanceRequest, RunView, Todo, TodoConfirmation, TodoT
 import { useAuth } from "../auth";
 import { t } from "../i18n";
 
-const KIND_LABEL: Record<string, string> = { G5: t("业务验收（G5）"), G6: t("安全审核（G6）"), usage: t("使用申请") };
+const KIND_LABEL: Record<string, string> = {
+  G5: t("业务验收（G5）"),
+  G6: t("安全审核（G6）"),
+  usage: t("使用申请"),
+  transport_exception: t("传输例外"),
+  resume: t("熔断恢复"),
+};
 const TASK_LABEL: Record<string, string> = { confirm: t("确认"), approve: t("审批"), input: t("补录") };
 const time = (v: string | null | undefined) => (v ? v.slice(0, 16).replace("T", " ") : "-");
 
@@ -18,9 +24,22 @@ export function ApprovalsPage() {
   const todo = useLoad(() => get<Todo>("/todo"), []);
   const clearanceReqs = useLoad(() => get<Page<ClearanceRequest>>("/clearance-requests"), []);
   const [current, setCurrent] = useState<Approval | null>(null);
+  const [search, setSearch] = useSearchParams();
   const confirmations = todo.data?.confirmations ?? [];
   const tasks = todo.data?.tasks ?? [];
   const { has } = useAuth();
+  useEffect(() => {
+    const focus = search.get("focus");
+    if (!focus || items.loading || !items.data?.items?.length) return;
+    const hit = items.data.items.find((a) => a.id === focus);
+    if (!hit) return;
+    setCurrent(hit);
+    const next = new URLSearchParams(search);
+    next.delete("focus");
+    setSearch(next, { replace: true });
+    // 仅在列表加载后认领一次深链
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.data, items.loading]);
   return (
     <PageCard>
       <Tabs items={[
@@ -247,6 +266,8 @@ function DecideModal({ approval, onClose, onDone }: { approval: Approval | null;
   const act = useAction();
   const decision = Form.useWatch("decision", form);
   const g5 = approval?.kind === "G5";
+  const transport = approval?.kind === "transport_exception";
+  const payload = (approval?.payload ?? {}) as Record<string, unknown>;
   return (
     <Modal open={Boolean(approval)} title={approval ? `${KIND_LABEL[approval.kind] ?? approval.kind} · ${approval.subject}` : ""}
       onCancel={onClose} onOk={() => form.submit()} destroyOnClose>
@@ -258,6 +279,18 @@ function DecideModal({ approval, onClose, onDone }: { approval: Approval | null;
           const r = await act(() => post<{ status: string }>(`/approvals/${approval.id}/decide`, body), t("已提交"));
           if (r) { onClose(); onDone(); }
         }}>
+        {transport && (
+          <Alert type="warning" showIcon style={{ marginBottom: 12 }}
+            message={t("明文 HTTP / insecure 传输例外：通过后连接生效；驳回将禁用连接。登记人不能审批。")}
+            description={
+              <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+                {String(payload.base_url ?? "")}
+                {payload.reason ? ` · ${String(payload.reason)}` : ""}
+                {payload.expires_at ? ` · ${t("例外到期")} ${String(payload.expires_at).slice(0, 10)}` : ""}
+              </Typography.Paragraph>
+            }
+          />
+        )}
         <Form.Item name="decision" label={t("结论")}>
           <Radio.Group options={[{ value: "approve", label: t("通过") }, { value: "reject", label: t("驳回") }]} />
         </Form.Item>

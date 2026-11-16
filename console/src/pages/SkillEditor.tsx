@@ -1,11 +1,25 @@
-import { DownloadOutlined } from "@ant-design/icons";
+import { DownloadOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Alert, Button, Col, Descriptions, Empty, Form, Input, List, Modal, Row, Select, Space, Tabs, Typography, Upload, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
-import { ApiError, describeError, downloadFile, get, put, upload, type Page } from "../api";
+import { ApiError, describeError, downloadFile, get, post, put, upload, type Page } from "../api";
 import { useAction, useLoad } from "../hooks";
 import { Markdown } from "../markdown";
 import type { SkillSource, SkillSourceSaved, VersionSummary } from "../types";
 import { t } from "../i18n";
+
+interface ModelProfileRow {
+  name: string;
+  version: string | null;
+}
+
+interface SkillAiDraft {
+  name: string;
+  description: string;
+  body: string;
+  tools: string[];
+  allowed_tools: string[];
+  warnings: string[];
+}
 
 // 与后端 package.py 保持一致：首期只发指令型 Skill（architecture.md 6.2、10.4）
 const BLOCKED = [".py", ".sh", ".bash", ".ps1", ".js", ".mjs", ".cjs", ".exe", ".bat", ".cmd"];
@@ -136,9 +150,18 @@ function SkillEditor(p: Props & { initial: SkillSource | null; onReplaced: () =>
   const catalog = useLoad(() => get<{ items: { capability_id: string | null; version: string | null; title?: string | null }[] }>("/console/catalog")
     .catch(() => ({ items: [] })), []);
   const versions = useLoad(() => get<Page<VersionSummary>>(`/assets/${p.assetId}/versions`), [p.assetId]);
+  const profiles = useLoad(() => get<{ items: ModelProfileRow[] }>("/llm/model-profiles").catch(() => ({ items: [] })), []);
+  const [modelProfile, setModelProfile] = useState<string | undefined>();
+  const [scenario, setScenario] = useState("");
   const toolOptions = useMemo(() => (catalog.data?.items ?? [])
     .filter((x) => x.capability_id && x.version)
     .map((x) => ({ value: `${x.capability_id}@${x.version}`, label: `${x.capability_id}@${x.version}${x.title ? ` · ${x.title}` : ""}` })), [catalog.data]);
+  const profileOptions = useMemo(() => (profiles.data?.items ?? [])
+    .filter((x) => x.name && x.version)
+    .map((x) => ({ value: `${x.name}@${x.version}`, label: `${x.name}@${x.version}` })), [profiles.data]);
+  useEffect(() => {
+    if (!modelProfile && profileOptions[0]) setModelProfile(profileOptions[0].value);
+  }, [profileOptions, modelProfile]);
 
   const fill = (s: SkillSource | null) => {
     form.setFieldsValue(s ? {
@@ -182,6 +205,42 @@ function SkillEditor(p: Props & { initial: SkillSource | null; onReplaced: () =>
 
   const loadable = (versions.data?.items ?? []).filter((v) => v.id !== p.versionId);
   const current = refs.find((r) => r.path === active);
+
+  const generateAi = async () => {
+    const tools = (form.getFieldValue("tools") as string[] | undefined) ?? [];
+    const bad = tools.filter((x) => !TOOL_REF.test(x));
+    if (!tools.length) {
+      message.warning(t("请先勾选至少一个 Tool"));
+      return;
+    }
+    if (bad.length) {
+      message.error(t("格式须为 capability_id@x.y.z：{0}", [bad.join("，")]));
+      return;
+    }
+    if (!modelProfile) {
+      message.warning(t("请先填写 model_profile"));
+      return;
+    }
+    const draft = await act(
+      () => post<SkillAiDraft>(`/versions/${p.versionId}/skill-ai-draft`, {
+        tools,
+        model_profile: modelProfile,
+        scenario: scenario.trim() || undefined,
+        hint_name: (form.getFieldValue("name") as string | undefined) || undefined,
+      }),
+      t("已生成 AI 草稿（请人工核对后再保存）"),
+    );
+    if (!draft) return;
+    form.setFieldsValue({
+      name: draft.name,
+      description: draft.description,
+      body: draft.body,
+      tools: draft.tools,
+      allowed_tools: draft.allowed_tools?.length ? draft.allowed_tools : form.getFieldValue("allowed_tools"),
+    });
+    setNotice(draft.warnings ?? []);
+  };
+
   return (
     <Form form={form} layout="vertical"
       onFinish={async (v) => {
@@ -213,6 +272,33 @@ function SkillEditor(p: Props & { initial: SkillSource | null; onReplaced: () =>
           <Button>{t("上传 zip（本地编写的 Skill）")}</Button>
         </Upload>
       </Space>
+      <Alert type="success" showIcon style={{ marginBottom: 12 }}
+        message={t("AI 辅助：先勾选 Tool，可选填场景说明，经 LLM Gateway 生成 SKILL.md 候选（不落库，须人工修改后保存）")}
+        description={
+          <Space direction="vertical" style={{ width: "100%", marginTop: 8 }}>
+            <Space wrap>
+              <Select
+                style={{ minWidth: 260 }}
+                placeholder={t("model_profile")}
+                options={profileOptions}
+                value={modelProfile}
+                onChange={setModelProfile}
+                allowClear
+              />
+              <Button type="default" icon={<ThunderboltOutlined />} onClick={() => void generateAi()}>
+                {t("AI 生成草稿")}
+              </Button>
+            </Space>
+            <Input.TextArea
+              value={scenario}
+              onChange={(e) => setScenario(e.target.value)}
+              placeholder={t("场景说明（可选）：例如「夜班按工厂汇总在制工单并提示异常状态」")}
+              autoSize={{ minRows: 2, maxRows: 4 }}
+              maxLength={4000}
+            />
+          </Space>
+        }
+      />
       {notice.length > 0 && (
         <Alert type="warning" showIcon style={{ marginBottom: 12 }} message={t("安全扫描预检（G0 会正式判定）")}
           description={notice.map((x) => <div key={x}>· {x}</div>)} />

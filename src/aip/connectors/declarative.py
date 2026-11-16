@@ -112,10 +112,17 @@ class DeclarativeConnector:
         return self._classify(mapping, r)
 
     def _classify(self, mapping: dict[str, Any], r: httpx.Response) -> ConnectorResult:
+        # 老 PHP 常带 UTF-8 BOM；统一剥 BOM 再解析
+        raw = r.content.lstrip(b"\xef\xbb\xbf")
         try:
-            doc = r.json()
-        except ValueError as e:
-            raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, "下游返回的不是 JSON") from e
+            doc = json.loads(raw.decode(r.encoding or "utf-8"))
+        except (ValueError, UnicodeDecodeError) as e:
+            ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+            hint = ""
+            head = raw[:64].upper()
+            if "html" in ctype or raw[:1] == b"<" or b"<!DOCTYPE" in head:
+                hint = "（收到 HTML，请检查系统连接地址是否只填到端口、勿带登录页路径）"
+            raise PlatformError(ErrorCode.DOWNSTREAM_UNAVAILABLE, f"下游返回的不是 JSON{hint}") from e
         for rule in mapping.get("errors", []):
             if evaluate(rule["when"], doc):
                 raise PlatformError(ErrorCode(rule["map"]), "下游业务规则拒绝")

@@ -91,6 +91,18 @@ def test_prod_overlay_env_and_replicas() -> None:
     assert sts["spec"]["replicas"] == 4
 
 
+def test_region_overlays_build_and_label() -> None:
+    """G6.6：双机房草稿 overlay 可 kustomize；待集团确认 RPO/RTO 前不作生产切流。"""
+    for name in ("region-a", "region-b"):
+        docs = _build(K8S / "overlays" / name)
+        cm = next(d for d in docs if d.get("kind") == "ConfigMap" and d["metadata"]["name"] == "aip-config")
+        assert cm["data"]["AIP_REGION"] == name
+        assert cm["data"]["AIP_RUNTIME_MODE"] == "live"
+        sts = next(d for d in docs if d.get("kind") == "StatefulSet" and d["metadata"]["name"] == "data-plane")
+        assert sts["spec"]["replicas"] == 2
+        assert sts["metadata"]["labels"].get("aip.region") == name
+
+
 def test_secret_ref_not_inlined() -> None:
     """机密只通过 Secret 引用注入，清单内不得出现明文口令字段。"""
     text = (K8S / "base" / "config.yaml").read_text(encoding="utf-8")

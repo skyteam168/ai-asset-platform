@@ -1,0 +1,27 @@
+# 双机房 region-b（备区示例）。默认较少副本；切主前须集团确认 RPO/RTO。
+# 构建：kubectl kustomize deploy/k8s/overlays/region-b
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: aip
+resources:
+  - ../../base
+commonLabels:
+  aip.region: region-b
+  aip.topology: multi-region-draft
+patches:
+  - target: {kind: ConfigMap, name: aip-config}
+    patch: |-
+      - op: replace
+        path: /data/AIP_ENV
+        value: staging
+      - op: replace
+        path: /data/AIP_RUNTIME_MODE
+        value: live
+      - op: add
+        path: /data/AIP_REGION
+        value: region-b
+  - target: {kind: StatefulSet, name: data-plane}
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2

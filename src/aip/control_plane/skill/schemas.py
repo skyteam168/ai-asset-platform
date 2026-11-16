@@ -128,3 +128,16 @@ class SkillScriptAllowlistItem(BaseModel):
 
 class SkillScriptAllowlistPage(BaseModel):
     items: list[SkillScriptAllowlistItem] = Field(default_factory=list)
+
+
+class SkillAiDraft(BaseModel):
+    """AI 生成的 Skill 候选（不落库；须人工改后再保存）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str
+    description: str
+    body: str
+    tools: list[str] = Field(default_factory=list)
+    allowed_tools: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

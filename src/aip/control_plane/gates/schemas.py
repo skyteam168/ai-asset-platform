@@ -122,6 +122,8 @@ class ApprovalPending(BaseModel):
     subject: str | None = None
     subject_id: str | None = None
     company_id: str | None = None
+    approver_role: str | None = None
+    required_approvals: int | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     due_at: str | None = None
     created_at: str | None = None

@@ -173,6 +173,57 @@ describe("在线 Skill 编辑器", () => {
     expect(await screen.findByText(/描述中不允许出现外部链接/)).toBeInTheDocument();
   });
 
+  it("AI 生成草稿：勾选 Tool 后填入表单", async () => {
+    session.set("s");
+    const calls = mockApi((method, path) => {
+      if (path === "/me") return { body: dev };
+      if (path === "/versions/v1/skill-source" && method === "GET") return { status: 404, body: { code: "NOT_FOUND", detail: "Skill 包不存在" } };
+      if (path === "/console/catalog") {
+        return { body: { items: [{ capability_id: "production.mes.query_work_orders", version: "1.0.0", title: "查询工单" }], bundles: [] } };
+      }
+      if (path === "/llm/model-profiles") {
+        return { body: { items: [{ name: "mp_select", version: "1.0.0" }] } };
+      }
+      if (path === "/versions/v1/skill-ai-draft" && method === "POST") {
+        return {
+          body: {
+            name: "night-shift-wo",
+            description: "夜班按工厂汇总在制工单并提示异常状态的指导说明。",
+            body: "## 何时使用\n\n夜班汇总工单。\n\n## 步骤\n\n1. 调用 Tool。\n\n## 注意事项\n\n- 只读。\n",
+            tools: ["production.mes.query_work_orders@1.0.0"],
+            allowed_tools: [],
+            warnings: ["AI 生成的 Skill 仅为候选草稿"],
+          },
+        };
+      }
+      return method === "GET" ? page([]) : undefined;
+    });
+    render(wrap(
+      <SkillPackagePanel versionId="v1" assetId="a1" semver="1.0.0" editable onSaved={() => undefined}
+        spec={{
+          name: "query-work-orders",
+          description: "指导模型查询本厂在制工单并汇总状态。",
+          tools: ["production.mes.query_work_orders@1.0.0"],
+        }} />,
+    ));
+    const user = userEvent.setup();
+    await screen.findByLabelText("SKILL.md 正文（Markdown）");
+    // 等 model_profile 列表回填默认值
+    await waitFor(() => {
+      expect(calls.some((c) => c.path === "/llm/model-profiles")).toBe(true);
+    });
+    await user.click(screen.getByRole("button", { name: /AI 生成草稿/ }));
+    await waitFor(() => {
+      const posted = calls.find((c) => c.method === "POST" && c.path === "/versions/v1/skill-ai-draft");
+      expect(posted?.body).toMatchObject({
+        tools: ["production.mes.query_work_orders@1.0.0"],
+        model_profile: "mp_select@1.0.0",
+      });
+    });
+    expect(await screen.findByDisplayValue("night-shift-wo")).toBeInTheDocument();
+    expect(await screen.findByText(/仅为候选草稿/)).toBeInTheDocument();
+  });
+
   it("非 draft 版本只读展示已入库的包", async () => {
     session.set("s");
     mockApi((method, path) => {

@@ -5,6 +5,22 @@
 
 执行顺序与任务拆分见企业级上线总计划：[2026-10-30-enterprise-go-live.md](../superpowers/plans/2026-10-30-enterprise-go-live.md)（Wave G0→G6）。本清单为 **G6 出口验收表**，须全部勾选方可宣布上线。
 
+**约 200 人单机房试点**：不要求本清单全勾；跟踪 [task.md](task.md) **Wave P** 与 [pilot-200.md](pilot-200.md)。
+
+## 本地可验 vs staging 待勾（G6 分流）
+
+| 类别 | 命令 / 证据 | 状态 |
+| --- | --- | --- |
+| kustomize base/prod/region-* | `tools/dev.py k8s-check`；`tests/test_h16_k8s.py` | 本地可验 |
+| prod-check 文档门禁 | `tools/dev.py prod-check` | 本地可验 |
+| 本机多进程压测 | `tools/dev.py loadtest --workers 1,2,4`；[slo.md](slo.md) §10 | 本地可验；**k8s 4 副本表待填** |
+| 故障演练自动化 | `tests/test_m7_fault_drills.py`；[fault-drills.md](fault-drills.md) | 本地可验 |
+| PG dump/restore 演练 | `tools/pg_backup_restore_drill.py`；[evidence/g6-pg-local-restore.md](evidence/g6-pg-local-restore.md) | 本地可验；**≠ CNPG PITR** |
+| WORM 应用层 | `tools/worm_object_lock_check.py`；[evidence/g6-worm-object-lock.md](evidence/g6-worm-object-lock.md) | 本地可验；**合规桶 Object Lock 待 staging** |
+| 双机房 overlay 草稿 | [multi-region.md](multi-region.md)；region-a/b | 草稿可构建；**RPO/RTO 待集团确认** |
+| CNPG PITR 真恢复 | [evidence/g6-cnpg-pitr.md](evidence/g6-cnpg-pitr.md) | **待 staging kube** |
+| 下列各节 `[ ]` 项 | Secrets → 双机房 | **待运维在目标环境勾选** |
+
 ## Secrets
 
 - [ ] 创建 K8s Secret `aip-secrets`（库连接、OpenBao token、服务令牌、签名/机密后端配置）；**勿**写入 Git。见 [k8s.md](k8s.md)。
@@ -88,4 +104,4 @@
 ## pgvector / 双机房
 
 - [ ] 需要语义检索时再装 pgvector（见 [search-index.md](search-index.md)）；默认不强制。
-- [ ] 双机房 / 跨机架副本与数据合规由集团策略；平台侧多副本见 K8s base。
+- [ ] 双机房 / 跨机架副本与数据合规由集团策略；平台侧草稿见 [multi-region.md](multi-region.md)（`overlays/region-a` / `region-b`）；RPO/RTO 确认前不切流。

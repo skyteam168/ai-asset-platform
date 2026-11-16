@@ -110,4 +110,6 @@ python tools/dev.py loadtest \
 | 2026-10-30 | 本机多进程 | 4 | 10 | 400 | 0 | 385.9 | 36.2 | 378.9 | 32.9 | P95 均 ≤100ms；errors=0 |
 | _待填_ | k8s staging | 4×? | 40 | 2000 | | | | | | 真集群 Ingress 压测 |
 
+本机复跑（G6.2）：`python tools/dev.py loadtest --workers 1,2,4 --concurrency 20 --requests 400 --json-out .tmp/loadtest.json`。k8s 行在有 staging Ingress 前保持待填。
+
 验收参考：errors=0；REST P95（平台附加，下游 mock）在容量余量下尽量 ≤ 100ms；相对单副本吞吐有可见提升。

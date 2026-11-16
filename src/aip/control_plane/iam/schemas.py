@@ -44,6 +44,9 @@ class Session(BaseModel):
 class AuthProviderInfo(BaseModel):
     name: str
     enabled: bool
+    stub: bool | None = None
+    authorization_url: str | None = None
+    redirect_uri: str | None = None
 
 
 class ExternalLogin(BaseModel):

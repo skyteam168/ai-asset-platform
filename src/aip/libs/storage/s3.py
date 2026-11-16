@@ -105,14 +105,36 @@ class S3Client:
             raise FileNotFoundError(f"s3://{bucket}/{key} HTTP {r.status_code}")
         return r.content
 
-    async def put(self, bucket: str, key: str, body: bytes, *, content_type: str = "application/octet-stream") -> None:
-        headers = self._headers("PUT", bucket, key, body, {"content-type": content_type})
+    async def put(
+        self,
+        bucket: str,
+        key: str,
+        body: bytes,
+        *,
+        content_type: str = "application/octet-stream",
+        object_lock_mode: str | None = None,
+        object_lock_retain_until: dt.datetime | None = None,
+    ) -> None:
+        extra: dict[str, str] = {"content-type": content_type}
+        if object_lock_mode and object_lock_retain_until:
+            # AWS S3 Object Lock 保留期头（合规桶；兼容实现可忽略或拒绝）
+            until = object_lock_retain_until.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            extra["x-amz-object-lock-mode"] = object_lock_mode
+            extra["x-amz-object-lock-retain-until-date"] = until
+        headers = self._headers("PUT", bucket, key, body, extra)
         r = await self._http.put(self._url(bucket, key), content=body, headers=headers)
         if r.status_code not in (200, 201, 204):
             raise RuntimeError(f"put s3://{bucket}/{key}: HTTP {r.status_code} {r.text[:200]}")
 
     async def put_if_absent(
-        self, bucket: str, key: str, body: bytes, *, content_type: str = "application/json"
+        self,
+        bucket: str,
+        key: str,
+        body: bytes,
+        *,
+        content_type: str = "application/json",
+        object_lock_mode: str | None = None,
+        object_lock_retain_until: dt.datetime | None = None,
     ) -> str:
         """WORM 语义：不存在则写入；已存在且内容相同则成功；内容不同则拒绝。"""
         code = await self.head(bucket, key)
@@ -125,11 +147,25 @@ class S3Client:
             # 405/403：部分网关对 HEAD 支持差，直接 PUT 并接受 409/412
             pass
         else:
-            await self.put(bucket, key, body, content_type=content_type)
+            await self.put(
+                bucket,
+                key,
+                body,
+                content_type=content_type,
+                object_lock_mode=object_lock_mode,
+                object_lock_retain_until=object_lock_retain_until,
+            )
             return f"s3://{bucket}/{key}"
         # HEAD 异常时尝试 PUT
         try:
-            await self.put(bucket, key, body, content_type=content_type)
+            await self.put(
+                bucket,
+                key,
+                body,
+                content_type=content_type,
+                object_lock_mode=object_lock_mode,
+                object_lock_retain_until=object_lock_retain_until,
+            )
         except RuntimeError:
             existing = await self.get(bucket, key)
             if existing != body:

@@ -37,16 +37,22 @@ python tools/dev.py serve
 | `libs/storage/worm.py` | `MemoryWormStore` / `S3WormStore`、`sync_anchors` / `verify_worm` |
 | `libs/audit/store.anchor(..., worm=)` | 锚定后可选同步 |
 
-## Object Lock 合规桶（G6.4 / staging）
+## Object Lock 合规桶（G6.4 / P9）
 
-应用层 `put_if_absent` 已拒绝同键异内容覆写（`test_memory_worm_put_if_absent_conflict` / SeaweedFS 往返）。生产另配桶级 Object Lock：
+应用层 `put_if_absent` 已拒绝同键异内容覆写。启用合规保留期时，客户端在首次写入附带 S3 Object Lock 头：
 
-1. 桶开启 **Object Lock 合规模式** + 默认保留期（对照集团合规天数）。
-2. `AIP_WORM_BUCKET` 指向该桶；账号仅允许 `PutObject`（无覆盖）、`GetObject`；禁止无条件 `DeleteObject`。
-3. 校验：写入锚点后，同键覆写应被存储层或 `put_if_absent` 拒绝；`verify_worm` 无问题列表。
-4. 证据目录建议：`.tmp/g6-worm/`（策略截图、拒绝日志、`verify_worm` 输出）。
+| 变量 | 说明 |
+| --- | --- |
+| `AIP_WORM_ENABLED=true` | 开启锚点同步 |
+| `AIP_WORM_OBJECT_LOCK_MODE` | `COMPLIANCE` 或 `GOVERNANCE`（空=仅应用层） |
+| `AIP_WORM_OBJECT_LOCK_DAYS` | 保留天数（默认 2555 ≈ 7 年） |
 
-本地 SeaweedFS 开发栈未必暴露原生 Object Lock；以应用层 WORM + staging 合规桶为准。
+运维侧：
+
+1. 桶创建时开启 **Object Lock**；默认保留期可与上表对齐。
+2. `AIP_WORM_BUCKET` 指向该桶；账号仅允许 `PutObject` / `GetObject`；禁止无条件 `DeleteObject`。
+3. 校验：`pytest -q tests/test_p9_worm_object_lock.py`；`.venv/Scripts/python tools/worm_object_lock_check.py`。
+4. 本地 SeaweedFS 可能忽略 Object Lock 头；生产用 MinIO/AWS/兼容实现并验拒绝覆写。
 
 ## 不在本片
 

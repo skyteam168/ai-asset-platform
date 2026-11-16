@@ -16,6 +16,7 @@ import {
   LeftOutlined,
   LinkOutlined,
   LogoutOutlined,
+  MailOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   MoonOutlined,
@@ -32,6 +33,7 @@ import {
   ShopOutlined,
   BugOutlined,
   RocketOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { AutoComplete, Avatar, Badge, Button, DatePicker, Dropdown, Form, Input, Layout, Menu, Modal, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
 import dayjs from "dayjs";
@@ -65,10 +67,12 @@ const RiskPage = page(() => import("./pages/Risk"), "RiskPage");
 const RunsPage = page(() => import("./pages/Runs"), "RunsPage");
 const DistributionPage = page(() => import("./pages/Distribution"), "DistributionPage");
 const LlmConfigPage = page(() => import("./pages/LlmConfig"), "LlmConfigPage");
+const MailConfigPage = page(() => import("./pages/MailConfig"), "MailConfigPage");
 const OpsDashboardPage = page(() => import("./pages/OpsDashboard"), "OpsDashboardPage");
 const MarketplacePage = page(() => import("./pages/Marketplace"), "MarketplacePage");
 const PrismMocksPage = page(() => import("./pages/PrismMocks"), "PrismMocksPage");
 const ToolWizardPage = page(() => import("./pages/ToolWizard"), "ToolWizardPage");
+const EasyConnectPage = page(() => import("./pages/EasyConnect"), "EasyConnectPage");
 
 type Group = "access" | "governance" | "system";
 
@@ -97,6 +101,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "asset_developer", "data_owner", "business_owner"] },
   { path: "/wizard", label: t("创建 Tool 向导"), icon: <RocketOutlined />, element: <ToolWizardPage />,
     roles: ["platform_admin", "asset_developer"] },
+  { path: "/easy-connect", label: t("简易接入"), icon: <ThunderboltOutlined />, element: <EasyConnectPage />,
+    roles: ["platform_admin", "asset_developer"], group: "access" },
   { path: "/marketplace", label: t("资产市场"), icon: <ShopOutlined />, element: <MarketplacePage />,
     roles: ["platform_admin", "asset_developer", "data_owner", "company_admin"] },
   { path: "/catalog", label: t("资产目录"), icon: <BookOutlined />, element: <CatalogPage />,
@@ -115,6 +121,8 @@ export const SECTIONS: Section[] = [
     roles: ["platform_admin", "data_owner", "auditor", "company_admin"], group: "governance" },
   { path: "/llm", label: t("LLM 配置"), icon: <ExperimentOutlined />, element: <LlmConfigPage />,
     roles: ["platform_admin"], group: "governance" },
+  { path: "/mail", label: t("邮件配置"), icon: <MailOutlined />, element: <MailConfigPage />,
+    roles: ["platform_admin"], group: "system" },
   { path: "/audit", label: t("审计"), icon: <AuditOutlined />, element: <AuditPage />,
     roles: ["platform_admin", "auditor", "company_admin"], group: "governance" },
   { path: "/orgs", label: t("组织与用户"), icon: <ApartmentOutlined />, element: <OrgsPage />,

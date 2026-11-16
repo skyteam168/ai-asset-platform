@@ -6,6 +6,7 @@ interface AuthState {
   me: Me | null;
   loading: boolean;
   login: (loginName: string, password: string, totp: string) => Promise<void>;
+  loginWithSession: (sessionToken: string) => Promise<void>;
   logout: () => Promise<void>;
   has: (...roles: Role[]) => boolean;
 }
@@ -40,6 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMe(await get<Me>("/me"));
   }, []);
 
+  const loginWithSession = useCallback(async (sessionToken: string) => {
+    session.set(sessionToken);
+    setMe(await get<Me>("/me"));
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       await api("POST", "/auth/logout");
@@ -53,10 +59,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       loading,
       login,
+      loginWithSession,
       logout,
       has: (...roles) => Boolean(me?.roles.some((r) => roles.includes(r.role))),
     }),
-    [me, loading, login, logout],
+    [me, loading, login, loginWithSession, logout],
   );
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

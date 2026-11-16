@@ -52,6 +52,15 @@ CNPG + barmanObjectStore 提供 WAL 归档与定时全备；恢复演练在 stag
 
 见 [evidence/g6-cnpg-pitr.md](evidence/g6-cnpg-pitr.md)。本机 2026-10-30：`cnpg_kind_smoke.py` → `skip: no kube context`（有 kubectl 客户端、无集群）。
 
+### 本机 dump/restore（有 compose PG、无 kube）
+
+```bash
+.venv/Scripts/python tools/dev.py up
+.venv/Scripts/python tools/pg_backup_restore_drill.py
+```
+
+证据：[evidence/g6-pg-local-restore.md](evidence/g6-pg-local-restore.md)。**不能**替代 staging CNPG WAL PITR。
+
 ## 不在本片
 
 - 真实集群安装 operator 与恢复演练的自动化（需 staging kube）

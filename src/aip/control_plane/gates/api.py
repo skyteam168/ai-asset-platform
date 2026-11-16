@@ -113,6 +113,11 @@ async def _subject(conn: AsyncConnection, row: dict[str, Any]) -> str:
             else None
         )
         return f"{name or asset_id}（{row['payload'].get('env', '')}）"
+    if row["kind"] == "transport_exception":
+        key = row["payload"].get("system_key") or str(row["subject_id"])
+        env = row["payload"].get("env", "")
+        scheme = row["payload"].get("scheme") or row["payload"].get("tls_mode") or ""
+        return f"{key}@{env}（{scheme}）"
     return str(row["subject_id"])
 
 
@@ -140,6 +145,40 @@ def router() -> APIRouter:
                 critical=body.critical,
             )
         return out.TestCase.model_validate({"id": str(cid), **body.model_dump()})
+
+    @r.put(
+        f"{V}/versions/{{id}}/test-cases/{{case_id}}",
+        tags=["release"],
+        operation_id="updateTestCase",
+        response_model=out.TestCase,
+    )
+    async def update_case(
+        id: uuid.UUID, case_id: uuid.UUID, body: CaseIn, actor: ActorDep, db: DbDep
+    ) -> out.TestCase:
+        async with db.tx(actor.db_scope()) as conn:
+            row = await gates.update_test_case(
+                conn,
+                actor,
+                id,
+                case_id,
+                name=body.name,
+                kind=body.kind,
+                args=body.args,
+                expect=body.expect,
+                principal=body.principal,
+                critical=body.critical,
+            )
+        return out.TestCase.model_validate(row)
+
+    @r.delete(
+        f"{V}/versions/{{id}}/test-cases/{{case_id}}",
+        tags=["release"],
+        operation_id="deleteTestCase",
+        status_code=204,
+    )
+    async def delete_case(id: uuid.UUID, case_id: uuid.UUID, actor: ActorDep, db: DbDep) -> None:
+        async with db.tx(actor.db_scope()) as conn:
+            await gates.delete_test_case(conn, actor, id, case_id)
 
     @r.put(
         f"{V}/versions/{{id}}/selection-eval",
@@ -275,6 +314,11 @@ def router() -> APIRouter:
     )
     async def pending(actor: ActorDep, db: DbDep) -> Page[out.ApprovalPending]:
         async with db.tx(actor.db_scope()) as conn:
+            # 历史遗留：明文/insecure 连接曾只改 status、未建审批单 → 补建后铃铛才可见
+            if actor.has("data_owner"):
+                from aip.control_plane.conn import service as conn_svc
+
+                await conn_svc.backfill_transport_approvals(conn)
             rows = await approval.pending_for(conn, actor)
             items = []
             for row in rows:
@@ -301,6 +345,12 @@ def router() -> APIRouter:
             elif req["kind"] == "usage":
                 status = await flows.decide_usage(
                     conn, actor, req["subject_id"], body.decision == "approve", body.comment
+                )
+            elif req["kind"] == "transport_exception":
+                from aip.control_plane.conn import service as conn_svc
+
+                status = await conn_svc.decide_transport_exception(
+                    conn, actor, id, body.decision == "approve", body.comment, body.on_behalf_of
                 )
             else:
                 status = await gates.decide(

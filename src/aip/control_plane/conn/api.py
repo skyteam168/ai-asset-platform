@@ -76,6 +76,18 @@ class UpstreamMcpPreviewIn(BaseModel):
     mcp_path: str = Field(default="/mcp", min_length=1, max_length=256)
 
 
+class CredentialsIn(BaseModel):
+    username: str | None = Field(default=None, min_length=1, max_length=256)
+    password: str | None = Field(default=None, min_length=1, max_length=512)
+    api_key: str | None = Field(default=None, min_length=1, max_length=1024)
+    token: str | None = Field(default=None, min_length=1, max_length=4096)
+    credential_ref: str | None = Field(default=None, min_length=8, max_length=200)
+
+
+class TestAuthIn(BaseModel):
+    auth: dict[str, Any] = Field(default_factory=lambda: {"mode": "none"})
+
+
 def _secrets(request: Request) -> SecretStore:
     s: SecretStore | None = getattr(request.app.state, "secrets", None)
     if s is None:
@@ -147,6 +159,42 @@ def router() -> APIRouter:
     async def test(id: uuid.UUID, actor: ActorDep, db: DbDep) -> out.ConnectionTestResult:
         async with db.tx(actor.db_scope()) as conn:
             return out.ConnectionTestResult.model_validate(await svc.test_connection(conn, actor, id))
+
+    @r.put(
+        f"{V}/connections/{{id}}/credentials",
+        operation_id="putConnectionCredentials",
+        response_model=out.CredentialRefOut,
+    )
+    async def put_credentials(
+        id: uuid.UUID, body: CredentialsIn, actor: ActorDep, db: DbDep, request: Request
+    ) -> out.CredentialRefOut:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.CredentialRefOut.model_validate(
+                await svc.put_credentials(
+                    conn,
+                    actor,
+                    _secrets(request),
+                    id,
+                    username=body.username,
+                    password=body.password,
+                    api_key=body.api_key,
+                    token=body.token,
+                    credential_ref=body.credential_ref,
+                )
+            )
+
+    @r.post(
+        f"{V}/connections/{{id}}/test-auth",
+        operation_id="testConnectionAuth",
+        response_model=out.AuthTestResult,
+    )
+    async def test_auth(
+        id: uuid.UUID, body: TestAuthIn, actor: ActorDep, db: DbDep, request: Request
+    ) -> out.AuthTestResult:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.AuthTestResult.model_validate(
+                await svc.test_auth(conn, actor, _secrets(request), id, auth=body.auth)
+            )
 
     @r.post(
         f"{V}/connections/{{id}}/trust-draft",

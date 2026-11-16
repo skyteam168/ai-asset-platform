@@ -86,7 +86,16 @@ def match_in_memory(items: list[dict[str, Any]], query: str) -> list[dict[str, A
     for it in items:
         blob = " ".join(
             str(it.get(k) or "")
-            for k in ("name", "capability_id", "description", "title", "search_text")
+            for k in (
+                "name",
+                "capability_id",
+                "description",
+                "title",
+                "search_text",
+                "connector",
+                "system_key",
+                "system_host",
+            )
         ).lower()
         if q in blob:
             out.append(it)

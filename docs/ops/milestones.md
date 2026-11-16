@@ -1328,6 +1328,29 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | prod-check | 通过 | `tools/dev.py prod-check` |
 | staging k8s 4 副本 / PITR 真恢复 / 清单全勾 | 待集群 | G6 出口未宣称上线 |
 
+### G6 本地可验收口（续）— 2026-11-12
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 双机房 overlay 草稿 region-a/b | 通过 | `deploy/k8s/overlays/region-*`；[multi-region.md](multi-region.md)；`test_region_overlays_build_and_label` |
+| 本机 PG dump/restore 演练 | 通过 | `tools/pg_backup_restore_drill.py`；[evidence/g6-pg-local-restore.md](evidence/g6-pg-local-restore.md) |
+| WORM 应用层脚本 | 通过 | `tools/worm_object_lock_check.py`；[evidence/g6-worm-object-lock.md](evidence/g6-worm-object-lock.md) |
+| 清单分流表 + k8s-check 含 region | 通过 | [production-checklist.md](production-checklist.md)；`prod-check` 绿 |
+| CNPG PITR / k8s 4 副本 / 合规桶 / 双活切流 / 清单全勾 | 待 staging | 不虚假勾选 |
+
+### Wave P 约 200 人试点 — 2026-11-16
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| staging 含义 + 单机安装说明 | 通过 | [pilot-200.md](pilot-200.md) |
+| `pilot_check` + Settings 禁 dev-only | 通过 | `tools/pilot_check.py`；`tests/test_pilot_check.py` |
+| 服务 jwt 测例 | 通过 | `tests/test_h44_service_auth.py`（既有） |
+| P8 OIDC/WebAuthn 非 stub | 通过 | `test_p8_webauthn_*`；`test_g31_oidc_jwks`；[oidc-staging.md](oidc-staging.md)；控制台企业登录 + 真密钥登记 |
+| P9 WORM Object Lock 头 | 通过 | `test_p9_worm_object_lock`；`worm_object_lock_check.py`；[audit-worm.md](audit-worm.md) |
+| SMTP 真发 | 阻塞·部署后填 | **缺**公司 SMTP；见 task.md P6 |
+| 飞书 / OTel / 真 LLM | 本波暂缓 | P7/P10/P11；不挡上线 |
+| CNPG/双机房/清单全勾 | 本波不做 | 业务确认延后 |
+
 ### 服务凭据失败不踢控制台会话 — 2026-10-30
 
 | 验收项 | 结果 | 证据 |
@@ -1620,6 +1643,61 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 模块 | ADR-0026；architecture 9.5/16.1；`SqlReadonlyConnector`；`conn.sql_query_template` |
 | 不在本片 | MySQL 真机（H39f）；控制台（H39e） |
 
+### H40 草稿门禁用例可改删 + 模板填充 — 2026-11-10
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| draft 下 PUT/DELETE 门禁用例 | 通过 | `test_test_case_crud.py` |
+| testing 及之后不可改删 | 通过 | `test_mutate_case_blocked_after_leave_draft` |
+| 控制台编辑/删除 + 功能/权限模板一键填充 | 通过 | Assets Cases；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `gates.update_test_case` / `delete_test_case`；`PUT|DELETE /versions/{id}/test-cases/{case_id}` |
+| 不在本片 | testing 态改用例；表单化（非 JSON）编辑器 |
+
+### H39h 控制台邮件配置与审批深链 — 2026-11-10
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 系统管理「邮件配置」：SMTP / 标题模板 / 测试发送 | 通过 | `/mail`；`GET|PUT /notify/mail-settings`；`POST …/test` |
+| 密码进 OpenBao，出站无明文 | 通过 | `mail_settings.save_password`；`has_password` 脱敏 |
+| 审批邮件 To=可处理角色、Cc=data_owner，含 `#/approvals?focus=` | 通过 | `test_mail_settings.py`；`enqueue_approval_mail` |
+| Notifier 优先控制台配置，flush 可热更新 | 通过 | `build_notifier_resolved`；`flush_forever(resolve=…)` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `libs/notify/mail_settings.py`；`notify_api`；`approval/notify_mail.py`；MailConfig 页 |
+| 不在本片 | 按公司多套 SMTP；HTML 邮件模板编辑器 |
+
+### H39g 传输例外进审批待办 / 铃铛 — 2026-11-10
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| 明文/insecure 登记建 `transport_exception` 审批单 | 通过 | `test_transport_exception_creates_approval_todo`；`create_connection` → `approval.create` |
+| data_owner 铃铛 / `/approvals` 可见；登记人 excluded | 通过 | 同上；`listApprovals` 懒补历史 pending |
+| 待办通过 ↔ 连接 active；驳回 → disabled；连接页「审批例外」仍可用 | 通过 | `decide_transport_exception`；`approve_exception` 复用 |
+| 控制台标签与帮助文案 | 通过 | Approvals KIND；Help；runbook 阶段 B；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `conn/service.py`；`gates/api.py` decide 分支；Approvals / Help / runbook |
+| 不在本片 | 传输例外单独 Tab；IM 定向到具体用户（仍 role:data_owner） |
+
+### H39 Cookie/Session 与简易接入向导 — 2026-11-10
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `mode=cookie` form 登录缓存 PHPSESSID | 通过 | `test_credential_cookie_session.py` |
+| 凭据写入 OpenBao + test-auth 不回显 | 通过 | `test_easy_connect_apis.py::test_put_credentials_and_test_auth` |
+| 手工导入落库草稿 | 通过 | `test_easy_connect_apis.py::test_manual_import_preview_and_persist` |
+| 控制台「简易接入」四步向导 | 通过 | `/easy-connect`；Connections 入口；en/vi/km |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `credentials.py` cookie；`PUT …/credentials`；`POST …/test-auth`；`POST /importer/manual`；ADR-0028 |
+| 不在本片 | 自动爬全站 API；跳过门禁直接 MCP；验证码登录 |
+
 ### H38 Swagger 2.0 Importer 兼容 — 2026-10-22
 
 | 验收项 | 结果 | 证据 |
@@ -1658,4 +1736,18 @@ isk/schemas.py、webhook/schemas.py、skill/schemas.py |
 | 新增 API | `GET /users/{id}/roles`；`GET /clearance-requests`；`GET /consumers/{id}/credentials`；`GET /assets/{id}/releases`；Consumer.quota 出站 |
 | 控制台 | Orgs / Approvals / App / Consumers / Grants / Assets / Distribution + i18n |
 | 不在本片 | Notifier 邮件/IM；运营 Dashboard；契约漂移运维 API；Prism Mock UI |
+
+### O5 Skill AI 草稿（勾选 Tool → LLM）— 2026-11-10
+
+| 验收项 | 结果 | 证据 |
+| --- | --- | --- |
+| `POST /versions/{id}/skill-ai-draft` 经 LLM Gateway 出候选 | 通过 | `test_skill_ai_draft.py`（Mock LLM） |
+| 空 Tool / 脚本正文拒绝 | 通过 | `test_generate_rejects_empty_tools`；`test_generate_rejects_script_body` |
+| 控制台：勾选 Tool + 场景 + model_profile → 填入表单 | 通过 | `SkillEditor.tsx`；en/vi/km |
+| OpenAPI | 通过 | `SkillAiDraftIn` / `SkillAiDraft`；`generateSkillAiDraft` |
+
+| 部分 | 内容 |
+| --- | --- |
+| 模块 | `skill/generate.py`；不落库，须人工改后再保存并走门禁 |
+| 不在本片 | 真模型联调；自动落库；脚本型 Skill |
 

@@ -276,26 +276,109 @@ function UserDrawer({ user, canManage, orgList, onClose }: {
   );
 }
 
+function _b64urlToBuf(s: string): ArrayBuffer {
+  const pad = "=".repeat((4 - (s.length % 4)) % 4);
+  const bin = atob((s + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out.buffer;
+}
+
+function _bufToB64url(buf: ArrayBuffer): string {
+  const u = new Uint8Array(buf);
+  let s = "";
+  for (const x of u) s += String.fromCharCode(x);
+  return btoa(s).replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
 function UserWebAuthnTab({ userId, canManage }: { userId: string; canManage: boolean }) {
   const creds = useLoad(
     () => get<Page<{ id: string; credential_id: string; nickname: string; sign_count: number }>>(`/users/${userId}/webauthn/credentials`),
     [userId],
   );
   const act = useAction();
-  const registerStub = async () => {
-    const begin = await act(() => post<{ challenge_id: string }>(`/users/${userId}/webauthn/register/begin`));
+  const registerKey = async () => {
+    const begin = await act(() =>
+      post<{
+        challenge_id: string;
+        stub?: boolean;
+        publicKey: {
+          challenge: string;
+          rp: { id: string; name: string };
+          user: { id: string; name: string; displayName: string };
+          pubKeyCredParams: { type: string; alg: number }[];
+          timeout: number;
+          attestation: string;
+        };
+      }>(`/users/${userId}/webauthn/register/begin`),
+    );
     if (!begin) return;
-    const pk = btoa("\xa1\x01\x02cose-ui").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
-    const id = `ui-${Date.now().toString(36)}`;
-    if (await act(
-      () => post(`/users/${userId}/webauthn/register/finish`, {
-        challenge_id: begin.challenge_id,
-        credential_id: id,
-        public_key_cose_b64: pk,
-        nickname: t("控制台登记"),
-      }),
-      t("已登记安全密钥"),
-    )) creds.reload();
+    if (begin.stub) {
+      const pk = btoa("\xa1\x01\x02cose-ui").replace(/=+$/, "").replace(/\+/g, "-").replace(/\//g, "_");
+      const id = `ui-${Date.now().toString(36)}`;
+      if (
+        await act(
+          () =>
+            post(`/users/${userId}/webauthn/register/finish`, {
+              challenge_id: begin.challenge_id,
+              credential_id: id,
+              public_key_cose_b64: pk,
+              nickname: t("控制台登记"),
+            }),
+          t("已登记安全密钥"),
+        )
+      )
+        creds.reload();
+      return;
+    }
+    if (!window.PublicKeyCredential) {
+      await act(async () => {
+        throw new Error(t("当前浏览器不支持 WebAuthn"));
+      });
+      return;
+    }
+    try {
+      const pk = begin.publicKey;
+      const cred = (await navigator.credentials.create({
+        publicKey: {
+          challenge: _b64urlToBuf(pk.challenge),
+          rp: pk.rp,
+          user: {
+            id: _b64urlToBuf(pk.user.id),
+            name: pk.user.name,
+            displayName: pk.user.displayName,
+          },
+          pubKeyCredParams: pk.pubKeyCredParams.map((p) => ({
+            type: "public-key" as const,
+            alg: p.alg,
+          })),
+          timeout: pk.timeout,
+          attestation: "none",
+        },
+      })) as PublicKeyCredential | null;
+      if (!cred) return;
+      const att = cred.response as AuthenticatorAttestationResponse;
+      const spki = att.getPublicKey?.();
+      if (!spki) {
+        throw new Error(t("浏览器未返回公钥，请升级 Chromium / Safari"));
+      }
+      const ok = await act(
+        () =>
+          post(`/users/${userId}/webauthn/register/finish`, {
+            challenge_id: begin.challenge_id,
+            credential_id: _bufToB64url(cred.rawId),
+            public_key_spki_b64: _bufToB64url(spki),
+            client_data_json_b64: _bufToB64url(att.clientDataJSON),
+            nickname: t("安全密钥"),
+          }),
+        t("已登记安全密钥"),
+      );
+      if (ok) creds.reload();
+    } catch (e) {
+      await act(async () => {
+        throw e instanceof Error ? e : new Error(String(e));
+      });
+    }
   };
   return (
     <Space direction="vertical" style={{ width: "100%" }}>
@@ -310,10 +393,10 @@ function UserWebAuthnTab({ userId, canManage }: { userId: string; canManage: boo
         ]}
       />
       {canManage && (
-        <Button onClick={registerStub}>{t("登记安全密钥（stub）")}</Button>
+        <Button onClick={registerKey}>{t("登记安全密钥")}</Button>
       )}
       <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-        {t("生产环境由浏览器 WebAuthn 创建真实密钥；此处 stub 仅用于联调登记与列表。")}
+        {t("生产环境由浏览器 WebAuthn 创建真实密钥；本地 stub 模式仍可无设备联调登记。")}
       </Typography.Paragraph>
     </Space>
   );

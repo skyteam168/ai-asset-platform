@@ -32,13 +32,35 @@ class Channel(Protocol):
     async def send(self, recipient: str, subject: str, body: str) -> None: ...
 
 
+def _parse_recipients(recipient: str) -> tuple[list[str], list[str]]:
+    """支持普通邮箱，或 JSON：{"to":["a@x"],"cc":["b@y"]}。"""
+    raw = recipient.strip()
+    if raw.startswith("{"):
+        try:
+            doc = json.loads(raw)
+        except json.JSONDecodeError:
+            return [raw], []
+        if isinstance(doc, dict):
+            to = [str(x).strip() for x in (doc.get("to") or []) if str(x).strip()]
+            cc = [str(x).strip() for x in (doc.get("cc") or []) if str(x).strip()]
+            return to or [raw], cc
+    return [raw], []
+
+
 class LogMailChannel:
     """开发默认：只记日志，不真发邮件。"""
 
     name = "email"
 
     async def send(self, recipient: str, subject: str, body: str) -> None:
-        log.info("notify.email to=%s subject=%s bytes=%s", recipient, subject, len(body))
+        to, cc = _parse_recipients(recipient)
+        log.info(
+            "notify.email to=%s cc=%s subject=%s bytes=%s",
+            ",".join(to),
+            ",".join(cc) or "-",
+            subject,
+            len(body),
+        )
 
 
 class SmtpMailChannel:
@@ -70,10 +92,15 @@ class SmtpMailChannel:
         import smtplib
         from email.message import EmailMessage
 
+        to, cc = _parse_recipients(recipient)
+        if not to:
+            raise ValueError("smtp recipient required")
         msg = EmailMessage()
         msg["Subject"] = subject
         msg["From"] = self.mail_from
-        msg["To"] = recipient
+        msg["To"] = ", ".join(to)
+        if cc:
+            msg["Cc"] = ", ".join(cc)
         msg.set_content(body)
 
         def _send() -> None:
@@ -93,12 +120,17 @@ class SmtpMailChannel:
             except Exception as e:
                 last = e
                 # 不把 password / 连接串写入日志
-                log.warning("notify.smtp_retry attempt=%s to=%s err=%s", attempt + 1, recipient, type(e).__name__)
+                log.warning(
+                    "notify.smtp_retry attempt=%s to=%s err=%s",
+                    attempt + 1,
+                    ",".join(to),
+                    type(e).__name__,
+                )
                 if attempt < 2:
                     await asyncio.sleep(0.4 * (attempt + 1))
         if last is not None:
             raise last
-        log.info("notify.smtp to=%s subject=%s bytes=%s", recipient, subject, len(body))
+        log.info("notify.smtp to=%s cc=%s subject=%s bytes=%s", ",".join(to), ",".join(cc) or "-", subject, len(body))
 
 
 def _feishu_sign(secret: str, timestamp: str) -> str:
@@ -299,6 +331,7 @@ def build_notifier(
 
 
 def build_notifier_from_settings(settings: Settings) -> Notifier:
+    """同步装配：仅环境变量（启动占位；生产投递请用 build_notifier_resolved）。"""
     return build_notifier(
         im_webhook_url=settings.notify_im_webhook_url,
         feishu_webhook_url=settings.notify_feishu_webhook_url,
@@ -312,13 +345,62 @@ def build_notifier_from_settings(settings: Settings) -> Notifier:
     )
 
 
-async def flush_forever(engine: AsyncEngine, notifier: Notifier, interval_s: float) -> None:
-    """后台循环 flush outbox（对齐 webhook deliver_forever）。"""
+async def build_notifier_resolved(
+    settings: Settings,
+    store: Any | None = None,
+) -> Notifier:
+    """控制台邮件配置优先（启用且有 host）；否则 AIP_SMTP_*；密码来自 OpenBao 或环境变量。"""
+    from aip.libs.notify import mail_settings as ms
+
+    meta = ms.load_meta(settings)
+    host = ""
+    port = settings.smtp_port
+    user = settings.smtp_user
+    password = settings.smtp_password
+    mail_from = settings.smtp_from
+    starttls = settings.smtp_starttls
+    if meta.get("enabled") and str(meta.get("host") or "").strip():
+        host = str(meta["host"]).strip()
+        port = int(meta.get("port") or 587)
+        user = str(meta.get("user") or "")
+        mail_from = str(meta.get("mail_from") or user)
+        starttls = bool(meta.get("starttls", True))
+        if store is not None:
+            password = await ms.resolve_password(store, settings)
+        else:
+            password = settings.smtp_password
+    elif settings.smtp_host:
+        host = settings.smtp_host
+    return build_notifier(
+        im_webhook_url=settings.notify_im_webhook_url,
+        feishu_webhook_url=settings.notify_feishu_webhook_url,
+        feishu_secret=settings.notify_feishu_secret,
+        smtp_host=host,
+        smtp_port=port,
+        smtp_user=user,
+        smtp_password=password,
+        smtp_from=mail_from,
+        smtp_starttls=starttls,
+    )
+
+
+async def flush_forever(
+    engine: AsyncEngine,
+    notifier: Notifier | Any,
+    interval_s: float,
+    *,
+    resolve: Any | None = None,
+) -> None:
+    """后台循环 flush outbox（对齐 webhook deliver_forever）。
+
+    resolve：可选异步工厂，每轮重建 Notifier（便于控制台改 SMTP 后无需重启）。
+    """
     import asyncio
 
     while True:
         try:
-            await flush_outbox(engine, notifier)
+            n = await resolve() if resolve is not None else notifier
+            await flush_outbox(engine, n)
         except Exception:  # 单轮失败不退出循环
             log.exception("notify flush_forever failed")
         await asyncio.sleep(interval_s)

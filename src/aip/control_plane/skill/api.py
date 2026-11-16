@@ -11,6 +11,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from aip.control_plane.iam.api import ActorDep, DbDep
+from aip.control_plane.skill import generate as skill_gen
 from aip.control_plane.skill import schemas as out
 from aip.control_plane.skill import service as skill
 from aip.libs.common.errors import ErrorCode, PlatformError
@@ -63,6 +64,13 @@ class SkillSourceIn(BaseModel):
     assets: list[SkillAssetFileIn] = Field(default_factory=list, max_length=20)
 
 
+class SkillAiDraftIn(BaseModel):
+    tools: list[str] = Field(min_length=1, max_length=20)
+    model_profile: str = Field(min_length=3, max_length=128)
+    scenario: str = Field(default="", max_length=4000)
+    hint_name: str | None = Field(default=None, max_length=64)
+
+
 def router() -> APIRouter:
     r = APIRouter()
 
@@ -86,6 +94,26 @@ def router() -> APIRouter:
         async with db.tx(actor.db_scope()) as conn:
             return out.SkillSourceSaved.model_validate(
                 await skill.save_source(conn, actor, id, body.model_dump(), key=platform_key())
+            )
+
+    @r.post(
+        f"{V}/versions/{{id}}/skill-ai-draft",
+        tags=["skill"],
+        operation_id="generateSkillAiDraft",
+        response_model=out.SkillAiDraft,
+    )
+    async def ai_draft(id: uuid.UUID, body: SkillAiDraftIn, actor: ActorDep, db: DbDep) -> out.SkillAiDraft:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.SkillAiDraft.model_validate(
+                await skill_gen.generate_draft(
+                    conn,
+                    actor,
+                    version_id=id,
+                    tool_refs=body.tools,
+                    scenario=body.scenario,
+                    model_profile=body.model_profile,
+                    hint_name=body.hint_name or "",
+                )
             )
 
     @r.post(

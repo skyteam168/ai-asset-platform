@@ -60,6 +60,7 @@
 | **H25** human_task.data 信封 | 完成 | b2b93a3 |
 | **H26** 控制台接入补齐与在线创建 Skill | 完成 | 8e6caef |
 | **H27** 控制台使用说明 | 完成 | — |
+| **H39** Cookie/Session 与简易接入向导 | 完成 | — |
 | **M7** 其余 | **待做**（见第 7 节） | — |
 
 测试现状：后端含 M6b–M7i 用例；TS SDK 与 consumer-kit（Python/TS）有 vitest/pytest；控制台组件测试与端到端在提交前再跑全量。
@@ -175,11 +176,11 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 - **H27（已完成）**：顶栏帮助 → 使用说明抽屉（按实际功能分节，中英越）。
 - **H40–H43（已完成）**：压测巩固、zhparser opt-in、生产清单 `prod-check`、Notifier 邮件+通用 IM Webhook。
 - **生产深度执行清单**：[task.md](task.md)（**H40–H58 Wave A/B/C 骨架已完成**）。
-- **Wave O（运营向导）**：O1–O4 / O3b 已完成（真连接点测、五步向导、AI 生成候选 OpenAPI、接入管道）。
+- **Wave O（运营向导）**：O1–O4 / O3b / **O5** 已完成（真连接点测、五步向导、AI 生成候选 OpenAPI、接入管道、Skill AI 草稿）。
 - **P0 登录握手**：Credential Manager 支持 RSA 加密口令换 JWT（ADR-0027）；设备管家演示 `tools/activate_equipment_path.py`。
 - **运营缺口（已提交 a77b16a）**：草稿删除 / 弃用退役 / 连接与实例删除 / 上游 MCP 源 CRUD；服务凭据失败不踢会话（`both` 无共享密钥用静态令牌）。
 - **企业级上线主线**：**Wave G0→G6**（不后置），总计划见 [enterprise-go-live](../superpowers/plans/2026-10-30-enterprise-go-live.md)；出口 = [production-checklist.md](production-checklist.md) 全勾。
-- **当前下一步**：G4.1–G4.2 已完成 → G4.3 真 LLM/Langfuse → G5…G6。架构「首期不做」项（RPA、分公司命名空间发布等）进 Wave X，改 ADR 前先提问。
+- **当前下一步**：**Wave P 试点上线** — P8/P9 代码已完成；剩余 P6（SMTP，部署后填）、可选飞书/OTel/LLM。见 [task.md](task.md) Wave P、[pilot-200.md](pilot-200.md)、[oidc-staging.md](oidc-staging.md)。不做 CNPG/双机房/清单全勾。
 
 完整的未完成清单与原因见 milestones.md 各节「仍未完成」与上线总计划。
 
@@ -192,3 +193,9 @@ write 类须显式配置 `probe`（可用 reconcile 查询参数）；漂移不�
 ```
 
 产物：`.aip-data/nike-path.json`。
+
+## 9. 业务系统手工接入全流程（操作手册）
+
+控制台逐步照做（简易接入 → 传输例外 → 门禁用例/验收 → G0–G8 → 授权 → AI 工作台 MCP）：见 [system-onboarding-runbook.md](system-onboarding-runbook.md)。
+
+审批邮件：系统管理 →「邮件配置」启用 SMTP（密码进 OpenBao）；用户需维护邮箱。深链 `/console/#/approvals?focus=`。未配控制台时仍可用 `AIP_SMTP_*`。

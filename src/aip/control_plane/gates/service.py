@@ -160,6 +160,16 @@ async def _record(
     )
 
 
+async def _require_draft_case_mut(
+    conn: AsyncConnection, actor: Actor, version_id: uuid.UUID
+) -> dict[str, Any]:
+    v = await registry.version_row(conn, version_id)
+    actor.require(actor.has("asset_developer") or actor.has("platform_admin"))
+    if v["state"] != "draft":
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "用例属于资产版本，只能在 draft 阶段维护")
+    return dict(v)
+
+
 async def add_test_case(
     conn: AsyncConnection,
     actor: Actor,
@@ -172,10 +182,7 @@ async def add_test_case(
     principal: dict[str, Any] | None = None,
     critical: bool = True,
 ) -> uuid.UUID:
-    v = await registry.version_row(conn, version_id)
-    actor.require(actor.has("asset_developer") or actor.has("platform_admin"))
-    if v["state"] != "draft":
-        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "用例属于资产版本，只能在 draft 阶段维护")
+    v = await _require_draft_case_mut(conn, actor, version_id)
     if kind not in ("functional", "permission"):
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "kind 只能是 functional 或 permission")
     cid = new_id()
@@ -193,6 +200,66 @@ async def add_test_case(
         )
     )
     return cid
+
+
+async def update_test_case(
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    case_id: uuid.UUID,
+    *,
+    name: str,
+    kind: str,
+    args: dict[str, Any],
+    expect: dict[str, Any],
+    principal: dict[str, Any] | None = None,
+    critical: bool = True,
+) -> dict[str, Any]:
+    await _require_draft_case_mut(conn, actor, version_id)
+    if kind not in ("functional", "permission"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "kind 只能是 functional 或 permission")
+    row = (
+        await conn.execute(
+            select(test_case).where(test_case.c.id == case_id, test_case.c.version_id == version_id)
+        )
+    ).mappings().first()
+    if row is None:
+        raise PlatformError(ErrorCode.NOT_FOUND, "门禁用例不存在或不属于该版本")
+    await conn.execute(
+        test_case.update()
+        .where(test_case.c.id == case_id, test_case.c.version_id == version_id)
+        .values(
+            name=name,
+            kind=kind,
+            critical=critical,
+            args=args,
+            principal=principal or {},
+            expect=expect,
+        )
+    )
+    return {
+        "id": str(case_id),
+        "name": name,
+        "kind": kind,
+        "args": args,
+        "principal": principal or {},
+        "expect": expect,
+        "critical": critical,
+    }
+
+
+async def delete_test_case(
+    conn: AsyncConnection,
+    actor: Actor,
+    version_id: uuid.UUID,
+    case_id: uuid.UUID,
+) -> None:
+    await _require_draft_case_mut(conn, actor, version_id)
+    result = await conn.execute(
+        test_case.delete().where(test_case.c.id == case_id, test_case.c.version_id == version_id)
+    )
+    if result.rowcount == 0:
+        raise PlatformError(ErrorCode.NOT_FOUND, "门禁用例不存在或不属于该版本")
 
 
 async def put_selection_eval(
@@ -692,6 +759,8 @@ async def _bundle_selection_g2(
 
 async def _default_selection_llm(conn: AsyncConnection) -> Any:
     """控制面默认 Gateway：Pg 白名单/预算 + 从 Registry 解析 model_profile。"""
+    from aip.connectors.credentials import OpenBaoSecretStore
+    from aip.control_plane.llm import provider as llm_provider
     from aip.data_plane.llm.allowlist import PgAllowlistStore
     from aip.data_plane.llm.budget import PgBudgetStore
     from aip.data_plane.llm.gateway import LlmGateway
@@ -699,6 +768,8 @@ async def _default_selection_llm(conn: AsyncConnection) -> Any:
 
     engine = conn.engine
     settings = _gs()
+    secrets = OpenBaoSecretStore(settings.openbao_addr, settings.openbao_token)
+    api_key = await llm_provider.resolve_api_key(secrets, settings)
 
     async def resolve(ref: str, _env: str) -> dict[str, Any]:
         return await load_model_profile_spec(conn, ref)
@@ -708,7 +779,8 @@ async def _default_selection_llm(conn: AsyncConnection) -> Any:
         budget=PgBudgetStore(engine),
         resolve_profile=resolve,
         env=settings.env if settings.env != "dev" else "test",
-        api_key=settings.llm_api_key or None,
+        api_key=api_key,
+        secrets=secrets,
     )
 
 

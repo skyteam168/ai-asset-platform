@@ -58,6 +58,22 @@ class TransportExceptionStatus(BaseModel):
     status: str
 
 
+class CredentialRefOut(BaseModel):
+    id: str
+    credential_ref: str
+
+
+class AuthTestResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    ok: bool
+    mode: str
+    detail: str | None = None
+    cookie_name: str | None = None
+    expires_in_s: int | None = None
+    error_code: str | None = None
+
+
 class ConnectorInstance(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

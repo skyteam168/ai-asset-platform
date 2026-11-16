@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     # 审计锚点 WORM 桶（architecture.md 12.4）；关闭时只写 audit_anchor 表
     worm_enabled: bool = False
     worm_bucket: str = "aip-audit-worm"
+    # 合规 Object Lock：写入时附带保留期头（空=仅应用层 put_if_absent）
+    # COMPLIANCE / GOVERNANCE；桶须已开 Object Lock（或兼容实现接受这些头）
+    worm_object_lock_mode: str = Field(default="", pattern="^(|COMPLIANCE|GOVERNANCE)$")
+    worm_object_lock_days: int = Field(default=2555, ge=1, le=36500)
 
     # 身份（architecture.md 3）
     issuer: str = "https://api.aip.internal"
@@ -105,6 +109,8 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = ""
     smtp_starttls: bool = True
+    # 控制台深链根（空则用邮件配置 public_base_url 或 http://127.0.0.1:18081）
+    public_base_url: str = ""
     # Connector worker（H57 / G5.1）：inline=同进程；rpc=独立池 HTTP JSON
     connector_worker_mode: str = Field(default="inline", pattern="^(inline|rpc)$")
     connector_worker_url: str = ""
@@ -122,6 +128,9 @@ class Settings(BaseSettings):
     oidc_jwks_url: str = ""
     oidc_token_url: str = ""
     oidc_client_secret: str = ""
+    # 授权端点（控制台「企业登录」跳转）；空则只接受已拿到的 id_token / code 换票
+    oidc_authorization_url: str = ""
+    oidc_redirect_uri: str = ""
     # OAuth authorization_code + PKCE（H52）：默认关闭；stub 签发授权码供本地测例
     oauth_pkce_enabled: bool = False
     oauth_pkce_stub: bool = True
@@ -132,6 +141,8 @@ class Settings(BaseSettings):
     webauthn_rp_id: str = "localhost"
     webauthn_rp_name: str = "AIP Console"
     webauthn_challenge_ttl_s: int = Field(default=300, ge=60, le=600)
+    # 逗号分隔；非 stub 校验 clientDataJSON.origin（空=本地默认集合）
+    webauthn_origins: str = ""
 
     @model_validator(mode="after")
     def _no_dev_secrets_outside_dev(self) -> Settings:
@@ -157,6 +168,11 @@ class Settings(BaseSettings):
                 leaked.append("oidc_stub（须 false，并配置 oidc_jwks_url / issuer）")
             if self.oidc_enabled and not self.oidc_stub and not self.oidc_jwks_url:
                 leaked.append("oidc_jwks_url")
+            if self.oidc_enabled and not self.oidc_stub and not self.oidc_issuer:
+                leaked.append("oidc_issuer")
+            # P8：启用 WebAuthn 时生产/staging 禁止 stub
+            if self.webauthn_enabled and self.webauthn_stub:
+                leaked.append("webauthn_stub（须 false）")
             if leaked:
                 raise ValueError(f"{self.env} 环境必须显式配置：{', '.join(leaked)}")
         return self

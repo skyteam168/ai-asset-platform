@@ -1,6 +1,7 @@
 import { Alert, Button, DatePicker, Descriptions, Drawer, Form, Input, Modal, Select, Space, Switch, Tabs, Tag, Typography } from "antd";
 import dayjs from "dayjs";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { del, get, post, type Page } from "../api";
 import { useAuth } from "../auth";
 import { matches, OrgName, PageCard, PAGINATION, StateTag, Toolbar, useOrgs } from "../components";
@@ -34,7 +35,12 @@ export function ConnectionsPage() {
   const systems = (
     <>
       <Toolbar placeholder={t("系统 / 地址 / 环境")} onSearch={setKw}
-        actions={has("platform_admin", "asset_developer") && <Button onClick={() => setOpen(true)}>{t("登记连接")}</Button>} />
+        actions={has("platform_admin", "asset_developer") && (
+          <Space>
+            <Link to="/easy-connect"><Button type="primary">{t("简易接入")}</Button></Link>
+            <Button onClick={() => setOpen(true)}>{t("登记连接")}</Button>
+          </Space>
+        )} />
       {conns.error && <Alert type="error" message={conns.error} />}
       <ListTable<Connection> pagination={PAGINATION} rowKey="id" loading={conns.loading} dataSource={(conns.data?.items ?? []).filter((c) => matches(c, kw, ["system_key", "base_url", "env"]))}
         columns={[

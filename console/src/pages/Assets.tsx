@@ -604,14 +604,72 @@ function RolloutButton({ versionId, kind, onDone }: { versionId: string; kind: "
 }
 
 const CASE_TEMPLATE = {
-  args: JSON.stringify({ factory_id: "F001" }, null, 2),
-  principal: JSON.stringify({ company: "VN01", scope: "company" }, null, 2),
+  args: JSON.stringify({}, null, 2),
+  principal: JSON.stringify({ company: "HQ", clearance: 2 }, null, 2),
   expect: JSON.stringify({ status: "succeeded" }, null, 2),
 };
 
+const CASE_BY_KIND: Record<string, { name: string; principal: string; expect: string; args: string }> = {
+  functional: {
+    name: "正常查询",
+    args: JSON.stringify({}, null, 2),
+    principal: JSON.stringify({ company: "HQ", clearance: 2 }, null, 2),
+    expect: JSON.stringify({ status: "succeeded" }, null, 2),
+  },
+  permission: {
+    name: "无授权被拒",
+    args: JSON.stringify({}, null, 2),
+    principal: JSON.stringify({ company: "HQ", granted: false }, null, 2),
+    expect: JSON.stringify({ status: "failed", error_code: "PERMISSION_DENIED" }, null, 2),
+  },
+};
+
+function caseFormValues(c: TestCase) {
+  return {
+    name: c.name,
+    kind: c.kind,
+    args: JSON.stringify(c.args ?? {}, null, 2),
+    principal: JSON.stringify(c.principal ?? {}, null, 2),
+    expect: JSON.stringify(c.expect ?? {}, null, 2),
+  };
+}
+
+function CaseFields() {
+  return (
+    <>
+      <Space align="start">
+        <Form.Item name="name" label={t("用例名")} rules={[{ required: true }]}><Input /></Form.Item>
+        <Form.Item name="kind" label={t("类型")}>
+          <Select style={{ width: 120 }} options={[{ value: "functional", label: t("功能") }, { value: "permission", label: t("权限") }]} />
+        </Form.Item>
+      </Space>
+      <Space align="start" style={{ display: "flex" }} wrap>
+        <Form.Item name="args" label={t("参数")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
+        <Form.Item name="principal" label={t("调用者画像")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
+        <Form.Item name="expect" label={t("期望")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
+      </Space>
+    </>
+  );
+}
+
 function Cases({ v, editable, onDone }: { v: VersionDetail; editable: boolean; onDone: () => void }) {
   const [form] = Form.useForm();
+  const [editForm] = Form.useForm();
+  const [editing, setEditing] = useState<TestCase | null>(null);
   const act = useAction();
+
+  const applyTemplate = (kind: "functional" | "permission", target: typeof form) => {
+    target.setFieldsValue({ kind, ...CASE_BY_KIND[kind] });
+  };
+
+  const bodyFrom = (x: { name: string; kind: string; args: string; principal: string; expect: string }) => ({
+    name: x.name,
+    kind: x.kind,
+    args: parseJson(x.args),
+    principal: parseJson(x.principal),
+    expect: parseJson(x.expect),
+  });
+
   return (
     <>
       <ListTable<TestCase> rowKey="id" size="small" pagination={false} dataSource={v.test_cases}
@@ -620,27 +678,79 @@ function Cases({ v, editable, onDone }: { v: VersionDetail; editable: boolean; o
           { title: t("名称"), dataIndex: "name" },
           { title: t("类型"), dataIndex: "kind", render: (k) => <Tag color={k === "permission" ? "orange" : "blue"}>{k === "permission" ? t("权限") : t("功能")}</Tag> },
           { title: t("期望"), key: "expect", render: (_, c) => JSON.stringify(c.expect) },
+          ...(editable ? [{
+            title: t("操作"),
+            key: "actions",
+            width: 140,
+            render: (_: unknown, c: TestCase) => (
+              <Space size={0}>
+                <Button type="link" size="small" onClick={() => {
+                  setEditing(c);
+                  editForm.setFieldsValue(caseFormValues(c));
+                }}>{t("编辑")}</Button>
+                <Button type="link" size="small" danger onClick={() => Modal.confirm({
+                  title: t("删除用例？"),
+                  content: t("将删除「{0}」，仅草稿可删。", [c.name]),
+                  okButtonProps: { danger: true },
+                  onOk: async () => {
+                    if (await act(() => del(`/versions/${v.id}/test-cases/${c.id}`), t("已删除"))) onDone();
+                  },
+                })}>{t("删除")}</Button>
+              </Space>
+            ),
+          }] : []),
         ]} />
       {editable && (
-        <Form form={form} layout="vertical" style={{ marginTop: 12 }} initialValues={{ kind: "functional", ...CASE_TEMPLATE }}
+        <Form form={form} layout="vertical" style={{ marginTop: 12 }} initialValues={{ kind: "functional", ...CASE_TEMPLATE, name: CASE_BY_KIND.functional.name }}
+          onValuesChange={(ch) => {
+            if (ch.kind && CASE_BY_KIND[ch.kind as string]) form.setFieldsValue(CASE_BY_KIND[ch.kind as string]);
+          }}
           onFinish={async (x) => {
-            const body = { name: x.name, kind: x.kind, args: parseJson(x.args), principal: parseJson(x.principal), expect: parseJson(x.expect) };
-            if (await act(() => post(`/versions/${v.id}/test-cases`, body), t("已添加"))) { form.resetFields(); onDone(); }
+            if (await act(() => post(`/versions/${v.id}/test-cases`, bodyFrom(x)), t("已添加"))) {
+              form.resetFields();
+              form.setFieldsValue({ kind: "functional", ...CASE_BY_KIND.functional });
+              onDone();
+            }
           }}>
-          <Space align="start">
-            <Form.Item name="name" label={t("用例名")} rules={[{ required: true }]}><Input /></Form.Item>
-            <Form.Item name="kind" label={t("类型")}>
-              <Select style={{ width: 120 }} options={[{ value: "functional", label: t("功能") }, { value: "permission", label: t("权限") }]} />
-            </Form.Item>
+          <Alert type="info" showIcon style={{ marginBottom: 8 }}
+            message={t("公司编码须与「组织与用户」一致。本环境常用 HQ / VN-E41139 / DEMO，没有 VN01。可用模板一键填充。")} />
+          <Space style={{ marginBottom: 8 }} wrap>
+            <Button onClick={() => applyTemplate("functional", form)}>{t("填充功能模板")}</Button>
+            <Button onClick={() => applyTemplate("permission", form)}>{t("填充权限模板")}</Button>
           </Space>
-          <Space align="start" style={{ display: "flex" }}>
-            <Form.Item name="args" label={t("参数")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
-            <Form.Item name="principal" label={t("调用者画像")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
-            <Form.Item name="expect" label={t("期望")} rules={[jsonRule]}><JsonInput rows={4} /></Form.Item>
-          </Space>
-          <Button htmlType="submit">{t("添加用例")}</Button>
+          <CaseFields />
+          <Button type="primary" htmlType="submit">{t("添加用例")}</Button>
         </Form>
       )}
+      <Modal
+        title={t("编辑用例")}
+        open={!!editing}
+        onCancel={() => setEditing(null)}
+        destroyOnClose
+        okText={t("保存")}
+        onOk={() => editForm.submit()}
+      >
+        <Form form={editForm} layout="vertical"
+          onValuesChange={(ch) => {
+            if (ch.kind && CASE_BY_KIND[ch.kind as string]) {
+              const tpl = CASE_BY_KIND[ch.kind as string];
+              editForm.setFieldsValue({ principal: tpl.principal, expect: tpl.expect });
+            }
+          }}
+          onFinish={async (x) => {
+            if (!editing) return;
+            if (await act(() => put(`/versions/${v.id}/test-cases/${editing.id}`, bodyFrom(x)), t("已保存"))) {
+              setEditing(null);
+              onDone();
+            }
+          }}>
+          <Space style={{ marginBottom: 8 }} wrap>
+            <Button size="small" onClick={() => applyTemplate("functional", editForm)}>{t("填充功能模板")}</Button>
+            <Button size="small" onClick={() => applyTemplate("permission", editForm)}>{t("填充权限模板")}</Button>
+          </Space>
+          <CaseFields />
+        </Form>
+      </Modal>
     </>
   );
 }

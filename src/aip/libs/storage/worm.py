@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from typing import Any, Protocol
 
@@ -23,6 +24,7 @@ class MemoryWormStore:
 
     def __init__(self) -> None:
         self.objects: dict[str, bytes] = {}
+        self.lock_headers: dict[str, dict[str, str]] = {}
 
     async def put_if_absent(self, key: str, body: bytes, *, content_type: str = "application/json") -> str:
         if key in self.objects and self.objects[key] != body:
@@ -37,9 +39,18 @@ class MemoryWormStore:
 
 
 class S3WormStore:
-    def __init__(self, client: S3Client, bucket: str) -> None:
+    def __init__(
+        self,
+        client: S3Client,
+        bucket: str,
+        *,
+        object_lock_mode: str = "",
+        object_lock_days: int = 2555,
+    ) -> None:
         self.client = client
         self.bucket = bucket
+        self.object_lock_mode = (object_lock_mode or "").strip().upper()
+        self.object_lock_days = object_lock_days
         self._ready = False
 
     async def _ensure(self) -> None:
@@ -47,9 +58,20 @@ class S3WormStore:
             await self.client.ensure_bucket(self.bucket)
             self._ready = True
 
+    def _lock_kwargs(self) -> dict[str, Any]:
+        if self.object_lock_mode not in ("COMPLIANCE", "GOVERNANCE"):
+            return {}
+        until = dt.datetime.now(dt.UTC) + dt.timedelta(days=self.object_lock_days)
+        return {
+            "object_lock_mode": self.object_lock_mode,
+            "object_lock_retain_until": until,
+        }
+
     async def put_if_absent(self, key: str, body: bytes, *, content_type: str = "application/json") -> str:
         await self._ensure()
-        return await self.client.put_if_absent(self.bucket, key, body, content_type=content_type)
+        return await self.client.put_if_absent(
+            self.bucket, key, body, content_type=content_type, **self._lock_kwargs()
+        )
 
     async def get(self, key: str) -> bytes:
         await self._ensure()
@@ -140,4 +162,9 @@ def worm_store_from_settings(settings: Settings | None = None) -> WormStore | No
     if not s.worm_enabled:
         return None
     client = S3Client(s.s3_endpoint, s.s3_access_key, s.s3_secret_key, region=s.s3_region)
-    return S3WormStore(client, s.worm_bucket)
+    return S3WormStore(
+        client,
+        s.worm_bucket,
+        object_lock_mode=s.worm_object_lock_mode,
+        object_lock_days=s.worm_object_lock_days,
+    )

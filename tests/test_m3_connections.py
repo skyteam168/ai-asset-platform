@@ -75,6 +75,38 @@ async def test_transport_exception_requires_dual_approval_in_prod(db: Database, 
         assert await conn_service.approve_exception(conn, sec2, cid) == "active"
 
 
+async def test_transport_exception_creates_approval_todo(db: Database, seeded: Seed) -> None:
+    """明文 HTTP 登记后 data_owner 在审批待办可见；待办通过后连接生效。"""
+    from aip.control_plane.approval import service as approval
+
+    dev = await actor_for(db, seeded, "admin")
+    sec = await actor_for(db, seeded, "security")
+    async with db.tx(DbScope.system()) as conn:
+        cid = await conn_service.create_connection(
+            conn,
+            dev,
+            company_id=seeded.vn,
+            data={
+                "system_key": "legacy_http_todo",
+                "env": "test",
+                "base_url": "http://10.1.2.9:8080",
+                "scheme": "http",
+                "transport_exception_reason": "铃铛待办联调",
+                "transport_exception_expires_at": SOON,
+            },
+        )
+        pending_sec = await approval.pending_for(conn, sec)
+        hit = [p for p in pending_sec if p["kind"] == "transport_exception" and p["subject_id"] == cid]
+        assert len(hit) == 1
+        assert hit[0]["required_approvals"] == 1
+        assert hit[0]["approver_role"] == "data_owner"
+        pending_dev = await approval.pending_for(conn, dev)
+        assert not any(p["subject_id"] == cid for p in pending_dev)  # 登记人在 excluded
+        status = await conn_service.decide_transport_exception(conn, sec, hit[0]["id"], approve=True)
+        assert status == "approved"
+        assert (await conn_service.row(conn, cid))["status"] == "active"
+
+
 async def test_exception_rules_and_expiry(db: Database, seeded: Seed) -> None:
     dev = await actor_for(db, seeded, "admin")
     async with db.tx(DbScope.system()) as conn:

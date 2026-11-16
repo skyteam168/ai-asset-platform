@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import uuid
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import jsonschema
 from sqlalchemy import (
@@ -26,14 +28,35 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import CIDR, JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncConnection
 
+from aip.connectors.credentials import CredentialManager, SecretStore
+from aip.connectors.upstream_mcp import pin_from_tools_list
 from aip.control_plane.iam.authz import Actor
 from aip.control_plane.iam.orgs import get_org
 from aip.control_plane.registry.service import SPECS, notify_change
 from aip.libs.common.errors import ErrorCode, PlatformError
 from aip.libs.common.ids import new_id, utcnow
-from aip.connectors.upstream_mcp import pin_from_tools_list
 from aip.libs.httpclient import ConnectionConfig, NetworkAllowlist, build_client, map_error, probe, trust_draft
 from aip.libs.httpclient.config import Resolver
+
+_REF_OK = re.compile(r"^kv/data/[a-z0-9][a-z0-9_./-]{1,180}$")
+
+
+def _normalize_http_base_url(base_url: str, scheme: str) -> str:
+    """http(s) 的 base_url 只能是 scheme://host[:port]，不能带登录页等路径。"""
+    if scheme not in ("http", "https"):
+        return base_url
+    parts = urlsplit(base_url.strip())
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "地址须为 http(s)://主机[:端口]")
+    path = parts.path or ""
+    if path not in ("", "/"):
+        raise PlatformError(
+            ErrorCode.INVALID_ARGUMENT,
+            "地址请只填到主机和端口（例如 http://10.10.130.199:8082），不要带 /Index/login 等路径；接口路径在下一步单独填写",
+        )
+    if parts.query or parts.fragment:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "地址不要带查询参数或 # 片段")
+    return urlunsplit((parts.scheme, parts.netloc, "", "", ""))
 
 md = MetaData(schema="conn")
 U = UUID(as_uuid=True)
@@ -152,6 +175,7 @@ async def create_connection(
     org = await get_org(conn, company_id)
     if org.type != "company":
         raise PlatformError(ErrorCode.INVALID_ARGUMENT, "连接按公司登记")
+    data = {**data, "base_url": _normalize_http_base_url(str(data["base_url"]), str(data["scheme"]))}
     exception = data["scheme"] == "http" or data.get("tls_mode") == "insecure"
     expires = data.get("transport_exception_expires_at")
     if exception:
@@ -159,6 +183,22 @@ async def create_connection(
         if expires_at is None or expires_at > utcnow() + dt.timedelta(days=MAX_EXCEPTION_DAYS):
             raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"传输例外到期日不能超过 {MAX_EXCEPTION_DAYS} 天")
         data = {**data, "transport_exception_expires_at": expires_at}
+    dup = (
+        await conn.execute(
+            select(system_connection.c.id).where(
+                and_(
+                    system_connection.c.company_id == company_id,
+                    system_connection.c.system_key == data["system_key"],
+                    system_connection.c.env == data["env"],
+                )
+            )
+        )
+    ).first()
+    if dup is not None:
+        raise PlatformError(
+            ErrorCode.INVALID_ARGUMENT,
+            f"该公司下系统「{data['system_key']}」环境「{data['env']}」已登记，请改系统标识或选用已有连接",
+        )
     cid = new_id()
     await conn.execute(
         system_connection.insert().values(
@@ -183,8 +223,116 @@ async def create_connection(
             status="pending_approval" if exception else "active",
         )
     )
+    if exception:
+        # 写入通用审批单 → 铃铛 / 审批待办可见，并走邮件/IM outbox
+        await _ensure_transport_approval(conn, await row(conn, cid))
     await notify_change(conn, "connection.created", company_id, cid, actor)
     return cid
+
+
+async def _pending_transport_request(conn: AsyncConnection, connection_id: uuid.UUID) -> dict[str, Any] | None:
+    from aip.control_plane.approval import service as approval
+
+    r = (
+        await conn.execute(
+            select(approval.approval_request)
+            .where(
+                and_(
+                    approval.approval_request.c.kind == "transport_exception",
+                    approval.approval_request.c.subject_id == connection_id,
+                    approval.approval_request.c.status == "pending",
+                )
+            )
+            .order_by(approval.approval_request.c.created_at.desc())
+            .limit(1)
+        )
+    ).mappings().first()
+    return dict(r) if r else None
+
+
+async def _ensure_transport_approval(conn: AsyncConnection, connection: dict[str, Any]) -> uuid.UUID:
+    """为待审批传输例外补建审批单（新登记必建；历史遗留 pending 连接懒补）。"""
+    from aip.control_plane.approval import service as approval
+
+    existing = await _pending_transport_request(conn, connection["id"])
+    if existing is not None:
+        return existing["id"]
+    expires = connection.get("transport_exception_expires_at")
+    return await approval.create(
+        conn,
+        kind="transport_exception",
+        subject_id=connection["id"],
+        company_id=connection["company_id"],
+        submitter=connection.get("owner_user_id"),
+        approver_role="data_owner",
+        required=2 if connection["env"] == "prod" else 1,
+        excluded=[connection["owner_user_id"]] if connection.get("owner_user_id") else [],
+        payload={
+            "system_key": connection["system_key"],
+            "env": connection["env"],
+            "scheme": connection["scheme"],
+            "tls_mode": connection.get("tls_mode"),
+            "base_url": connection["base_url"],
+            "reason": connection.get("transport_exception_reason"),
+            "expires_at": expires.isoformat() if isinstance(expires, dt.datetime) else expires,
+        },
+        sla_business_days=2,
+    )
+
+
+async def backfill_transport_approvals(conn: AsyncConnection) -> int:
+    """把仍 pending_approval 但缺审批单的连接补进审批待办（铃铛可见）。"""
+    rows = (
+        await conn.execute(select(system_connection).where(system_connection.c.status == "pending_approval"))
+    ).mappings().all()
+    n = 0
+    for r in rows:
+        before = await _pending_transport_request(conn, r["id"])
+        await _ensure_transport_approval(conn, dict(r))
+        if before is None:
+            n += 1
+    return n
+
+
+async def decide_transport_exception(
+    conn: AsyncConnection,
+    actor: Actor,
+    request_id: uuid.UUID,
+    approve: bool,
+    comment: str = "",
+    on_behalf_of: uuid.UUID | None = None,
+) -> str:
+    """审批待办入口：同步审批单与 system_connection 状态。"""
+    from aip.control_plane.approval import service as approval
+
+    req = await approval.request_row(conn, request_id)
+    if req["kind"] != "transport_exception":
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "不是传输例外审批单")
+    r = await row(conn, req["subject_id"])
+    if r["status"] != "pending_approval":
+        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "该连接不在待审批状态")
+    status = await approval.decide(conn, actor, request_id, approve, comment, on_behalf_of)
+    approvers = await approval.approvers_of(conn, request_id)
+    if status == "approved":
+        conn_status = "active"
+    elif status == "rejected":
+        conn_status = "disabled"
+    else:
+        conn_status = "pending_approval"
+    await conn.execute(
+        update(system_connection)
+        .where(system_connection.c.id == r["id"])
+        .values(transport_approved_by=approvers, status=conn_status, updated_at=utcnow())
+    )
+    await notify_change(
+        conn,
+        "connection.approved" if approve else "connection.rejected",
+        r["company_id"],
+        r["id"],
+        actor,
+        {"status": conn_status},
+    )
+    return status
 
 
 async def approve_exception(conn: AsyncConnection, actor: Actor, connection_id: uuid.UUID) -> str:
@@ -194,19 +342,9 @@ async def approve_exception(conn: AsyncConnection, actor: Actor, connection_id: 
     if r["status"] != "pending_approval":
         raise PlatformError(ErrorCode.PRECONDITION_FAILED, "该连接不在待审批状态")
     actor.require(actor.user_id != r["owner_user_id"], "不能审批自己登记的连接")
-    approvers = list(r["transport_approved_by"] or [])
-    if actor.user_id in approvers:
-        raise PlatformError(ErrorCode.PRECONDITION_FAILED, "同一审批人不能重复审批")
-    approvers.append(actor.user_id)
-    needed = 2 if r["env"] == "prod" else 1
-    status = "active" if len(approvers) >= needed else "pending_approval"
-    await conn.execute(
-        update(system_connection)
-        .where(system_connection.c.id == connection_id)
-        .values(transport_approved_by=approvers, status=status, updated_at=utcnow())
-    )
-    await notify_change(conn, "connection.approved", r["company_id"], connection_id, actor, {"status": status})
-    return status
+    request_id = await _ensure_transport_approval(conn, r)
+    status = await decide_transport_exception(conn, actor, request_id, approve=True)
+    return "active" if status == "approved" else "pending_approval"
 
 
 async def expire_exceptions(conn: AsyncConnection) -> int:
@@ -263,6 +401,96 @@ async def draft_trust(conn: AsyncConnection, actor: Actor, connection_id: uuid.U
     return trust_draft(last[0], "pinned")
 
 
+async def put_credentials(
+    conn: AsyncConnection,
+    actor: Actor,
+    secrets: SecretStore,
+    connection_id: uuid.UUID,
+    *,
+    username: str | None = None,
+    password: str | None = None,
+    api_key: str | None = None,
+    token: str | None = None,
+    credential_ref: str | None = None,
+) -> dict[str, Any]:
+    """写入 OpenBao；响应只回 credential_ref。口令不进审计与日志。"""
+    actor.require(_manages(actor), "连接由总部 IT 维护")
+    r = await row(conn, connection_id)
+    ref = (credential_ref or r.get("credential_ref") or f"kv/data/{r['system_key']}/{r['env']}").strip()
+    if not _REF_OK.match(ref):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "credential_ref 须形如 kv/data/system/env")
+    data: dict[str, str] = {}
+    if username is not None:
+        data["username"] = username
+    if password is not None:
+        data["password"] = password
+    if api_key is not None:
+        data["api_key"] = api_key
+    if token is not None:
+        data["token"] = token
+    if not data:
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "至少提供一项凭据字段")
+    # 合并已有密钥字段，避免只更新 password 时丢掉 username
+    try:
+        existing = await secrets.get(ref)
+    except PlatformError:
+        existing = {}
+    merged = {**existing, **data}
+    await secrets.put(ref, merged)
+    if r.get("credential_ref") != ref:
+        await conn.execute(
+            update(system_connection)
+            .where(system_connection.c.id == connection_id)
+            .values(credential_ref=ref, updated_at=utcnow())
+        )
+    await notify_change(
+        conn,
+        "connection.credentials_updated",
+        r["company_id"],
+        connection_id,
+        actor,
+        {"credential_ref": ref, "fields": sorted(data.keys())},
+    )
+    return {"id": str(connection_id), "credential_ref": ref}
+
+
+async def test_auth(
+    conn: AsyncConnection,
+    actor: Actor,
+    secrets: SecretStore,
+    connection_id: uuid.UUID,
+    *,
+    auth: dict[str, Any],
+) -> dict[str, Any]:
+    """用连接上的 credential_ref + 传入 auth 配置测登录；不回传 Cookie/口令。"""
+    actor.require(_manages(actor) or actor.has("data_owner"))
+    if not isinstance(auth, dict):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "auth 必须是对象")
+    mode = str(auth.get("mode") or "none")
+    if mode not in ("none", "api_key", "bearer", "login", "cookie"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, f"不支持的 auth.mode: {mode}")
+    r = await row(conn, connection_id)
+    cfg = to_config(r)
+    if cfg.status == "pending_approval":
+        cfg.status = "active"
+    elif cfg.status != "active":
+        raise PlatformError(ErrorCode.TRANSPORT_EXCEPTION_EXPIRED, "连接已停用")
+    if cfg.scheme not in ("http", "https"):
+        raise PlatformError(ErrorCode.INVALID_ARGUMENT, "仅 http/https 连接支持测登录")
+    allow = await allowlist(conn)
+    mgr = CredentialManager(auth, r.get("credential_ref"), secrets)
+    try:
+        result = await mgr.probe(lambda: build_client(cfg, allowlist=allow, trace_id="conn-test-auth"))
+    except PlatformError as e:
+        return {
+            "ok": False,
+            "mode": mode,
+            "detail": e.detail,
+            "error_code": str(e.code),
+        }
+    return result
+
+
 async def delete_connector_instance(conn: AsyncConnection, actor: Actor, instance_id: uuid.UUID) -> None:
     """删除 Connector 实例及其 SQL 模板；被 Tool Spec 引用时由调用方自行处理快照失效。"""
     actor.require(_manages(actor), "连接器由总部 IT 维护")
@@ -280,6 +508,8 @@ async def delete_connector_instance(conn: AsyncConnection, actor: Actor, instanc
 
 async def delete_connection(conn: AsyncConnection, actor: Actor, connection_id: uuid.UUID) -> None:
     """删除系统连接。仍有 Connector 实例或上游 MCP 源绑定时拒绝。"""
+    from aip.control_plane.approval import service as approval
+
     actor.require(_manages(actor), "连接由总部 IT 维护")
     r = await row(conn, connection_id)
     bound = (
@@ -296,6 +526,13 @@ async def delete_connection(conn: AsyncConnection, actor: Actor, connection_id: 
     ).first()
     if upstream is not None:
         raise PlatformError(ErrorCode.PRECONDITION_FAILED, "仍有上游 MCP 源绑定该连接，请先禁用或删除")
+    pending = await _pending_transport_request(conn, connection_id)
+    if pending is not None:
+        await conn.execute(
+            update(approval.approval_request)
+            .where(approval.approval_request.c.id == pending["id"])
+            .values(status="cancelled", decided_at=utcnow())
+        )
     await conn.execute(text("DELETE FROM conn.connection_test_run WHERE connection_id = :c"), {"c": connection_id})
     await conn.execute(system_connection.delete().where(system_connection.c.id == connection_id))
     await notify_change(

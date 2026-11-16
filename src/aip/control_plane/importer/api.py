@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from aip.connectors.credentials import OpenBaoSecretStore, SecretStore
 from aip.control_plane.iam.api import ActorDep, DbDep
 from aip.control_plane.importer import generate as gen
+from aip.control_plane.importer import manual as manual_imp
 from aip.control_plane.importer import schemas as out
 from aip.control_plane.importer import service as importer
 from aip.control_plane.importer import try_op
@@ -55,6 +56,29 @@ class GenerateOpenApiIn(BaseModel):
     title_hint: str | None = Field(default=None, max_length=200)
     domain_hint: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
     system_hint: str | None = Field(default=None, pattern=r"^[a-z][a-z0-9_]*$")
+    connection_id: uuid.UUID | None = None
+    owner_org_id: uuid.UUID | None = None
+
+
+class ManualOpIn(BaseModel):
+    operation: str = Field(pattern=r"^[a-z][a-z0-9_]{1,63}$")
+    method: str = Field(default="GET", pattern=r"^(GET|POST|PUT|PATCH|DELETE|HEAD)$")
+    path: str = Field(min_length=1, max_length=512)
+    mode: str | None = Field(default=None, pattern=r"^(read|write)$")
+    success_when: str | None = Field(default=None, max_length=200)
+    data: str = Field(default="$.data", max_length=200)
+    title: str | None = Field(default=None, max_length=128)
+    description: str | None = Field(default=None, max_length=2000)
+    query: dict[str, str] = Field(default_factory=dict)
+
+
+class ManualImportIn(BaseModel):
+    connector_name: str = Field(pattern=r"^[a-z][a-z0-9_]{2,63}$")
+    domain: str = Field(default="imported", pattern=r"^[a-z][a-z0-9_]*$")
+    system: str = Field(default="imported", pattern=r"^[a-z][a-z0-9_]*$")
+    operations: list[ManualOpIn] = Field(min_length=1, max_length=100)
+    auth: dict[str, Any] | None = None
+    persist: bool = False
     connection_id: uuid.UUID | None = None
     owner_org_id: uuid.UUID | None = None
 
@@ -162,6 +186,29 @@ def router() -> APIRouter:
                     system_hint=body.system_hint,
                     connection_id=body.connection_id,
                     owner_org_id=body.owner_org_id,
+                )
+            )
+
+    @r.post(
+        f"{V}/importer/manual",
+        operation_id="importManualOperations",
+        status_code=200,
+        response_model=out.ImporterResult,
+    )
+    async def import_manual(body: ManualImportIn, actor: ActorDep, db: DbDep) -> out.ImporterResult:
+        async with db.tx(actor.db_scope()) as conn:
+            return out.ImporterResult.model_validate(
+                await manual_imp.import_manual(
+                    conn,
+                    actor,
+                    connector_name=body.connector_name,
+                    domain=body.domain,
+                    system=body.system,
+                    operations=[op.model_dump(exclude_none=True) for op in body.operations],
+                    connection_id=body.connection_id,
+                    owner_org_id=body.owner_org_id,
+                    auth=body.auth,
+                    persist=body.persist,
                 )
             )
 

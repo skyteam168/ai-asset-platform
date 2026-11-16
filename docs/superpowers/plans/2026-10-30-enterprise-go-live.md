@@ -320,7 +320,8 @@ flowchart TB
 **Files:** `docs/ops/pg-ha-prod.md` 实操记录模板；脚本 `tools/cnpg_kind_smoke.py` 扩展或 staging runbook
 
 - [x] **Step 1:** 冒烟脚本 + 演练模板（本机无 kube context → skip；待 staging）
-- [ ] **Step 2:** 造数 → 备份 → 销毁 → PITR 恢复 → 数据校验（需集群）
+- [x] **Step 2a:** 本机 compose dump/restore 演练（`tools/pg_backup_restore_drill.py`；≠ WAL PITR）
+- [ ] **Step 2b:** 造数 → 备份 → 销毁 → CNPG PITR 恢复 → 数据校验（**需 staging 集群**）
 - [x] **Step 3:** 模板写入 `docs/ops/evidence/g6-cnpg-pitr.md` / milestones
 
 ### Task G6.2: k8s 多副本压测写入 slo
@@ -344,7 +345,7 @@ flowchart TB
 **Files:** 桶策略；`audit-worm.md`；测例或运维脚本校验 put_if_absent
 
 - [x] **Step 1:** Object Lock 运维步骤写入 audit-worm.md（staging 桶待运维）
-- [x] **Step 2:** 应用层 put_if_absent 篡改拒绝（内存 + SeaweedFS 测例）
+- [x] **Step 2:** 应用层 put_if_absent 篡改拒绝（内存 + SeaweedFS 测例 + `tools/worm_object_lock_check.py`）
 - [ ] **Step 3:** staging 合规桶勾选 checklist（待对象存储策略）
 
 ### Task G6.5: 生产清单收口 + prod-check
@@ -352,7 +353,8 @@ flowchart TB
 **Files:** `docs/ops/production-checklist.md`（全部 `[x]`）；`handoff.md` 宣布可上线
 
 - [x] **Step 1:** `tools/dev.py prod-check` 绿
-- [ ] **Step 2:** 人工逐项勾选 Secrets → 双机房（待 staging 实装）
+- [x] **Step 2a:** 清单增加「本地可验 vs staging 待勾」分流表
+- [ ] **Step 2b:** 人工逐项勾选 Secrets → 双机房（**待 staging 实装**）
 - [ ] **Step 3:** 发布 go-live 记录（待 G6.1 PITR + 清单全勾）
 
 ### Task G6.6: 双机房 / 跨机架（集团策略落地）
@@ -360,7 +362,8 @@ flowchart TB
 **Files:** 部署拓扑文档；kustomize overlays（region-a / region-b）；流量与数据驻留说明（**不做**跨境报表，见 ADR-0025）
 
 - [ ] **Step 1:** 与集团确认拓扑与 RPO/RTO
-- [ ] **Step 2:** overlay + 演练切换
+- [x] **Step 2a:** overlay 草稿 + `docs/ops/multi-region.md` + k8s-check / 测例（切流前不宣布双活）
+- [ ] **Step 2b:** 演练切换（待 Step 1）
 - [ ] **Step 3:** 勾选 checklist「双机房」
 
 ---

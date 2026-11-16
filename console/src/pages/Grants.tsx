@@ -112,10 +112,14 @@ function Grants(p: Lookups) {
   const [form] = Form.useForm();
   const act = useAction();
   const assetId = Form.useWatch("asset_id", form);
-  const usable = (ceilings.data?.items ?? []).filter((c) => c.status === "active" && (!assetId || c.asset_ids.includes(assetId)));
+  const usable = (ceilings.data?.items ?? []).filter((c) => c.status === "active" && (!assetId || (c.asset_ids ?? []).includes(assetId)));
   return (
     <>
-      {has("platform_admin", "company_admin") && <Button type="primary" style={{ marginBottom: 12 }} onClick={() => setOpen(true)}>{t("新建授权")}</Button>}
+      {has("platform_admin", "company_admin") && (
+        <Button type="primary" style={{ marginBottom: 12 }} onClick={() => { ceilings.reload(); setOpen(true); }}>
+          {t("新建授权")}
+        </Button>
+      )}
       {list.error && <Alert type="error" message={list.error} />}
       <ListTable<Grant> pagination={PAGINATION} rowKey="id" loading={list.loading} dataSource={list.data?.items ?? []}
         columns={[
@@ -133,11 +137,21 @@ function Grants(p: Lookups) {
             if (await act(() => post("/grants", body), t("已授权"))) { setOpen(false); list.reload(); }
           }}>
           <Form.Item name="asset_id" label={t("资产")} rules={[{ required: true }]}>
-            <Select showSearch optionFilterProp="label" options={p.assets.map((a) => ({ value: a.id, label: a.name }))} />
+            <Select showSearch optionFilterProp="label" options={p.assets.map((a) => ({ value: a.id, label: a.name }))}
+              onChange={() => form.setFieldValue("ceiling_id", undefined)} />
           </Form.Item>
           <Form.Item name="ceiling_id" label={t("依据的授权上限")} rules={[{ required: true }]}
-            extra={t("分公司授权不能超出集团下发的上限；没有可选项时请先由平台管理员下发上限。")}>
-            <Select options={usable.map((c) => ({ value: c.id, label: `${c.id.slice(0, 8)} · L${c.max_classification}` }))} />
+            extra={usable.length
+              ? t("分公司授权不能超出集团下发的上限；没有可选项时请先由平台管理员下发上限。")
+              : t("没有匹配该资产的有效上限。请先到「授权上限」下发，或点右上角刷新后再打开本弹窗。")}>
+            <Select
+              loading={ceilings.loading}
+              notFoundContent={ceilings.loading ? t("加载中…") : t("暂无匹配上限")}
+              options={usable.map((c) => ({
+                value: c.id,
+                label: `${(c.asset_ids ?? []).map(p.assetName).join("、") || c.id.slice(0, 8)} · L${c.max_classification}`,
+              }))}
+            />
           </Form.Item>
           <Space style={{ display: "flex" }} align="start">
             <Form.Item name="grantee_type" label={t("被授权方类型")}>
